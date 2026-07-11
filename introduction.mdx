@@ -1,0 +1,53 @@
+---
+title: Introduction
+description: AgentMail gives AI agents their own email inboxes. Create inboxes, receive mail, trigger workflows, and reply through one API.
+---
+
+AgentMail is email built for AI agents instead of people. This page explains what it does, why an agent needs an inbox of its own, and how it differs from the email tools you already use, so you can decide whether it fits and pick a surface to start with.
+
+## What AgentMail is
+
+AgentMail gives AI agents programmable email inboxes. You create an inbox, receive mail sent to it, trigger workflows on incoming messages, and send replies, all through one API. An agent gets a real address it can hand out, watch, and act on without a human sitting in a mail client.
+
+## Why agents need email
+
+Email is the account layer of the internet. Signing up for a service, confirming an address, resetting a password, and receiving receipts or notifications all run through an inbox. An agent that acts on the internet needs one for the same reasons a person does.
+
+Give the agent its own address and it can register for the tools it needs, receive verification codes and finish those flows on its own, and hold ongoing correspondence with services and people. Without an inbox, an agent has to borrow a human's, which breaks down the moment it needs to act unattended or at scale.
+
+## How AgentMail differs from email tools you know
+
+Most email tools move mail on behalf of humans. They send the transactional messages your app generates, broadcast marketing campaigns, or give a person programmatic access to their own mailbox. AgentMail is different in kind: it gives an agent an inbox of its own to send from and receive into.
+
+| Tool | Who it serves | What it moves |
+| --- | --- | --- |
+| AgentMail | AI agents | An agent's own inbox: send and receive, with workflows on incoming mail |
+| SendGrid / Resend | Your application | Outbound transactional email your app generates |
+| Mailchimp | Marketers | Outbound marketing broadcasts to a subscriber list |
+| Gmail API | A human user | Programmatic access to that person's existing mailbox |
+
+## Four ways to use AgentMail
+
+Reach AgentMail through whichever surface fits your workflow. All of them talk to the same API.
+
+<CardGroup cols={2}>
+  <Card title="CLI" icon="terminal">
+    Work from the terminal and script quick tasks or one-off checks.
+  </Card>
+  <Card title="MCP" icon="plug">
+    Give an MCP-capable agent or assistant direct access to inbox tools.
+  </Card>
+  <Card title="Console" icon="browser">
+    Create and inspect inboxes and messages in a visual dashboard.
+  </Card>
+  <Card title="SDK (Python, TypeScript)" icon="code">
+    Build AgentMail into your application in your language of choice.
+  </Card>
+</CardGroup>
+
+Prefer not to use an SDK? Every operation is available over raw HTTP, so any language that can make an HTTP request can call the API directly.
+
+## Where to go next
+
+- [Quickstart](/quickstart): create your first inbox and send a message, so you can see it work end to end.
+- [Architecture](/architecture): the object model behind inboxes, messages, and workflows.

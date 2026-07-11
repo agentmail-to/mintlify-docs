@@ -1,0 +1,89 @@
+---
+title: How AgentMail is architected
+description: A high-level map of AgentMail's objects, how they nest, and how your API key's scope decides which calls need a pod in the path.
+---
+
+Before you work through the task pages, it helps to see how AgentMail's objects fit together. This page names each primitive, shows how they contain each other, and explains the one rule that trips people up: whether a call needs a pod in the path depends on the scope of the API key you are using. If you have not set up a key yet, start with the [Introduction](/) and then the [Quickstart](/quickstart).
+
+## The big picture
+
+AgentMail nests from your account down to individual messages. An organization holds one or more pods, each pod holds inboxes, and each inbox owns the messages, threads, and drafts that flow through its email address. Everything else (domains, keys, webhooks, labels, lists) hangs off one of these levels.
+
+```text
+Organization                  your account / tenant
+└── Pod                       a sub-organization; the unit of multi-tenancy
+    └── Inbox                 an email address
+        ├── Messages          individual emails
+        ├── Threads           grouped conversations
+        └── Drafts            unsent messages
+```
+
+The rest of this page walks each level from the top down, then covers how your key's scope moves through this tree.
+
+## Organization
+
+The organization is your account: the top of the tree and the tenant that everything else belongs to. When you sign up, you get an organization. Every pod, inbox, and message you create lives somewhere underneath it. You rarely address the organization directly in a request path, but it is the boundary that defines what your account owns.
+
+## Pod
+
+A pod is a sub-organization inside your organization, and it is the unit of multi-tenancy: if you are building a product where each of your customers needs their own isolated set of inboxes, you give each customer a pod. Inboxes, and the messages under them, are partitioned by pod, so one tenant's mail never mixes with another's.
+
+Because the pod is the tenancy boundary, it is also the level your API key scope is usually anchored to. That is the rule the rest of this page builds toward.
+
+## Inbox
+
+An inbox is an email address, and it owns the mail that passes through it. Every message, thread, and draft belongs to exactly one inbox. When you send or receive email, you are always doing so as a specific inbox. Create an inbox under a pod, and that inbox is the addressable unit you read from and write to for the rest of its life.
+
+## The other primitives
+
+Everything below is a supporting object that hangs off one of the three levels above.
+
+| Primitive | What it is | What it belongs to |
+| --- | --- | --- |
+| Domain | A sending/receiving domain you own and verify | Organization |
+| API key | A credential that carries a scope (org-wide or a single pod) | Organization or pod |
+| Webhook | An HTTP endpoint AgentMail calls on events | Pod |
+| WebSocket | A live connection for streaming events | Pod |
+| Message | A single email | Inbox |
+| Thread | A grouped conversation of related messages | Inbox |
+| Draft | An unsent message | Inbox |
+| Label | A tag you apply to organize messages | Inbox |
+| List | A named grouping you manage | Inbox |
+
+## How key scope flows
+
+This is the section that decides how every request path is shaped. Every request goes to the base URL `https://api.agentmail.to/v0` with your key in an `Authorization: Bearer <key>` header. An API key carries a scope, and that scope determines whether you name a pod in the path.
+
+- A **pod-scoped key** is tied to one pod. It resolves its scope on its own, so you do not name the pod in the request path. AgentMail already knows which pod the key belongs to.
+- An **org-scoped key** can reach any pod in your organization. Because it is not tied to one, it cannot resolve scope on its own, so you must name the pod in the request path for calls that operate on pod-level resources, for example `/v0/pods/{pod_id}/inboxes`.
+
+The contrast in one table:
+
+| Key scope | Does the path name a pod? |
+| --- | --- |
+| Pod-scoped | No. Scope resolves from the key. |
+| Org-scoped | Yes. You name the target pod in the path. |
+
+Practically: if your code was written against a pod-scoped key and you swap in an org-scoped key, calls that used to work will start failing until you add the pod to the path (and the other way around). Knowing your key's scope up front saves that debugging round.
+
+## Verify a key's scope
+
+When you are not sure what a key can reach, ask AgentMail directly. Call `GET /v0/auth/me` with the key in question, and the response tells you what that key is scoped to. There is no database read behind this call: passing the authorizer is enough to learn your own identity, so it is a cheap way to confirm a key before you build against it.
+
+```bash
+curl https://api.agentmail.to/v0/auth/me \
+  -H "Authorization: Bearer $AGENTMAIL_API_KEY"
+```
+
+The response is the caller's scope. These are the fields to read:
+
+- **`scope_type`** — the level this key is anchored to. One of `organization`, `pod`, or `inbox`. This is the field that answers the pod-in-path question: an `organization` key names the pod in the path, a `pod` (or `inbox`) key resolves it from the key.
+- **`scope_id`** — the id of the thing named by `scope_type`. For a pod-scoped key it is the pod id, for an org-scoped key it is the organization id.
+- **`organization_id`** — the organization the key belongs to, always present regardless of scope.
+- **`pod_id`** — present when the key resolves to a specific pod. This is the pod you would otherwise have to name in the path, so an org-scoped key will not have it.
+- **`inbox_id`** — present when the key is scoped down to a single inbox (an email address).
+- **`api_key_id`** — the id of the key itself, when the caller authenticated with an API key.
+
+Read `scope_type` first: it tells you whether the task pages' calls need a pod segment. If it comes back `organization`, include the pod in your paths; if it comes back `pod` or `inbox`, leave the pod segment out and let the key resolve it.
+
+Once you know your key's scope, the task pages will make sense: pod-scoped readers can ignore the pod path segment, and org-scoped readers know to include it.
