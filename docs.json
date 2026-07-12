@@ -20,6 +20,13 @@
               "quickstart",
               "architecture"
             ]
+          },
+          {
+            "group": "Core tasks",
+            "pages": [
+              "tasks/receive",
+              "tasks/send"
+            ]
           }
         ]
       }

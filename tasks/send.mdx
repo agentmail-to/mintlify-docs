@@ -1,0 +1,260 @@
+---
+title: Send and reply
+description: Send new messages, reply and forward with automatic threading, schedule drafts, and make sends idempotent.
+---
+
+Send a message from any inbox you own, reply into an existing conversation, or stage the send as a draft and let AgentMail deliver it later. Every send path on this page returns the same response, a `message_id` and a `thread_id`, so downstream code handles a direct send and a scheduled draft identically.
+
+## Send a new message
+
+`POST /inboxes/{inbox_id}/messages/send` sends immediately. `inbox_id` is the inbox's email address. At least one of `to`, `cc`, or `bcc` is required; everything else is optional.
+
+<CodeGroup>
+
+```python Python
+import os
+
+from agentmail import AgentMail
+
+client = AgentMail(api_key=os.getenv("AGENTMAIL_API_KEY"))
+
+message = client.inboxes.messages.send(
+    inbox_id="agent@yourdomain.com",
+    to=["customer@example.com"],
+    subject="Your receipt",
+    text="Thanks for your order.",
+    html="<p>Thanks for your order.</p>",
+)
+
+print(message.message_id, message.thread_id)
+```
+
+```typescript TypeScript
+import { AgentMailClient } from "agentmail";
+
+const client = new AgentMailClient({ apiKey: process.env.AGENTMAIL_API_KEY });
+
+const message = await client.inboxes.messages.send("agent@yourdomain.com", {
+  to: ["customer@example.com"],
+  subject: "Your receipt",
+  text: "Thanks for your order.",
+  html: "<p>Thanks for your order.</p>",
+});
+
+console.log(message.messageId, message.threadId);
+```
+
+```bash curl
+curl -X POST https://api.agentmail.to/v0/inboxes/agent@yourdomain.com/messages/send \
+  -H "Authorization: Bearer $AGENTMAIL_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "to": ["customer@example.com"],
+    "subject": "Your receipt",
+    "text": "Thanks for your order.",
+    "html": "<p>Thanks for your order.</p>"
+  }'
+```
+
+</CodeGroup>
+
+The response is `{"message_id": "...", "thread_id": "..."}`. Request body fields:
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `to`, `cc`, `bcc` | array of addresses | At least one of the three must be non-empty. |
+| `subject` | string | Optional. |
+| `text`, `html` | string | The message body. There is no `body` field; use `text` and/or `html`. Provide both when you can so the message renders on every client. |
+| `reply_to` | array of addresses | Sets the Reply-To header on the outgoing message. |
+| `attachments` | array | See [Attachments](#attachments). |
+| `headers` | map | Custom SMTP headers, name to value. A `null` value suppresses that header instead of setting it. |
+| `labels` | array of strings | Custom labels stored on the sent message, useful for filtering later. AgentMail adds the system label `sent` itself. |
+
+<Note>
+Sends from shared-domain inboxes (addresses on `agentmail.to`) always carry AgentMail's `List-Unsubscribe` headers. The `headers` map cannot override or suppress them; custom-domain inboxes pass their own headers through.
+</Note>
+
+## Attachments
+
+Each attachment entry carries its metadata plus exactly one content source:
+
+- `content`: the file bytes, base64-encoded.
+- `url`: a URL for AgentMail to fetch at send time. The fetch follows redirects and times out after 10 seconds. If the URL answers with a 4xx (other than 408 or 429), the send is rejected with a 403 because the link is permanently bad; network failures and 5xx responses return a 503 so you can retry.
+
+Passing both `content` and `url`, or neither, is a 400. The other fields are optional with sensible fallbacks: `content_type` is inferred from the `filename` extension (or, for URL attachments, from the source's response headers), and `content_disposition` defaults to `inline` when you set a `content_id` (for images referenced from your HTML body) and `attachment` otherwise.
+
+```json
+{
+  "attachments": [
+    { "filename": "receipt.pdf", "content": "<base64 bytes>" },
+    { "filename": "logo.png", "url": "https://example.com/logo.png", "content_id": "logo" }
+  ]
+}
+```
+
+## Reply, reply-all, and forward
+
+These three endpoints hang off the message you are responding to, not off the thread:
+
+| Action | Endpoint |
+| --- | --- |
+| Reply | `POST /inboxes/{inbox_id}/messages/{message_id}/reply` |
+| Reply all | `POST /inboxes/{inbox_id}/messages/{message_id}/reply-all` |
+| Forward | `POST /inboxes/{inbox_id}/messages/{message_id}/forward` |
+
+All three accept the same body fields as a plain send. AgentMail handles the email plumbing from the source message: it sets the `In-Reply-To` and `References` threading headers, prefixes the subject with `Re:` (or `Fwd:`), and appends the original message as a quoted block below your `text`/`html`. You write only the new content. Forwards and replies both land in the source message's existing thread.
+
+Recipients are derived when you omit them:
+
+- **Reply** goes to your `to` if you pass one, otherwise to the original's Reply-To address, otherwise to the sender.
+- **Reply-all** goes to everyone on the original's To line plus the sender, minus your own inbox address, and carries the original Cc. You can trigger it either through the `/reply-all` endpoint or by passing `reply_all: true` to `/reply`; in both cases the recipient list is always derived, so combining it with explicit `to`, `cc`, or `bcc` is a 400.
+- **Forward** derives nothing: you must supply at least one recipient. The original body appears under a `---------- Forwarded message ---------` block, and the original's attachments are sent along with any you add.
+
+<CodeGroup>
+
+```python Python
+reply = client.inboxes.messages.reply(
+    inbox_id="agent@yourdomain.com",
+    message_id="<message-id@example.com>",
+    text="Confirmed. Shipping today.",
+)
+```
+
+```typescript TypeScript
+const reply = await client.inboxes.messages.reply(
+  "agent@yourdomain.com",
+  "<message-id@example.com>",
+  { text: "Confirmed. Shipping today." },
+);
+```
+
+```bash curl
+curl -X POST "https://api.agentmail.to/v0/inboxes/agent@yourdomain.com/messages/<message-id@example.com>/reply" \
+  -H "Authorization: Bearer $AGENTMAIL_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"text": "Confirmed. Shipping today."}'
+```
+
+</CodeGroup>
+
+## Drafts and scheduled sends
+
+A draft is an unsent message. Use one when the send should not happen in the same breath as the composition: a human reviews it first, or it goes out at a scheduled time.
+
+Create a draft with `POST /inboxes/{inbox_id}/drafts` (same content fields as a send), then fire it with `POST /inboxes/{inbox_id}/drafts/{draft_id}/send`. Sending returns the usual `message_id` and `thread_id` and deletes the draft; from then on it is a message. To prepare a reply or forward for review instead of composing one by hand, `POST /inboxes/{inbox_id}/messages/{message_id}/draft-reply`, `/draft-reply-all`, or `/draft-forward` create the draft with recipients, subject, and threading already derived from the source message.
+
+To schedule, set `send_at` to an ISO 8601 datetime when creating or updating the draft. AgentMail sends it at that time; no polling on your side. A scheduled draft must have at least one recipient, and it gets the `scheduled` label so you can find pending sends with a label filter.
+
+<CodeGroup>
+
+```python Python
+from datetime import datetime, timedelta, timezone
+
+send_time = datetime.now(timezone.utc) + timedelta(hours=24)
+
+draft = client.inboxes.drafts.create(
+    inbox_id="agent@yourdomain.com",
+    to=["prospect@example.com"],
+    subject="Following up",
+    text="Checking in on yesterday's conversation.",
+    send_at=send_time.isoformat(),
+)
+
+print(draft.send_status)  # "scheduled"
+```
+
+```typescript TypeScript
+const sendTime = new Date(Date.now() + 24 * 60 * 60 * 1000);
+
+const draft = await client.inboxes.drafts.create("agent@yourdomain.com", {
+  to: ["prospect@example.com"],
+  subject: "Following up",
+  text: "Checking in on yesterday's conversation.",
+  sendAt: sendTime.toISOString(),
+});
+
+console.log(draft.sendStatus); // "scheduled"
+```
+
+```bash curl
+curl -X POST https://api.agentmail.to/v0/inboxes/agent@yourdomain.com/drafts \
+  -H "Authorization: Bearer $AGENTMAIL_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "to": ["prospect@example.com"],
+    "subject": "Following up",
+    "text": "Checking in on yesterday'"'"'s conversation.",
+    "send_at": "2026-07-13T09:00:00Z"
+  }'
+```
+
+</CodeGroup>
+
+Manage the schedule through the draft itself:
+
+- **Reschedule**: `PATCH /inboxes/{inbox_id}/drafts/{draft_id}` with a new `send_at`.
+- **Cancel the schedule but keep the draft**: `PATCH` with `"send_at": null`.
+- **Cancel entirely**: `DELETE /inboxes/{inbox_id}/drafts/{draft_id}`.
+- **Send now instead of waiting**: `POST .../drafts/{draft_id}/send`.
+
+A scheduled draft's `send_status` field reports where it is in the lifecycle:
+
+| `send_status` | Meaning |
+| --- | --- |
+| `scheduled` | Queued; will send at `send_at`. Still editable and cancelable. |
+| `sending` | Picked up for delivery. Too late to cancel. |
+| `failed` | The send hit a terminal error, such as a blocked recipient. Fix the cause and set a new `send_at` to retry. |
+
+There is no `sent` status: a draft that sends successfully is deleted, and the result lives on as a message in the thread.
+
+## Prevent reply loops
+
+An agent that replies to everything it receives will eventually mail another auto-responder, and the two will answer each other forever. AgentMail derives recipients safely (reply-all already filters out your own inbox address), but loop prevention across messages is your agent's job. Three checks cover it:
+
+1. **Never respond to your own outbound mail.** If you consume webhook events, skip `message.sent` events entirely; they fire for your agent's own sends. If you poll, skip messages whose `from` is your inbox address.
+2. **Skip auto-generated mail.** Received messages include a `headers` map. Do not reply when `Auto-Submitted` is present with any value other than `no`; that header marks out-of-office notices, delivery reports, and other machine-generated mail.
+3. **Cap replies per thread.** Before replying, count your inbox's prior messages in the thread and stop past a fixed limit. This bounds the damage of any loop the first two checks miss.
+
+## Idempotent sends
+
+A send is irreversible: retry a request that actually went through and the recipient gets the email twice. To make retries safe, pass an `Idempotency-Key` header on any send: `messages/send`, `reply`, `reply-all`, `forward`, or `drafts/{draft_id}/send`. This is opt-in; requests without the header are not deduplicated.
+
+<CodeGroup>
+
+```python Python
+message = client.inboxes.messages.send(
+    inbox_id="agent@yourdomain.com",
+    to=["customer@example.com"],
+    subject="Your receipt",
+    text="Thanks for your order.",
+    request_options={"additional_headers": {"Idempotency-Key": "order-4821-receipt"}},
+)
+```
+
+```typescript TypeScript
+const message = await client.inboxes.messages.send(
+  "agent@yourdomain.com",
+  { to: ["customer@example.com"], subject: "Your receipt", text: "Thanks for your order." },
+  { headers: { "Idempotency-Key": "order-4821-receipt" } },
+);
+```
+
+```bash curl
+curl -X POST https://api.agentmail.to/v0/inboxes/agent@yourdomain.com/messages/send \
+  -H "Authorization: Bearer $AGENTMAIL_API_KEY" \
+  -H "Idempotency-Key: order-4821-receipt" \
+  -H "Content-Type: application/json" \
+  -d '{"to": ["customer@example.com"], "subject": "Your receipt", "text": "Thanks for your order."}'
+```
+
+</CodeGroup>
+
+The key is reserved before the email leaves, then finalized with the result in the same commit that stores the message, so there is no window where a crash produces a sent email with no record. In practice:
+
+- A retry with the same key and the same request replays the original `message_id` and `thread_id`. No second email. The replay window is 24 hours after the send completes; after that the key is free to reuse.
+- The same key with a different request (different content, inbox, or endpoint) returns `409 Conflict`, so accidental reuse surfaces instead of silently returning the wrong result.
+- While the first request is still in flight, a duplicate returns `409` rather than racing it.
+- If the send fails in a way where the email definitely did not leave, the key is released immediately and a retry proceeds. If the failure is ambiguous (the upstream call died without an answer), the claim is held and retries return `409` until the pending claim expires after 15 minutes; this is deliberate, because retrying into an ambiguous send is how duplicates happen.
+- An explicitly empty `Idempotency-Key` header is a `400`, not a silent non-idempotent send.
+
+Choose a key unique to the logical send: a UUID you generate once and reuse across retries of that one send, or a deterministic key from your own data such as `order-4821-receipt`. Keys are 1 to 256 characters from `A-Z a-z 0-9 - . _ ~` and are scoped to your organization.

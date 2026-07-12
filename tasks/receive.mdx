@@ -1,0 +1,212 @@
+---
+title: "Receive email"
+description: "Pick up inbound mail from an AgentMail inbox: list threads, fetch new messages, strip quoted history, and download attachments."
+---
+
+Every AgentMail inbox receives mail at its address as soon as it exists. This page covers the pull side of receiving: create or choose an inbox, list the threads that arrived, fetch a thread's messages, read only the new content in a reply, and download attachments or the raw email file. Push delivery (webhook and WebSocket events like `message.received`) is a separate setup and is not covered here.
+
+All requests use `https://api.agentmail.to/v0` with `Authorization: Bearer $AGENTMAIL_API_KEY`.
+
+## Create or choose an inbox
+
+An inbox is addressable the moment you create it with `POST /v0/inboxes`. Every field is optional: skip `username` and one is generated randomly, skip `domain` and the address lands on `agentmail.to`. To receive on your own domain, pass a domain you have verified (or any subdomain of a verified domain with subdomains enabled, like `bot.example.com`).
+
+<CodeGroup>
+
+```python Python
+from agentmail import AgentMail
+import os
+
+client = AgentMail(api_key=os.getenv("AGENTMAIL_API_KEY"))
+
+inbox = client.inboxes.create(username="support")
+print(inbox.inbox_id)  # support@agentmail.to
+```
+
+```typescript TypeScript
+import { AgentMailClient } from "agentmail";
+
+const client = new AgentMailClient({ apiKey: process.env.AGENTMAIL_API_KEY! });
+
+const inbox = await client.inboxes.create({ username: "support" });
+console.log(inbox.inboxId); // support@agentmail.to
+```
+
+```bash CLI
+agentmail inboxes create \
+  --username support \
+  --domain agentmail.to
+```
+
+```bash curl
+curl -X POST "https://api.agentmail.to/v0/inboxes" \
+  -H "Authorization: Bearer $AGENTMAIL_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"username": "support"}'
+```
+
+</CodeGroup>
+
+The returned `inbox_id` is the inbox's email address (`username@domain`). You pass it anywhere an endpoint takes `inbox_id`.
+
+## What arrives
+
+When someone emails your inbox, AgentMail stores the email as a message and files it into a thread, the container that groups a conversation. A fresh email starts a new thread; a reply lands in the existing one. Every inbound message is labeled `received` and `unread` on arrival, and classification can add more:
+
+| Label             | Applied when                                                             |
+| ----------------- | ------------------------------------------------------------------------ |
+| `received`        | Every inbound message. System label, cannot be added or removed via API. |
+| `unread`          | Every inbound message. Remove it once your agent has processed the message. |
+| `spam`            | The message failed spam screening.                                       |
+| `unauthenticated` | The sender's SPF, DKIM, and DMARC headers were missing entirely.         |
+| `blocked`         | The sender's address or domain matches one of your block list entries.   |
+
+Mail whose authentication headers are present but explicitly fail SPF, DKIM, or DMARC is dropped before it reaches an inbox, and there is no API to retrieve dropped mail. Missing headers are treated more leniently because some legitimate senders omit them: the message is delivered, labeled `unauthenticated`.
+
+<Warning>
+**Expected mail can look missing.** Listing endpoints hide `spam`, `unauthenticated`, `blocked`, and trashed items by default. If a sender's test email "never arrived", list with `include_spam=true` or `include_unauthenticated=true` before assuming it was dropped. Opting in also requires the API key to hold the matching label read permission (for example `label_spam_read`).
+</Warning>
+
+## List threads
+
+`GET /v0/threads` lists threads across every inbox your API key can see, newest first. Scope to one inbox with `GET /v0/inboxes/{inbox_id}/threads`. Filter with `labels` to poll for work; `labels=unread` returns only conversations with unprocessed mail.
+
+<CodeGroup>
+
+```python Python
+threads = client.threads.list(labels=["unread"])
+
+for t in threads.threads:
+    print(t.thread_id, t.subject, t.preview)
+```
+
+```typescript TypeScript
+const threads = await client.threads.list({ labels: ["unread"] });
+
+for (const t of threads.threads) {
+  console.log(t.threadId, t.subject, t.preview);
+}
+```
+
+```bash CLI
+agentmail threads list
+```
+
+```bash curl
+curl "https://api.agentmail.to/v0/threads?labels=unread" \
+  -H "Authorization: Bearer $AGENTMAIL_API_KEY"
+```
+
+</CodeGroup>
+
+The response holds `count`, an optional `next_page_token`, and `threads[]` ordered by `timestamp` descending. Each item carries `thread_id`, `senders`, `recipients`, `subject`, a text `preview` of the last message, `message_count`, and `last_message_id`. Page with `limit` and `page_token`. You can also filter by `senders`, `recipients`, or `subject` substring; filtered requests are served by search and cap `limit` at 100.
+
+## Fetch one thread
+
+`GET /v0/threads/{thread_id}` returns the full thread, including `messages[]` ordered by `timestamp` ascending, so the last element is the newest message. This is the call that gives you message bodies.
+
+<CodeGroup>
+
+```python Python
+thread = client.threads.get(thread_id="thread_123")
+
+latest = thread.messages[-1]
+print(latest.subject, latest.preview)
+```
+
+```typescript TypeScript
+const thread = await client.threads.get("thread_123");
+
+const latest = thread.messages[thread.messages.length - 1];
+console.log(latest.subject, latest.preview);
+```
+
+```bash CLI
+agentmail threads get --thread-id thread_123
+```
+
+```bash curl
+curl "https://api.agentmail.to/v0/threads/thread_123" \
+  -H "Authorization: Bearer $AGENTMAIL_API_KEY"
+```
+
+</CodeGroup>
+
+An unknown `thread_id` returns `404` with a machine-readable `code` of `not_found` in the error body; branch on `code`, not the message text.
+
+Once your agent has handled a message, remove its `unread` label with `PATCH /v0/inboxes/{inbox_id}/messages/{message_id}` (`remove_labels: ["unread"]`, optionally `add_labels: ["read"]`). Your next `labels=unread` poll then skips it, which is what keeps the agent from reprocessing the same mail.
+
+## Read only the new content
+
+A message body comes in up to four fields. `text` and `html` are the full body as sent, including the quoted history that clients append to replies and forwards. `extracted_text` and `extracted_html` contain just the new content, with the quoted history stripped by the Talon extraction library. For an agent responding to replies, feed it `extracted_text` so the model sees one message instead of the whole conversation again.
+
+```python Python
+for message in thread.messages:
+    content = message.extracted_text or message.text
+```
+
+Fall back as shown: `extracted_text` and `extracted_html` are optional, and `text` itself can be absent when the sender transmitted an HTML-only email with no plain-text part (Gmail and Outlook do this for some forwards). `html` is the last resort.
+
+## Download attachments and the raw message
+
+Messages and threads list attachment metadata (`attachment_id`, `filename`, `size`, `content_type`), but not the bytes. To download, request the attachment by ID and you get back a `download_url`, a signed URL that expires at the returned `expires_at` timestamp. Fetch the URL promptly rather than storing it.
+
+<CodeGroup>
+
+```python Python
+attachment = client.threads.get_attachment(
+    thread_id="thread_123",
+    attachment_id="att_456",
+)
+print(attachment.download_url, attachment.expires_at)
+```
+
+```typescript TypeScript
+const attachment = await client.threads.getAttachment("thread_123", "att_456");
+console.log(attachment.downloadUrl, attachment.expiresAt);
+```
+
+```bash CLI
+agentmail threads get-attachment \
+  --thread-id thread_123 \
+  --attachment-id att_456
+```
+
+```bash curl
+curl "https://api.agentmail.to/v0/threads/thread_123/attachments/att_456" \
+  -H "Authorization: Bearer $AGENTMAIL_API_KEY"
+```
+
+</CodeGroup>
+
+The same shape exists per message at `GET /v0/inboxes/{inbox_id}/messages/{message_id}/attachments/{attachment_id}`.
+
+When you need the original email exactly as it crossed the wire (custom headers, MIME structure, signature verification), `GET /v0/inboxes/{inbox_id}/messages/{message_id}/raw` returns a signed `download_url` for the raw `.eml` file plus its `size` in bytes and `expires_at`.
+
+<CodeGroup>
+
+```python Python
+raw = client.inboxes.messages.get_raw(
+    inbox_id="support@agentmail.to",
+    message_id="msg_789",
+)
+print(raw.download_url)
+```
+
+```typescript TypeScript
+const raw = await client.inboxes.messages.getRaw("support@agentmail.to", "msg_789");
+console.log(raw.downloadUrl);
+```
+
+```bash CLI
+agentmail inboxes:messages get-raw \
+  --inbox-id support@agentmail.to \
+  --message-id msg_789
+```
+
+```bash curl
+curl "https://api.agentmail.to/v0/inboxes/support@agentmail.to/messages/msg_789/raw" \
+  -H "Authorization: Bearer $AGENTMAIL_API_KEY"
+```
+
+</CodeGroup>

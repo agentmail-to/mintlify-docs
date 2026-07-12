@@ -11,13 +11,13 @@ AgentMail gives AI agents programmable email inboxes. You create an inbox, recei
 
 ## Why agents need email
 
-Email is the account layer of the internet. Signing up for a service, confirming an address, resetting a password, and receiving receipts or notifications all run through an inbox. An agent that acts on the internet needs one for the same reasons a person does.
+Email is the account layer of the internet. Signing up for a service, confirming an address, resetting a password, and receiving receipts or notifications all run through an inbox, so an agent that does any of these needs an address mail can reach it at.
 
-Give the agent its own address and it can register for the tools it needs, receive verification codes and finish those flows on its own, and hold ongoing correspondence with services and people. Without an inbox, an agent has to borrow a human's, which breaks down the moment it needs to act unattended or at scale.
+That address should belong to the agent. Borrowing a human's inbox works until the agent has to act unattended or you run more agents than one mailbox can serve. With its own inbox, an agent registers for the tools it needs, receives verification codes and finishes those flows on its own, and holds ongoing correspondence with services and people.
 
 ## How AgentMail differs from email tools you know
 
-Most email tools move mail on behalf of humans. They send the transactional messages your app generates, broadcast marketing campaigns, or give a person programmatic access to their own mailbox. AgentMail is different in kind: it gives an agent an inbox of its own to send from and receive into.
+The email tools you already know move mail on behalf of humans; AgentMail gives an agent an inbox of its own to send from and receive into.
 
 | Tool | Who it serves | What it moves |
 | --- | --- | --- |
@@ -26,26 +26,26 @@ Most email tools move mail on behalf of humans. They send the transactional mess
 | Mailchimp | Marketers | Outbound marketing broadcasts to a subscriber list |
 | Gmail API | A human user | Programmatic access to that person's existing mailbox |
 
-## Four ways to use AgentMail
+## Five ways to use AgentMail
 
-Reach AgentMail through whichever surface fits your workflow. All of them talk to the same API.
+Reach AgentMail through whichever surface fits how you work. All five talk to the same API.
 
 <CardGroup cols={2}>
   <Card title="CLI" icon="terminal">
-    Work from the terminal and script quick tasks or one-off checks.
+    The fastest way to try calls from a terminal or script one-off checks, before you write any application code.
   </Card>
   <Card title="MCP" icon="plug">
-    Give an MCP-capable agent or assistant direct access to inbox tools.
+    Give an MCP-capable agent or assistant direct control of inboxes as tools, without writing glue code.
   </Card>
   <Card title="Console" icon="browser">
-    Create and inspect inboxes and messages in a visual dashboard.
+    Inspect inboxes and messages in the browser when you want to see what your code did rather than query it.
   </Card>
   <Card title="SDK (Python, TypeScript)" icon="code">
-    Build AgentMail into your application in your language of choice.
+    Build AgentMail into an application with typed calls instead of hand-rolled requests.
   </Card>
 </CardGroup>
 
-Prefer not to use an SDK? Every operation is available over raw HTTP, so any language that can make an HTTP request can call the API directly.
+The fifth surface is raw HTTP: every operation is available directly over the API, so pick it when you work in a language without an SDK or want no dependency at all.
 
 ## Where to go next
 
