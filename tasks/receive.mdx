@@ -66,6 +66,13 @@ When someone emails your inbox, AgentMail stores the email as a message and file
 
 Mail whose authentication headers are present but explicitly fail SPF, DKIM, or DMARC is dropped before it reaches an inbox, and there is no API to retrieve dropped mail. Missing headers are treated more leniently because some legitimate senders omit them: the message is delivered, labeled `unauthenticated`.
 
+You can watch mail land without writing any code: the [console](https://console.agentmail.to) shows each inbox's threads as they arrive, which is the quickest way to confirm a test email actually made it in.
+
+<Frame caption="An inbox in the AgentMail console — each row is a thread holding the received mail.">
+  <img className="block dark:hidden" src="/images/screenshots/console-inbox.png" alt="AgentMail console showing an inbox with two received threads in the thread list" />
+  <img className="hidden dark:block" src="/images/screenshots/console-inbox-dark.png" alt="AgentMail console showing an inbox with two received threads in the thread list" />
+</Frame>
+
 <Warning>
 **Expected mail can look missing.** Listing endpoints hide `spam`, `unauthenticated`, `blocked`, and trashed items by default. If a sender's test email "never arrived", list with `include_spam=true` or `include_unauthenticated=true` before assuming it was dropped. Opting in also requires the API key to hold the matching label read permission (for example `label_spam_read`).
 </Warning>

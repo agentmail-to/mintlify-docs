@@ -58,6 +58,13 @@ The metadata summarizes the whole conversation, so you rarely need to walk `mess
 
 To list threads instead of fetching one, `GET /threads` returns them newest-first with `count`, an optional `next_page_token` for paging, and a `labels` query parameter for filtering. The unprefixed path resolves its scope from your API key; `GET /inboxes/{inbox_id}/threads` and `GET /pods/{pod_id}/threads` pin the scope explicitly. List endpoints also accept `senders`, `recipients`, and `subject` substring filters, but filtered requests are served by search and cap `limit` at 100.
 
+The same thread is browsable in the [console](https://console.agentmail.to) — sent and received messages interleaved in order, with the thread's labels on top:
+
+<Frame caption="A thread in the AgentMail console: the agent's sent message and the received reply, with the thread's labels.">
+  <img className="block dark:hidden" src="/images/screenshots/console-thread.png" alt="AgentMail console thread view showing a sent message followed by a received reply labeled unread, with Sent, Received, and Unread labels on the thread" />
+  <img className="hidden dark:block" src="/images/screenshots/console-thread-dark.png" alt="AgentMail console thread view showing a sent message followed by a received reply labeled unread, with Sent, Received, and Unread labels on the thread" />
+</Frame>
+
 ## Track agent state with labels
 
 Labels come in two kinds. System labels are set by the delivery pipeline and cannot be added or removed through the API: `received`, `sent`, `bounced`, `complained`, `delayed`, `delivered`, `rejected`, `opened`, and `scheduled`. Everything else is a custom label you own, which makes labels the natural place to record agent state on a conversation: mark a thread `triaged` after classification, `escalated` when a human takes over, then filter your work queue with the `labels` parameter on list endpoints.
