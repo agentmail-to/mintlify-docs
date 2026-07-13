@@ -261,6 +261,13 @@ curl -X POST "$AGENTMAIL_BASE_URL/inboxes/<inbox_id>/messages/<message_id>/reply
 
 To confirm the reply landed, list the messages the same way you did in the previous step. You should now see two messages sharing one `thread_id`: your original test email and the reply you just sent. When both show up, the full send to receive to reply loop is working end to end.
 
+You can also confirm it visually: open your inbox in the [console](https://console.agentmail.to) and the loop is sitting there as one thread — the test message and the reply together, labeled `Sent`, `Received`, and `Unread`.
+
+<Frame caption="The finished quickstart loop in the console: one thread holding the test message and the reply.">
+  <img className="block dark:hidden" src="/images/screenshots/console-quickstart-thread.png" alt="AgentMail console showing the quickstart thread with the original test message and the reply on the same thread, labeled Sent, Received, and Unread" />
+  <img className="hidden dark:block" src="/images/screenshots/console-quickstart-thread-dark.png" alt="AgentMail console showing the quickstart thread with the original test message and the reply on the same thread, labeled Sent, Received, and Unread" />
+</Frame>
+
 ## What just happened
 
 You touched four objects. This is the mental model to carry into the rest of the docs:

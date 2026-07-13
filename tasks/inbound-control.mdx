@@ -93,6 +93,13 @@ curl -X POST "https://api.agentmail.to/v0/lists/receive/allow" \
 
 </CodeGroup>
 
+Every inbox's six lists are also editable in the [console](https://console.agentmail.to) under **Allow/Block Lists**, where a blocked entry shows the `reason` you attached:
+
+<Frame caption="An inbox's lists in the console — one receive-direction block entry with its reason.">
+  <img className="block dark:hidden" src="/images/screenshots/console-lists.png" alt="AgentMail console Allow/Block Lists page for an inbox showing the six lists by direction, with one block entry including its address and reason" />
+  <img className="hidden dark:block" src="/images/screenshots/console-lists-dark.png" alt="AgentMail console Allow/Block Lists page for an inbox showing the six lists by direction, with one block entry including its address and reason" />
+</Frame>
+
 Removing an entry is a delete on the same path. Deletion returns `204` and takes effect on the next send or delivery.
 
 <CodeGroup>

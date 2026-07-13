@@ -210,6 +210,13 @@ A scheduled draft's `send_status` field reports where it is in the lifecycle:
 
 There is no `sent` status: a draft that sends successfully is deleted, and the result lives on as a message in the thread.
 
+Pending sends are visible in the [console](https://console.agentmail.to) under the inbox's **Scheduled** folder until they fire:
+
+<Frame caption="A scheduled draft waiting in the console's Scheduled folder.">
+  <img className="block dark:hidden" src="/images/screenshots/console-scheduled.png" alt="AgentMail console showing the Scheduled folder of an inbox with one scheduled draft waiting to send" />
+  <img className="hidden dark:block" src="/images/screenshots/console-scheduled-dark.png" alt="AgentMail console showing the Scheduled folder of an inbox with one scheduled draft waiting to send" />
+</Frame>
+
 ## Prevent reply loops
 
 An agent that replies to everything it receives will eventually mail another auto-responder, and the two will answer each other forever. AgentMail derives recipients safely (reply-all already filters out your own inbox address), but loop prevention across messages is your agent's job. Three checks cover it:
