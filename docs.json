@@ -25,7 +25,9 @@
             "group": "Core tasks",
             "pages": [
               "tasks/receive",
-              "tasks/send"
+              "tasks/send",
+              "tasks/conversations",
+              "tasks/inbound-control"
             ]
           }
         ]

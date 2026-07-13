@@ -5,9 +5,24 @@ description: Go from an API key to a live inbox and a confirmed send to receive 
 
 By the end of this page you'll have a live inbox and a confirmed send to receive to reply loop, using the same four objects you'll reach for in every later workflow: the inbox, the message, the thread, and the reply.
 
+Everything below runs against one base URL and one auth header. Here they are up front so every snippet on the page is self-contained:
+
+```bash
+# Base URL for every request
+https://api.agentmail.to/v0
+
+# Auth header for every request
+Authorization: Bearer <API_KEY>
+```
+
 ## Before you begin
 
-You need an account and an API key; the key goes in the `Authorization` header on every request. If you don't have an account yet, start with the [Introduction](/introduction) and come back here once you have a key.
+You need two things:
+
+1. **An account and an API key.** The key is what goes in the `Authorization` header. Treat it like a password: read it from an environment variable in real code, and never commit it.
+2. **The two constants above.** Every request in this tutorial targets the base URL `https://api.agentmail.to/v0` and carries `Authorization: Bearer <API_KEY>`. If either is missing or wrong, calls fail before they reach any real logic.
+
+If you don't have an account yet, start with the [Introduction](./introduction) and come back here once you have a key. For how the pieces fit together, see [Architecture](./architecture).
 
 Export your key and the base URL so the snippets below can reference them:
 
@@ -16,46 +31,78 @@ export AGENTMAIL_API_KEY="<API_KEY>"
 export AGENTMAIL_BASE_URL="https://api.agentmail.to/v0"
 ```
 
-Every step shows two forms of the same call: the CLI and raw `curl`. Both hit the same endpoints; use whichever you prefer, consistently. The CLI needs Node.js and reads your key from the `AGENTMAIL_API_KEY` environment variable you just exported, so there is no separate login step:
+## Install and authenticate
 
-```bash
-npm install -g agentmail-cli
-```
+You can drive the whole tutorial with the Python SDK, the TypeScript SDK, the CLI, or raw `curl`. The SDKs are how most integrations ship; the CLI is handy for poking at the API from a terminal, and `curl` works anywhere with no install. Choose one and use it for every step; all four hit the same endpoints and the same base URL.
 
-<Steps>
-
-<Step title="Verify your key">
-
-Confirm the key is accepted before anything else. Both forms call `GET /auth/me`, which returns the scope your key resolves to.
+The SDK clients take the key as a constructor argument, and the CLI reads it from the `AGENTMAIL_API_KEY` environment variable you exported above, so there's no separate login step in any lane. To confirm the key is accepted, every lane calls `GET /v0/auth/me`, which returns the scope your key resolves to.
 
 <CodeGroup>
 
+```python Python
+# Install the SDK: pip install agentmail
+import os
+
+from agentmail import AgentMail
+
+client = AgentMail(api_key=os.environ["AGENTMAIL_API_KEY"])
+
+# Confirm the key is accepted; prints the caller scope
+print(client.auth.me())
+```
+
+```typescript TypeScript
+// Install the SDK: npm install agentmail
+import { AgentMailClient } from "agentmail";
+
+const client = new AgentMailClient({ apiKey: process.env.AGENTMAIL_API_KEY });
+
+// Confirm the key is accepted; prints the caller scope
+console.log(await client.auth.me());
+```
+
 ```bash CLI
+# Install the CLI (Node.js required)
+npm install -g agentmail-cli
+
+# Confirm the key is accepted; prints the caller scope
 agentmail auth me
 ```
 
 ```bash curl
+# No install needed. Every call sets the header and base URL explicitly.
+# Confirm the key is accepted:
 curl "$AGENTMAIL_BASE_URL/auth/me" \
   -H "Authorization: Bearer $AGENTMAIL_API_KEY"
 ```
 
 </CodeGroup>
 
-Read the response by status code:
+Read the response by status code (the SDKs raise an error instead of returning one, with the same codes attached):
 
-- **`200`**: your key works. The body describes the scope this key is allowed to act on.
-- **`401`**: the key is missing or wrong. Re-check `AGENTMAIL_API_KEY`.
-- **`404`**: the base URL is off, almost always a missing `/v0` segment. See [Common mistakes](#common-mistakes).
+- **`200`** — your key works. The body describes the scope this key is allowed to act on.
+- **`401`** — the key is missing or wrong. Re-check `AGENTMAIL_API_KEY`.
+- **`404`** — the base URL is off, almost always a missing `/v0` segment. See [Common mistakes](#common-mistakes).
 
-</Step>
+## Create an inbox
 
-<Step title="Create an inbox">
-
-An **inbox** is the mailbox you send to and receive from. Its `inbox_id` is the inbox's email address, formed as `username@domain`: the username is randomly generated unless you pass one, and the domain defaults to `agentmail.to`.
+An **inbox** is the mailbox you send to and receive from. It has an address-like id that other senders (including you, in the next step) can deliver to. Creating one is your first authenticated write.
 
 The request body is all-optional. The simplest call sends `{}`; passing a `display_name` just makes the inbox easier to recognize later.
 
 <CodeGroup>
+
+```python Python
+inbox = client.inboxes.create(display_name="Quickstart inbox")
+
+print(inbox.inbox_id)
+```
+
+```typescript TypeScript
+const inbox = await client.inboxes.create({ displayName: "Quickstart inbox" });
+
+console.log(inbox.inboxId);
+```
 
 ```bash CLI
 agentmail inboxes create \
@@ -75,20 +122,42 @@ curl -X POST "$AGENTMAIL_BASE_URL/inboxes" \
 
 The response includes `inbox_id`, `created_at`, and a few other fields. The one you need right now is `inbox_id`: it is the address you send to in the next step, and it goes in the path of every later call. Copy it and keep it handy.
 
-</Step>
+## Send a test email to the inbox
 
-<Step title="Send a test email to the inbox">
-
-Now give the inbox something to receive. Send a **message** addressed to the `inbox_id` from step 2, so the loop closes back to you. A message is a single email: it has one or more recipients (`to`), a `subject`, and content in `text` (and/or `html`).
+Now give the inbox something to receive. Send a **message** addressed to the `inbox_id` you just created, so the loop closes back to you. A message is a single email: it has one or more recipients (`to`), a `subject`, and content in `text` (and/or `html`).
 
 Note the field is `text`, not `body`. The send endpoint takes the inbox id in the path (`/v0/inboxes/{inbox_id}/messages/send`) and returns `message_id` and `thread_id`.
 
 <CodeGroup>
 
+```python Python
+sent = client.inboxes.messages.send(
+    inbox_id="<inbox_id from the previous step>",
+    to="<inbox_id from the previous step>",
+    subject="Hello from the quickstart",
+    text="This is a test message.",
+)
+
+print(sent.message_id, sent.thread_id)
+```
+
+```typescript TypeScript
+const sent = await client.inboxes.messages.send(
+  "<inbox_id from the previous step>",
+  {
+    to: "<inbox_id from the previous step>",
+    subject: "Hello from the quickstart",
+    text: "This is a test message.",
+  },
+);
+
+console.log(sent.messageId, sent.threadId);
+```
+
 ```bash CLI
 agentmail inboxes:messages send \
-  --inbox-id "<inbox_id from step 2>" \
-  --to "<inbox_id from step 2>" \
+  --inbox-id "<inbox_id from the previous step>" \
+  --to "<inbox_id from the previous step>" \
   --subject "Hello from the quickstart" \
   --text "This is a test message."
 ```
@@ -98,7 +167,7 @@ curl -X POST "$AGENTMAIL_BASE_URL/inboxes/<inbox_id>/messages/send" \
   -H "Authorization: Bearer $AGENTMAIL_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
-    "to": "<inbox_id from step 2>",
+    "to": "<inbox_id from the previous step>",
     "subject": "Hello from the quickstart",
     "text": "This is a test message."
   }'
@@ -108,17 +177,30 @@ curl -X POST "$AGENTMAIL_BASE_URL/inboxes/<inbox_id>/messages/send" \
 
 Delivery is not always instant. Give it a moment before you try to read it in the next step.
 
-</Step>
-
-<Step title="Fetch the received message">
+## Fetch the received message
 
 List the messages on your inbox to find the one that just arrived. The list response has a `count`, a `limit`, a `next_page_token` for paging, and a `messages` array. Each item carries `message_id`, `thread_id`, `from`, `to`, `subject`, `preview`, and `timestamp`.
 
 <CodeGroup>
 
+```python Python
+messages = client.inboxes.messages.list(inbox_id="<inbox_id from step 3>")
+
+for message in messages.messages:
+    print(message.message_id, message.thread_id, message.subject)
+```
+
+```typescript TypeScript
+const messages = await client.inboxes.messages.list("<inbox_id from step 3>");
+
+for (const message of messages.messages) {
+  console.log(message.messageId, message.threadId, message.subject);
+}
+```
+
 ```bash CLI
 agentmail inboxes:messages list \
-  --inbox-id "<inbox_id from step 2>"
+  --inbox-id "<inbox_id from step 3>"
 ```
 
 ```bash curl
@@ -130,21 +212,39 @@ curl "$AGENTMAIL_BASE_URL/inboxes/<inbox_id>/messages" \
 
 In the response, find the test message you sent. Two values from it matter for the reply:
 
-- **`message_id`**: the id of the message itself, which confirms the send to receive half of the loop worked. This is what you reply on next.
-- **`thread_id`**: the conversation the message belongs to. Your reply lands on this same thread.
+- **`message_id`** — the id of the message itself, which confirms the send to receive half of the loop worked. This is what you reply on next.
+- **`thread_id`** — the conversation the message belongs to. Your reply lands on this same thread.
 
-</Step>
-
-<Step title="Reply and confirm the loop">
+## Reply and confirm it landed
 
 Send a **reply** on the message you just found. In AgentMail a reply targets a message id, not a thread id: `POST /v0/inboxes/{inbox_id}/messages/{message_id}/reply`. The reply is attached to the same thread as the original, so the conversation stays together. Its body uses `text` (and/or `html`), and the response returns a new `message_id` and the same `thread_id`.
 
 <CodeGroup>
 
+```python Python
+reply = client.inboxes.messages.reply(
+    inbox_id="<inbox_id from step 3>",
+    message_id="<message_id from the previous step>",
+    text="Got it, replying from the quickstart.",
+)
+
+print(reply.message_id, reply.thread_id)
+```
+
+```typescript TypeScript
+const reply = await client.inboxes.messages.reply(
+  "<inbox_id from step 3>",
+  "<message_id from the previous step>",
+  { text: "Got it, replying from the quickstart." },
+);
+
+console.log(reply.messageId, reply.threadId);
+```
+
 ```bash CLI
 agentmail inboxes:messages reply \
-  --inbox-id "<inbox_id from step 2>" \
-  --message-id "<message_id from step 4>" \
+  --inbox-id "<inbox_id from step 3>" \
+  --message-id "<message_id from the previous step>" \
   --text "Got it, replying from the quickstart."
 ```
 
@@ -159,22 +259,16 @@ curl -X POST "$AGENTMAIL_BASE_URL/inboxes/<inbox_id>/messages/<message_id>/reply
 
 </CodeGroup>
 
-To confirm the reply landed, list the messages the same way you did in step 4. You should now see two messages sharing one `thread_id`: your original test email and the reply you just sent. When both show up, the full send to receive to reply loop is working end to end.
-
-</Step>
-
-</Steps>
+To confirm the reply landed, list the messages the same way you did in the previous step. You should now see two messages sharing one `thread_id`: your original test email and the reply you just sent. When both show up, the full send to receive to reply loop is working end to end.
 
 ## What just happened
 
 You touched four objects. This is the mental model to carry into the rest of the docs:
 
-- **Inbox**: a mailbox whose `inbox_id` is its email address. It sends and receives mail. You created one in step 2.
+- **Inbox**: a mailbox with an address-like `inbox_id`. It sends and receives mail. You created one in step 3.
 - **Message**: a single email with recipients, a subject, and `text`/`html` content. You sent one to your inbox and then read it back.
 - **Thread**: the conversation a message belongs to, tracked by `thread_id`. It groups an original message with its replies so a back-and-forth stays together.
 - **Reply**: a new message attached to an existing message's thread rather than a fresh conversation. Some flows build a reply as a **draft** first and then send it; the end result is the same message on the thread. Your reply landed on the same `thread_id` as the test email.
-
-For how these objects fit into the larger system, see [Architecture](/architecture).
 
 ## Common mistakes
 
@@ -183,5 +277,5 @@ Symptom: requests return `404 Not Found` even though your key is valid and the r
 Fix: make sure the base URL is exactly `https://api.agentmail.to/v0`, including the `/v0` version segment, on every request. A base URL of `https://api.agentmail.to` without `/v0` will not resolve to the API.
 
 **Re-running signup when an account already exists.**
-Symptom: signing up again does not mint a fresh account. When the account already exists, the API rejects the request with a `403` "already exists" error.
-Fix: don't re-run signup to recover a key. Sign in and reuse or rotate your existing API key instead. See the [Introduction](/introduction) for where to find and manage your key.
+Symptom: signing up again returns a conflict instead of a fresh account, and you don't get a clean new key.
+Fix: don't re-run signup to recover. If you already have an account, sign in and reuse or rotate your existing API key instead. See the [Introduction](./introduction) for where to find and manage your key.

@@ -67,7 +67,7 @@ The response is `{"message_id": "...", "thread_id": "..."}`. Request body fields
 | `text`, `html` | string | The message body. There is no `body` field; use `text` and/or `html`. Provide both when you can so the message renders on every client. |
 | `reply_to` | array of addresses | Sets the Reply-To header on the outgoing message. |
 | `attachments` | array | See [Attachments](#attachments). |
-| `headers` | map | Custom SMTP headers, name to value. A `null` value suppresses that header instead of setting it. |
+| `headers` | map | Custom SMTP headers, name to value. Values must be strings; a `null` value is rejected with a 400 `ValidationError`. To leave a header off, omit it from the map. |
 | `labels` | array of strings | Custom labels stored on the sent message, useful for filtering later. AgentMail adds the system label `sent` itself. |
 
 <Note>
@@ -143,7 +143,11 @@ A draft is an unsent message. Use one when the send should not happen in the sam
 
 Create a draft with `POST /inboxes/{inbox_id}/drafts` (same content fields as a send), then fire it with `POST /inboxes/{inbox_id}/drafts/{draft_id}/send`. Sending returns the usual `message_id` and `thread_id` and deletes the draft; from then on it is a message. To prepare a reply or forward for review instead of composing one by hand, `POST /inboxes/{inbox_id}/messages/{message_id}/draft-reply`, `/draft-reply-all`, or `/draft-forward` create the draft with recipients, subject, and threading already derived from the source message.
 
-To schedule, set `send_at` to an ISO 8601 datetime when creating or updating the draft. AgentMail sends it at that time; no polling on your side. A scheduled draft must have at least one recipient, and it gets the `scheduled` label so you can find pending sends with a label filter.
+To schedule, set `send_at` to an ISO 8601 datetime when creating or updating the draft. AgentMail sends it at that time; no polling on your side. The scheduled draft gets the `scheduled` label so you can find pending sends with a label filter.
+
+<Warning>
+Recipients are not validated at schedule time. A draft scheduled with no `to`, `cc`, or `bcc` is accepted (`send_status: scheduled`) and then silently moves to `send_status: failed` at fire time instead of sending. Set recipients before `send_at` arrives, and monitor `send_status` if the draft was created without them.
+</Warning>
 
 <CodeGroup>
 
@@ -193,9 +197,8 @@ curl -X POST https://api.agentmail.to/v0/inboxes/agent@yourdomain.com/drafts \
 Manage the schedule through the draft itself:
 
 - **Reschedule**: `PATCH /inboxes/{inbox_id}/drafts/{draft_id}` with a new `send_at`.
-- **Cancel the schedule but keep the draft**: `PATCH` with `"send_at": null`.
-- **Cancel entirely**: `DELETE /inboxes/{inbox_id}/drafts/{draft_id}`.
-- **Send now instead of waiting**: `POST .../drafts/{draft_id}/send`.
+- **Cancel**: `DELETE /inboxes/{inbox_id}/drafts/{draft_id}`. This is the only cancel path: `PATCH` with `"send_at": null` is rejected with a 400 (`send_at` must be a datetime string), so there is no way to unschedule a draft while keeping it. To keep the content, read the draft and recreate it without `send_at` before deleting.
+- **Send now instead of waiting**: `POST .../drafts/{draft_id}/send`. In TypeScript this is `client.inboxes.drafts.send(inboxId, draftId, {})`; the empty request object is required, and omitting it throws a client-side `JsonError` before any request is made.
 
 A scheduled draft's `send_status` field reports where it is in the lifecycle:
 
@@ -203,7 +206,7 @@ A scheduled draft's `send_status` field reports where it is in the lifecycle:
 | --- | --- |
 | `scheduled` | Queued; will send at `send_at`. Still editable and cancelable. |
 | `sending` | Picked up for delivery. Too late to cancel. |
-| `failed` | The send hit a terminal error, such as a blocked recipient. Fix the cause and set a new `send_at` to retry. |
+| `failed` | The send hit a terminal error, such as a blocked recipient or a draft that reached `send_at` with no recipients. Fix the cause and set a new `send_at` to retry. |
 
 There is no `sent` status: a draft that sends successfully is deleted, and the result lives on as a message in the thread.
 

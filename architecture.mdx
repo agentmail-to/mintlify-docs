@@ -9,14 +9,10 @@ Before you work through the task pages, it helps to see how AgentMail's objects 
 
 AgentMail nests from your account down to individual messages. An organization holds one or more pods, each pod holds inboxes, and each inbox owns the messages, threads, and drafts that flow through its email address. Everything else (domains, keys, webhooks, labels, lists) hangs off one of these levels.
 
-```text
-Organization                  your account / tenant
-└── Pod                       a sub-organization; the unit of multi-tenancy
-    └── Inbox                 an email address
-        ├── Messages          individual emails
-        ├── Threads           grouped conversations
-        └── Drafts            unsent messages
-```
+<Frame>
+  <img className="block dark:hidden" src="/images/diagrams/architecture-object-model.svg" alt="Organization contains pods; each pod contains inboxes; an inbox owns messages, threads, and drafts" />
+  <img className="hidden dark:block" src="/images/diagrams/architecture-object-model.dark.svg" alt="Organization contains pods; each pod contains inboxes; an inbox owns messages, threads, and drafts" />
+</Frame>
 
 ## Organization
 

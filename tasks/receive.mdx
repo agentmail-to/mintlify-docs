@@ -15,11 +15,14 @@ An inbox is addressable the moment you create it with `POST /v0/inboxes`. Every 
 
 ```python Python
 from agentmail import AgentMail
+from agentmail.inboxes import CreateInboxRequest
 import os
 
 client = AgentMail(api_key=os.getenv("AGENTMAIL_API_KEY"))
 
-inbox = client.inboxes.create(username="support")
+# The Python SDK wraps create parameters in a request object.
+# CreateInboxRequest imports from agentmail.inboxes, not the top-level package.
+inbox = client.inboxes.create(request=CreateInboxRequest(username="support"))
 print(inbox.inbox_id)  # support@agentmail.to
 ```
 
@@ -99,7 +102,9 @@ curl "https://api.agentmail.to/v0/threads?labels=unread" \
 
 </CodeGroup>
 
-The response holds `count`, an optional `next_page_token`, and `threads[]` ordered by `timestamp` descending. Each item carries `thread_id`, `senders`, `recipients`, `subject`, a text `preview` of the last message, `message_count`, and `last_message_id`. Page with `limit` and `page_token`. You can also filter by `senders`, `recipients`, or `subject` substring; filtered requests are served by search and cap `limit` at 100.
+The response holds `count`, an optional `next_page_token`, and `threads[]` ordered by `timestamp` descending. Each item carries `thread_id`, `senders`, `recipients`, `subject`, a text `preview` of the last message, `message_count`, and `last_message_id`. Page with `limit` and `page_token`.
+
+You can also filter by `senders`, `recipients`, or `subject`. Filtered requests are served by search and cap `limit` at 100, and matching is by word prefix, not arbitrary substring: `subject=Verification` matches "Verification test mail", but the mid-word fragment `subject=cation test` matches nothing. Two behaviors to plan around when filtering by address: a full literal address (`agent-a@agentmail.to`) can return zero results while a prefix of its username (`senders=agent-a`) matches, so filter on the username portion; and a value made entirely of digits is parsed as a number and rejected with `400`, so keep at least one non-digit character in the filter value.
 
 ## Fetch one thread
 
@@ -132,7 +137,7 @@ curl "https://api.agentmail.to/v0/threads/thread_123" \
 
 </CodeGroup>
 
-An unknown `thread_id` returns `404` with a machine-readable `code` of `not_found` in the error body; branch on `code`, not the message text.
+An unknown `thread_id` returns `404` with a body like `{"name": "NotFoundError", "message": "Thread not found"}`; branch on the HTTP status and the PascalCase `name` field, not the message text.
 
 Once your agent has handled a message, remove its `unread` label with `PATCH /v0/inboxes/{inbox_id}/messages/{message_id}` (`remove_labels: ["unread"]`, optionally `add_labels: ["read"]`). Your next `labels=unread` poll then skips it, which is what keeps the agent from reprocessing the same mail.
 
