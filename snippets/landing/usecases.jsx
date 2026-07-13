@@ -31,7 +31,7 @@ export const LandingUseCases = () => {
 
       <div className="uc-grid">
         {/* 1 — Outbound GTM */}
-        <div className="uc-card">
+        <a className="uc-card" href="/tasks/send">
           <div className="uc-tag-row">
             <span className="uc-tag">/messages/send</span>
             <span className="uc-arrow">↗</span>
@@ -47,10 +47,10 @@ export const LandingUseCases = () => {
             <div className="uc-row"><span>Re: not right now, thanks</span><Chip>ARCHIVE</Chip></div>
             <div className="uc-note">hot lead → handed to sales@yourco.com</div>
           </div>
-        </div>
+        </a>
 
         {/* 2 — Inbox per user */}
-        <div className="uc-card">
+        <a className="uc-card" href="/architecture">
           <div className="uc-tag-row">
             <span className="uc-tag">/pods · /inboxes</span>
             <span className="uc-arrow">↗</span>
@@ -66,10 +66,10 @@ export const LandingUseCases = () => {
             <div className="uc-row"><span className="uc-mono"><em>zeno</em> kai@zeno-mail.com</span><span className="uc-check">✓</span></div>
             <div className="uc-note">+ 4,318 more inboxes</div>
           </div>
-        </div>
+        </a>
 
         {/* 3 — OTP */}
-        <div className="uc-card">
+        <a className="uc-card" href="/tasks/receive">
           <div className="uc-tag-row">
             <span className="uc-tag">message.received</span>
             <span className="uc-arrow">↗</span>
@@ -94,10 +94,10 @@ export const LandingUseCases = () => {
               <span className="uc-note-inline">read by agent in 0.4s</span>
             </div>
           </div>
-        </div>
+        </a>
 
         {/* 4 — Support triage */}
-        <div className="uc-card">
+        <a className="uc-card" href="/tasks/conversations">
           <div className="uc-tag-row">
             <span className="uc-tag">webhooks</span>
             <span className="uc-arrow">↗</span>
@@ -113,7 +113,7 @@ export const LandingUseCases = () => {
             <div className="uc-row"><span>Feature idea: dark mode</span><Chip>backlog</Chip></div>
             <div className="uc-note">3 drafts ready for review</div>
           </div>
-        </div>
+        </a>
       </div>
 
       <style>{`
@@ -137,7 +137,9 @@ export const LandingUseCases = () => {
           display: flex; flex-direction: column; gap: 10px;
           transition: transform 0.25s var(--aml-ease), box-shadow 0.25s var(--aml-ease);
         }
+        a.uc-card { text-decoration: none; color: inherit; }
         .uc-card:hover { transform: translateY(-3px); box-shadow: var(--aml-shadow); }
+        .uc-card:hover .uc-arrow { color: var(--aml-ink); }
         .uc-tag-row { display: flex; justify-content: space-between; align-items: center; }
         .uc-tag {
           font-family: var(--aml-mono); font-size: 12px; color: var(--aml-ink-2);
