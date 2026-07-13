@@ -234,7 +234,7 @@ SDK reference: https://docs.agentmail.to/api-reference
 
 | Error name | HTTP | Cause | Fix |
 | --- | --- | --- | --- |
-| `ValidationError` | 400 | System label in `add_labels`/`remove_labels`, or `limit` > 100 on search | Use custom labels only; keep `limit` <= 100 |
+| `ValidationError` | 400 | System label in `add_labels`/`remove_labels`, or `limit` > 100 on search | Use custom labels only; keep `limit` at 100 or less |
 | `ForbiddenError` | 403 | API key lacks `message_read` (reads/search) or `message_update` (label edits) | Use a key with the required permission |
 | `NotFoundError` | 404 | Thread ID does not exist or is outside the key's scope | Check the ID and the key's inbox/pod/org scope |
 | `RaceConditionError` | 409 | Concurrent write to the same thread raced this request | Retry the request |
