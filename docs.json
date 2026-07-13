@@ -3,13 +3,22 @@
   "theme": "mint",
   "name": "AgentMail",
   "colors": {
-    "primary": "#16A34A",
-    "light": "#07C983",
-    "dark": "#15803D"
+    "primary": "#18181b",
+    "light": "#fafafa",
+    "dark": "#09090b"
+  },
+  "appearance": {
+    "default": "dark"
   },
   "favicon": "/favicon.svg",
   "navigation": {
     "tabs": [
+      {
+        "tab": "Home",
+        "pages": [
+          "index"
+        ]
+      },
       {
         "tab": "Documentation",
         "groups": [
@@ -38,6 +47,19 @@
     "light": "/logo/light.svg",
     "dark": "/logo/dark.svg"
   },
+  "navbar": {
+    "links": [
+      {
+        "label": "Support",
+        "href": "mailto:support@agentmail.cc"
+      }
+    ],
+    "primary": {
+      "type": "button",
+      "label": "Get API Key",
+      "href": "https://console.agentmail.to"
+    }
+  },
   "contextual": {
     "options": [
       "copy",
@@ -52,7 +74,9 @@
   },
   "footer": {
     "socials": {
-      "github": "https://github.com/agentmail-to"
+      "x": "https://x.com/agentmail_to",
+      "github": "https://github.com/agentmail-to",
+      "discord": "https://discord.gg/hTYatWYWBc"
     }
   }
 }
