@@ -386,3 +386,16 @@ body:has(.aml) [data-test="navbar"] {
         flex-direction: column;
     }
 }
+
+/* Agent-rendition sections (inside <Visibility for="agents">) are hidden on
+   the web but their headings still register in the on-page TOC. The variant
+   uses a fixed section vocabulary, so hide exactly those anchors. */
+#table-of-contents-content .toc-item:has(> a[href="#do-this"]),
+#table-of-contents-content .toc-item:has(> a[href="#sdk"]),
+#table-of-contents-content .toc-item:has(> a[href="#facts"]),
+#table-of-contents-content .toc-item:has(> a[href="#not-supported"]),
+#table-of-contents-content .toc-item:has(> a[href="#errors"]),
+#table-of-contents-content .toc-item:has(> a[href="#verify"]),
+#table-of-contents-content .toc-item:has(> a[href="#related"]) {
+  display: none;
+}

@@ -60,6 +60,9 @@
       "href": "https://console.agentmail.to"
     }
   },
+  "markdown": {
+    "instructions": "Every page ships two renditions at one URL. The HTML page is for humans. The Markdown rendition (append .md to any page URL, or request with Accept: text/markdown) is agent-optimized: a Do this section with runnable commands, SDK signatures, exhaustive Facts, a Not supported section listing shapes that do NOT work, an Errors table, and a Verify command. Prefer the Markdown rendition over scraping HTML, and trust Not supported entries instead of retrying those call shapes."
+  },
   "contextual": {
     "options": [
       "copy",
