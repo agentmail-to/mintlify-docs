@@ -1,6 +1,6 @@
 # Place any AgentMail primitive in the object tree and predict request path shape from key scope
 
-This page maps AgentMail's containment hierarchy (Organization > Pod > Inbox > Messages/Threads/Drafts) and the rule that decides paths: org-scoped keys name the pod in the path, pod- and inbox-scoped keys do not. Use it before building against any endpoint to know whether a `/pods/{pod_id}` segment is required.
+This page maps AgentMail's containment hierarchy (Organization > Pod > Inbox > Messages/Threads/Drafts) and the rule that decides which pod a call targets: pod- and inbox-scoped keys resolve the pod from the key; org-scoped keys target the pod named in the path, and unprefixed paths fall back to org-wide reads and default-pod writes. Use it before building against any endpoint to know whether a `/pods/{pod_id}` segment is needed.
 
 ## Do this
 
@@ -11,7 +11,7 @@ curl https://api.agentmail.to/v0/auth/me \
   -H "Authorization: Bearer $AGENTMAIL_API_KEY"
 ```
 
-Read `scope_type` in the response. If `scope_type` is `organization`, include `/pods/{pod_id}` in paths for pod-level resources (example: `/v0/pods/{pod_id}/inboxes`). If `scope_type` is `pod` or `inbox`, omit the pod segment; the key resolves scope on its own.
+Read `scope_type` in the response. If `scope_type` is `organization`, include `/pods/{pod_id}` in paths whenever you mean a specific pod (example: `/v0/pods/{pod_id}/inboxes`); unprefixed writes such as `POST /v0/inboxes` succeed but create in the organization's default pod. If `scope_type` is `pod` or `inbox`, omit the pod segment; the key resolves scope on its own.
 
 ## Facts
 
@@ -33,13 +33,14 @@ Read `scope_type` in the response. If `scope_type` is `organization`, include `/
 - `pod_id` is present only when `scope_type` is `pod` or `inbox`.
 - `inbox_id` is present only when `scope_type` is `inbox`.
 - `api_key_id` is present only when the caller authenticated with an API key; absent for JWT and proxy credentials.
-- Path rule: keys with `scope_type` of `pod` or `inbox` never include a `/pods/{pod_id}` segment; keys with `scope_type` of `organization` must include `/pods/{pod_id}` for pod-level resource calls.
+- Path rule: keys with `scope_type` of `pod` or `inbox` never include a `/pods/{pod_id}` segment. Keys with `scope_type` of `organization` include `/pods/{pod_id}` to target a specific pod.
+- With an org-scoped key, unprefixed paths do not error: reads (`GET /v0/inboxes`) return resources across all pods in the organization; writes (`POST /v0/inboxes`) create in the organization's default pod.
+- Every organization has a default pod; unprefixed writes with an org-scoped key land there.
 
 ## Not supported
 
 - Request paths never include an organization segment; the organization is implied by the key.
-- An org-scoped key cannot omit the pod segment on pod-level resource calls; scope does not resolve from an org-scoped key alone.
-- Swapping a pod-scoped key for an org-scoped key (or the reverse) without changing paths does not work; path shape must match key scope.
+- Targeting a specific non-default pod with an org-scoped key on an unprefixed path: not possible. The unprefixed write silently creates in the default pod instead of failing — name `/pods/{pod_id}` in the path.
 - A message cannot belong to more than one inbox.
 
 ## Verify

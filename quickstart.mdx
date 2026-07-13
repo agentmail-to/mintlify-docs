@@ -219,6 +219,10 @@ In the response, find the test message you sent. Two values from it matter for t
 
 Send a **reply** on the message you just found. In AgentMail a reply targets a message id, not a thread id: `POST /v0/inboxes/{inbox_id}/messages/{message_id}/reply`. The reply is attached to the same thread as the original, so the conversation stays together. Its body uses `text` (and/or `html`), and the response returns a new `message_id` and the same `thread_id`.
 
+<Note>
+A message id is an RFC 822 id, angle brackets and all: `<0100...@email.amazonses.com>`. The SDKs and CLI take it as-is, but in the curl lane it goes into the URL path, so URL-encode it first (`<` → `%3C`, `>` → `%3E`, `@` → `%40`). Pasted raw, the request never matches the route.
+</Note>
+
 <CodeGroup>
 
 ```python Python
@@ -249,7 +253,7 @@ agentmail inboxes:messages reply \
 ```
 
 ```bash curl
-curl -X POST "$AGENTMAIL_BASE_URL/inboxes/<inbox_id>/messages/<message_id>/reply" \
+curl -X POST "$AGENTMAIL_BASE_URL/inboxes/<inbox_id>/messages/<url-encoded message_id>/reply" \
   -H "Authorization: Bearer $AGENTMAIL_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
