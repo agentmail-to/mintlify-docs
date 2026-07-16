@@ -1,37 +1,47 @@
 {
   "$schema": "https://mintlify.com/docs.json",
   "theme": "mint",
-  "name": "Mintlify Starter Kit",
+  "name": "AgentMail",
   "colors": {
-    "primary": "#16A34A",
-    "light": "#07C983",
-    "dark": "#15803D"
+    "primary": "#18181b",
+    "light": "#fafafa",
+    "dark": "#09090b"
+  },
+  "appearance": {
+    "default": "dark"
   },
   "favicon": "/favicon.svg",
   "navigation": {
-    "pages": [
+    "tabs": [
       {
-        "group": "Getting Started",
+        "tab": "Home",
         "pages": [
-          "index",
-          "quickstart"
+          "index"
+        ]
+      },
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Start here",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "architecture"
+            ]
+          },
+          {
+            "group": "Core tasks",
+            "pages": [
+              "tasks/receive",
+              "tasks/send",
+              "tasks/conversations",
+              "tasks/inbound-control"
+            ]
+          }
         ]
       }
-    ],
-    "global": {
-      "anchors": [
-        {
-          "anchor": "Documentation",
-          "href": "https://mintlify.com/docs",
-          "icon": "book-open-cover"
-        },
-        {
-          "anchor": "Blog",
-          "href": "https://mintlify.com/blog",
-          "icon": "newspaper"
-        }
-      ]
-    }
+    ]
   },
   "logo": {
     "light": "/logo/light.svg",
@@ -41,14 +51,17 @@
     "links": [
       {
         "label": "Support",
-        "href": "mailto:hi@mintlify.com"
+        "href": "mailto:support@agentmail.cc"
       }
     ],
     "primary": {
       "type": "button",
-      "label": "Dashboard",
-      "href": "https://app.mintlify.com"
+      "label": "Get API Key",
+      "href": "https://console.agentmail.to"
     }
+  },
+  "markdown": {
+    "instructions": "Every page ships two renditions at one URL. The HTML page is for humans. The Markdown rendition (append .md to any page URL, or request with Accept: text/markdown) is agent-optimized: a Do this section with runnable commands, SDK signatures, exhaustive Facts, a Not supported section listing shapes that do NOT work, an Errors table, and a Verify command. Prefer the Markdown rendition over scraping HTML, and trust Not supported entries instead of retrying those call shapes."
   },
   "contextual": {
     "options": [
@@ -64,9 +77,9 @@
   },
   "footer": {
     "socials": {
-      "x": "https://x.com/mintlify",
-      "github": "https://github.com/mintlify",
-      "linkedin": "https://linkedin.com/company/mintlify"
+      "x": "https://x.com/agentmail_to",
+      "github": "https://github.com/agentmail-to",
+      "discord": "https://discord.gg/hTYatWYWBc"
     }
   }
 }

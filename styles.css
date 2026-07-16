@@ -1,0 +1,401 @@
+/* ==================================================================
+   AgentMail docs landing — global shell.
+   Namespaced .aml-*. Monochrome (black/white/zinc) only.
+   Dark is the native default (docs.json appearance.default = dark);
+   light tokens are the fallback when the user toggles.
+   Per-section styles live inline in /snippets/landing/*.jsx.
+   ================================================================== */
+@import url("https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500&display=swap");
+
+.aml {
+    /* light (fallback) tokens */
+    --aml-ink: #0a0a0b;
+    --aml-ink-2: #3f3f46;
+    --aml-muted: #71717b;
+    --aml-bg: #ffffff;
+    --aml-card: #ffffff;
+    --aml-card-bd: #e4e4e7;
+    --aml-tint: #fafafa;
+    --aml-rail: #d9d9d9;
+    --aml-acc: #18181b; /* the single accent: ink in light, white in dark */
+    --aml-acc-contrast: #ffffff; /* text on top of the accent */
+    --aml-conn: rgba(10, 10, 11, 0.35); /* dashed connectors */
+    --aml-glow: rgba(10, 10, 11, 0.05);
+    --aml-shadow: 0 12px 32px -12px rgba(10, 10, 11, 0.12);
+    --aml-sans:
+        "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    --aml-mono:
+        "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    --aml-ease: cubic-bezier(0.23, 1, 0.32, 1);
+    --aml-section-y: 110px;
+
+    font-family: var(--aml-sans);
+    color: var(--aml-ink);
+    background: var(--aml-bg);
+    position: relative;
+    /* full-bleed escape from Mintlify's centered content column */
+    margin-left: calc(50% - 50vw);
+    margin-right: calc(50% - 50vw);
+    width: 100vw;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+}
+.dark .aml {
+    /* native (default) dark tokens */
+    --aml-ink: #f5f5f7;
+    --aml-ink-2: #c2c2cb;
+    --aml-muted: #8b8b93;
+    --aml-bg: #09090b;
+    --aml-card: #131316;
+    --aml-card-bd: #26262d;
+    --aml-tint: #0f0f12;
+    --aml-rail: #232329;
+    --aml-acc: #fafafa;
+    --aml-acc-contrast: #09090b;
+    --aml-conn: rgba(250, 250, 250, 0.32);
+    --aml-glow: rgba(250, 250, 250, 0.05);
+    --aml-shadow: 0 16px 40px -16px rgba(0, 0, 0, 0.65);
+}
+.aml *,
+.aml *::before,
+.aml *::after {
+    box-sizing: border-box;
+}
+
+/* ---- Mintlify navbar: force solid on the landing page ---- */
+body:has(.aml) #header,
+body:has(.aml) > header,
+body:has(.aml) > div > header,
+body:has(.aml) header.sticky,
+body:has(.aml) header.fixed,
+body:has(.aml) header[class*="navbar"],
+body:has(.aml) header[class*="Navbar"],
+body:has(.aml) [id^="navbar"],
+body:has(.aml) [data-test="navbar"] {
+    background: #ffffff !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    border-bottom: 1px solid rgba(10, 10, 11, 0.08);
+}
+.dark body:has(.aml) #header,
+.dark body:has(.aml) > header,
+.dark body:has(.aml) > div > header,
+.dark body:has(.aml) header.sticky,
+.dark body:has(.aml) header.fixed,
+.dark body:has(.aml) header[class*="navbar"],
+.dark body:has(.aml) header[class*="Navbar"],
+.dark body:has(.aml) [id^="navbar"],
+.dark body:has(.aml) [data-test="navbar"] {
+    background: #09090b !important;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* ---- dashed rails: outer 1300 column + inner 1100 column ---- */
+.aml-rails {
+    max-width: 1300px;
+    margin: 0 auto;
+    border-left: 1px dashed var(--aml-rail);
+    border-right: 1px dashed var(--aml-rail);
+    position: relative;
+}
+.aml-rails-inner {
+    max-width: 1100px;
+    margin: 0 auto;
+    border-left: 1px dashed var(--aml-rail);
+    border-right: 1px dashed var(--aml-rail);
+    position: relative;
+}
+.aml-section {
+    position: relative;
+    padding: 0 clamp(20px, 4vw, 56px);
+}
+.aml-divider {
+    border: 0;
+    border-top: 1px dashed var(--aml-rail);
+    margin: 0;
+}
+
+/* ---- mono kicker with leading square dot ---- */
+.aml-kicker {
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+    font-family: var(--aml-mono);
+    font-size: 12px;
+    font-weight: 400;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--aml-muted);
+}
+.aml-kicker::before {
+    content: "";
+    width: 6px;
+    height: 6px;
+    border-radius: 2px;
+    background: var(--aml-acc);
+    flex: none;
+}
+
+/* ---- buttons: sharp corners, mono, uppercase ---- */
+.aml-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    font-family: var(--aml-mono);
+    font-size: 13.5px;
+    font-weight: 500;
+    letter-spacing: -0.01em;
+    text-transform: uppercase;
+    text-decoration: none !important;
+    padding: 13px 18px;
+    border-radius: 0;
+    cursor: pointer;
+    white-space: nowrap;
+    transition:
+        transform 0.25s var(--aml-ease),
+        background-color 0.2s ease,
+        box-shadow 0.25s var(--aml-ease),
+        color 0.2s ease,
+        border-color 0.2s ease,
+        opacity 0.2s ease;
+}
+.aml-btn--primary {
+    background: var(--aml-acc);
+    color: var(--aml-acc-contrast) !important;
+    border: 1px solid var(--aml-acc);
+}
+.aml-btn--primary:hover {
+    transform: translateY(-2px);
+    opacity: 0.92;
+    box-shadow: var(--aml-shadow);
+}
+.aml-btn--ghost {
+    background: transparent;
+    color: var(--aml-ink) !important;
+    border: 1px solid var(--aml-ink);
+}
+.aml-btn--ghost:hover {
+    background: color-mix(in srgb, var(--aml-ink) 8%, transparent);
+    transform: translateY(-2px);
+}
+.aml-btn .arrow {
+    transition: transform 0.25s var(--aml-ease);
+}
+.aml-btn:hover .arrow {
+    transform: translateX(3px);
+}
+
+/* ---- gradient headline accent (ink fade) ---- */
+.aml-grad {
+    background: linear-gradient(
+        180deg,
+        var(--aml-ink) 0%,
+        color-mix(in srgb, var(--aml-ink) 42%, var(--aml-bg)) 100%
+    );
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+}
+
+/* ---- section header pattern: headline left, lede/action right ---- */
+.aml-secthead {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: clamp(24px, 4vw, 64px);
+    flex-wrap: wrap;
+}
+.aml-secthead-left {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    min-width: 0;
+}
+.aml-h2 {
+    margin: 0;
+    font-family: var(--aml-sans);
+    font-weight: 700;
+    font-size: clamp(30px, 3.1vw, 44px);
+    line-height: 1.08;
+    letter-spacing: -0.03em;
+    color: var(--aml-ink);
+}
+.aml-h2 .ln {
+    display: block;
+}
+.aml-h2 .ln.aml-grad {
+    display: inline-block;
+}
+.aml-secthead-right {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    align-items: flex-start;
+    flex: 0 1 380px;
+    min-width: 260px;
+}
+.aml-secthead-copy {
+    margin: 0;
+    font-size: 15.5px;
+    line-height: 1.55;
+    letter-spacing: -0.01em;
+    color: var(--aml-ink-2);
+}
+
+/* ================== HERO ================== */
+.aml-hero {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: clamp(24px, 3.5vw, 60px);
+    padding-top: var(--aml-section-y);
+    padding-bottom: var(--aml-section-y);
+}
+.aml-hero-copy {
+    flex: 1 1 440px;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 26px;
+}
+.aml-h1 {
+    font-family: var(--aml-sans);
+    font-weight: 700;
+    margin: 0;
+    font-size: clamp(36px, 4vw, 60px);
+    line-height: 1.04;
+    letter-spacing: -0.033em;
+}
+.aml-h1 .ln {
+    display: block;
+    color: var(--aml-ink);
+}
+.aml-h1 .ln.aml-grad {
+    display: inline-block;
+    color: transparent;
+}
+.aml-lede {
+    margin: 0;
+    font-size: clamp(16px, 1.3vw, 17.5px);
+    line-height: 1.5;
+    letter-spacing: -0.015em;
+    color: var(--aml-ink-2);
+    max-width: 42ch;
+}
+.aml-hero-actions {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+.aml-hero-art {
+    flex: 1 1 520px;
+    min-width: 0;
+}
+
+/* ---- footer ---- */
+.aml-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+    padding-top: 34px;
+    padding-bottom: 34px;
+}
+.aml-footer-note {
+    font-family: var(--aml-mono);
+    font-size: 12px;
+    color: var(--aml-muted);
+}
+.aml-socials {
+    display: flex;
+    gap: 10px;
+}
+.aml-social {
+    width: 30px;
+    height: 30px;
+    border-radius: 6px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--aml-acc);
+    color: var(--aml-acc-contrast) !important;
+    transition: transform 0.2s var(--aml-ease), opacity 0.2s ease;
+}
+.aml-social:hover {
+    transform: translateY(-2px);
+    opacity: 0.9;
+}
+.aml-social svg {
+    width: 14px;
+    height: 14px;
+    fill: currentColor;
+}
+
+/* ---- entrance motion ---- */
+@media (prefers-reduced-motion: no-preference) {
+    .aml-anim {
+        opacity: 0;
+        animation: aml-rise 0.7s var(--aml-ease) forwards;
+    }
+    .aml-anim.d1 { animation-delay: 0.05s; }
+    .aml-anim.d2 { animation-delay: 0.15s; }
+    .aml-anim.d3 { animation-delay: 0.25s; }
+    .aml-anim.d4 { animation-delay: 0.35s; }
+    @keyframes aml-rise {
+        from { opacity: 0; transform: translateY(26px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+}
+@media (prefers-reduced-motion: reduce) {
+    .aml-anim { opacity: 1; }
+}
+
+/* ---- responsive ---- */
+@media (max-width: 900px) {
+    .aml-hero {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    .aml-hero-art {
+        justify-content: center;
+    }
+    .aml-secthead-right {
+        flex-basis: 100%;
+    }
+}
+@media (max-width: 768px) {
+    .aml {
+        overflow-x: clip;
+    }
+    .aml-rails,
+    .aml-rails-inner {
+        border-left: 0;
+        border-right: 0;
+    }
+}
+@media (max-width: 480px) {
+    .aml {
+        --aml-section-y: 56px;
+    }
+    .aml-btn {
+        width: 100%;
+    }
+    .aml-hero-actions {
+        flex-direction: column;
+    }
+}
+
+/* Agent-rendition sections (inside <Visibility for="agents">) are hidden on
+   the web but their headings still register in the on-page TOC. The variant
+   uses a fixed section vocabulary, so hide exactly those anchors. */
+#table-of-contents-content .toc-item:has(> a[href="#do-this"]),
+#table-of-contents-content .toc-item:has(> a[href="#sdk"]),
+#table-of-contents-content .toc-item:has(> a[href="#facts"]),
+#table-of-contents-content .toc-item:has(> a[href="#not-supported"]),
+#table-of-contents-content .toc-item:has(> a[href="#errors"]),
+#table-of-contents-content .toc-item:has(> a[href="#verify"]),
+#table-of-contents-content .toc-item:has(> a[href="#related"]) {
+  display: none;
+}

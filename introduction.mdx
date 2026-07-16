@@ -1,0 +1,89 @@
+---
+title: Introduction
+description: AgentMail gives AI agents their own email inboxes. Create inboxes, receive mail, trigger workflows, and reply through one API.
+---
+
+<Visibility for="humans">
+
+AgentMail is email built for AI agents instead of people. This page explains what it does, why an agent needs an inbox of its own, and how it differs from the email tools you already use, so you can decide whether it fits and pick a surface to start with.
+
+## What AgentMail is
+
+AgentMail gives AI agents programmable email inboxes. You create an inbox, receive mail sent to it, trigger workflows on incoming messages, and send replies, all through one API. An agent gets a real address it can hand out, watch, and act on without a human sitting in a mail client.
+
+## Why agents need email
+
+Email is the account layer of the internet. Signing up for a service, confirming an address, resetting a password, and receiving receipts or notifications all run through an inbox, so an agent that does any of these needs an address mail can reach it at.
+
+That address should belong to the agent. Borrowing a human's inbox works until the agent has to act unattended or you run more agents than one mailbox can serve. With its own inbox, an agent registers for the tools it needs, receives verification codes and finishes those flows on its own, and holds ongoing correspondence with services and people.
+
+## How AgentMail differs from email tools you know
+
+The email tools you already know move mail on behalf of humans; AgentMail gives an agent an inbox of its own to send from and receive into.
+
+| Tool | Who it serves | What it moves |
+| --- | --- | --- |
+| AgentMail | AI agents | An agent's own inbox: send and receive, with workflows on incoming mail |
+| SendGrid / Resend | Your application | Outbound transactional email your app generates |
+| Mailchimp | Marketers | Outbound marketing broadcasts to a subscriber list |
+| Gmail API | A human user | Programmatic access to that person's existing mailbox |
+
+## Five ways to use AgentMail
+
+Reach AgentMail through whichever surface fits how you work. All five talk to the same API.
+
+<CardGroup cols={2}>
+  <Card title="CLI" icon="terminal">
+    The fastest way to try calls from a terminal or script one-off checks, before you write any application code.
+  </Card>
+  <Card title="MCP" icon="plug">
+    Give an MCP-capable agent or assistant direct control of inboxes as tools, without writing glue code.
+  </Card>
+  <Card title="Console" icon="browser">
+    Inspect inboxes and messages in the browser when you want to see what your code did rather than query it.
+  </Card>
+  <Card title="SDK (Python, TypeScript)" icon="code">
+    Build AgentMail into an application with typed calls instead of hand-rolled requests.
+  </Card>
+</CardGroup>
+
+The fifth surface is raw HTTP: every operation is available directly over the API, so pick it when you work in a language without an SDK or want no dependency at all.
+
+## Where to go next
+
+- [Quickstart](/quickstart): create your first inbox and send a message, so you can see it work end to end.
+- [Architecture](/architecture): the object model behind inboxes, messages, and workflows.
+
+</Visibility>
+
+<Visibility for="agents">
+
+**Understand what AgentMail is and pick a surface to build on**
+
+AgentMail gives AI agents their own programmable email inboxes: create an inbox, receive mail sent to it, trigger workflows on incoming messages, and send replies through one API. Use this page to decide whether AgentMail fits your use case and which access surface (CLI, MCP, Console, SDK, or raw HTTP) to start with.
+
+## Facts
+
+- AgentMail provides email inboxes owned by AI agents. Each inbox is a real email address the agent can hand out, receive mail into, and send from.
+- The core loop on AgentMail is: create an inbox, receive mail, trigger workflows on incoming messages, send replies. All of it runs through one API.
+- Agents need their own inboxes because email is the account layer of the internet: service signups, address confirmation, password resets, verification codes, receipts, and notifications all run through an inbox.
+- An agent with its own AgentMail address can register for services, receive verification codes, complete verification flows unattended, and hold ongoing correspondence without borrowing a human's mailbox.
+- AgentMail serves AI agents and moves both inbound and outbound mail for the agent's own inbox. SendGrid and Resend serve applications and move outbound transactional email. Mailchimp serves marketers and moves outbound broadcasts to subscriber lists. Gmail API serves a human user and gives programmatic access to that person's existing mailbox.
+- AgentMail exposes five access surfaces: CLI, MCP, Console (web dashboard), SDKs (Python and TypeScript), and raw HTTP.
+- Surface selection: CLI for terminal use and one-off scripted checks; MCP for MCP-capable agents and assistants operating inboxes as tools; Console for visual inspection of inboxes and messages; SDKs (Python, TypeScript) for application code; raw HTTP for languages without an SDK or dependency-free integrations.
+- All access surfaces (CLI, MCP, Console, SDKs, raw HTTP) talk to the same AgentMail API.
+- No SDK is required: every AgentMail operation is available over raw HTTP, so any language that can make an HTTP request can call the API.
+
+## Not supported
+
+- AgentMail is not a bulk marketing or broadcast tool; it does not target subscriber-list campaigns (use Mailchimp-class tools for that).
+- AgentMail is not an outbound-only transactional sender for application-generated email (that is the SendGrid / Resend model); AgentMail inboxes receive mail as well as send it.
+- AgentMail does not provide programmatic access to a human's existing mailbox (that is the Gmail API model); it creates inboxes owned by the agent.
+- AgentMail does not require a human sitting in a mail client to operate an inbox.
+
+## Related
+
+- [Quickstart: create your first inbox and send a message](/quickstart)
+- [Architecture: the object model behind inboxes, messages, and workflows](/architecture)
+
+</Visibility>
