@@ -360,6 +360,28 @@ Fix: don't re-run signup to recover. If you already have an account, sign in and
 
 Creates an inbox, sends a test message to it, lists received messages, and replies on the same thread. Use this to verify an API key end to end and to learn the core object model: inbox, message, thread, reply.
 
+## No API key yet? Sign up in one call — FIRST TIME ONLY
+
+If you already have an `AGENTMAIL_API_KEY`, SKIP this section entirely — never re-run sign-up to "start fresh"; it does not create a new account.
+
+```bash
+# One-time agent sign-up: creates an org, an inbox, and an API key.
+# human_email = the email of the human you work for (they receive an OTP).
+curl -X POST "https://api.agentmail.to/v0/agent/sign-up" \
+  -H "Content-Type: application/json" \
+  -d '{"human_email": "<your human'"'"'s email>", "username": "<desired inbox username>"}'
+# response: { "organization_id", "inbox_id", "api_key", "instructions" }
+# The api_key is shown ONCE — export it immediately.
+
+# After your human reads the 6-digit OTP from their email, lift restrictions:
+curl -X POST "https://api.agentmail.to/v0/agent/verify" \
+  -H "Authorization: Bearer $AGENTMAIL_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"otp_code": "<6-digit code>"}'
+```
+
+Until verified, the account is restricted: 1 inbox, 10 sends/day, and sending is allow-listed to `human_email` only — so send your first message to your human asking them for the OTP code. If sign-up returns 403 `AlreadyExistsError`, an account for that email already exists: STOP, do not retry with variations; use the existing key, or ask your human to retrieve one from https://console.agentmail.to.
+
 ## Do this
 
 ```bash
@@ -416,13 +438,18 @@ curl -X POST "$BASE/inboxes/<inbox_id>/messages/<message_id>/reply" \
 - Some flows build a reply as a draft first and then send it; the result is the same message on the thread.
 - The CLI is installed with `npm install -g agentmail-cli` (Node.js required) and reads the key from the `AGENTMAIL_API_KEY` environment variable; there is no separate login step.
 - CLI command equivalents: `agentmail auth me`, `agentmail inboxes create`, `agentmail inboxes:messages send`, `agentmail inboxes:messages list`, `agentmail inboxes:messages reply`.
+- `POST /v0/agent/sign-up` takes `{ human_email, username }` (both required) and returns `organization_id`, `inbox_id` (formed as `username@agentmail.to`), a one-time-visible `api_key`, and `instructions`. It needs no auth header. A 6-digit OTP is emailed to `human_email`.
+- Sign-up is first-time-only per `human_email`. Re-calling it for a NOT-yet-verified account does not error: it rotates the API key (invalidating the one you had) and re-sends the OTP if expired. Re-calling it for a verified or human-registered email returns 403 `AlreadyExistsError`.
+- `POST /v0/agent/verify` takes `{ otp_code }` (6 digits) with the `Authorization: Bearer` header and lifts the sign-up restrictions. Wrong codes are limited to a few attempts; an expired OTP requires re-running sign-up.
+- Until verified, an agent-signed-up account has 1 inbox, 10 sends/day, and can send only to its `human_email`.
 
 ## Not supported
 
 - Replying by thread id: there is no reply endpoint that takes a `thread_id`. Replies target a message id via `POST /v0/inboxes/{inbox_id}/messages/{message_id}/reply`.
 - A `body` field in send or reply requests: message content goes in `text` and/or `html`.
 - Serving the API at `https://api.agentmail.to` without the `/v0` prefix: those requests return 404.
-- Re-running signup to get a fresh account or key when the account already exists: the request is rejected with a 403 "already exists" error.
+- Re-running sign-up to get a fresh account, a clean slate, or a second account for the same `human_email`: there is exactly one account per email. Against a verified account it returns 403 `AlreadyExistsError`; against an unverified one it silently rotates the key you already exported, breaking it.
+- Sending to anyone other than `human_email` before `POST /v0/agent/verify` succeeds: blocked by the sign-up allowlist.
 
 ## Errors
 
@@ -430,7 +457,8 @@ curl -X POST "$BASE/inboxes/<inbox_id>/messages/<message_id>/reply" \
 |---|---|---|---|
 | Unauthorized | 401 | `AGENTMAIL_API_KEY` missing or wrong in the `Authorization: Bearer` header | Re-check the key value and the header |
 | Not Found | 404 | Base URL missing the `/v0` segment, or a wrong path | Use exactly `https://api.agentmail.to/v0` |
-| "already exists" | 403 | Re-running signup when the account already exists | Sign in and reuse or rotate the existing API key |
+| `AlreadyExistsError` | 403 | Re-running sign-up when a verified account for that email already exists | STOP retrying sign-up. Use the key you already have, or have your human get one from https://console.agentmail.to |
+| `ForbiddenError` (wrong code / OTP expired) | 403 | Bad or expired `otp_code` on `POST /v0/agent/verify` | Re-check the code with your human; if expired, re-run sign-up to get a fresh OTP (this rotates the key) |
 
 ## Verify
 

@@ -399,3 +399,6 @@ body:has(.aml) [data-test="navbar"] {
 #table-of-contents-content .toc-item:has(> a[href="#related"]) {
   display: none;
 }
+#table-of-contents-content .toc-item:has(> a[href^="#no-api-key-yet"]) {
+  display: none;
+}
