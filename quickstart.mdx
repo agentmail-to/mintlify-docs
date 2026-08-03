@@ -3,7 +3,7 @@ title: Quickstart
 description: Create an inbox, send a message to it, then reply on the same thread.
 ---
 
-<Human>
+<Visibility for="humans">
 
 Create an inbox, send a test message to it, read the message, and reply on its thread.
 
@@ -11,7 +11,7 @@ All API requests use `https://api.agentmail.to/v0` and `Authorization: Bearer <A
 
 ## Before you begin
 
-You need an account and API key. Get one from the [Introduction](./introduction), then set these variables. If signup reports that an account already exists, sign in and reuse or rotate its API key instead of signing up again.
+You need an account and API key. Get one from the [Introduction](./introduction#create-an-account-and-api-key), then set these variables.
 
 ```bash
 export AGENTMAIL_API_KEY="<API_KEY>"
@@ -269,9 +269,9 @@ The reply returns a new `message_id` and the original `thread_id`, using the sam
 
 **Using `body` instead of `text`.** The send and reply APIs accept `text` and/or `html`. Replace `body` with `text`.
 
-</Human>
+</Visibility>
 
-<Agent>
+<Visibility for="agents">
 
 # Create an AgentMail account when needed, then create an inbox and verify a send, receive, and reply loop
 
@@ -526,4 +526,4 @@ print(reply.message_id, reply.thread_id)
 
 The list response contains `messages[]`, newest first. Each message has `message_id` and `thread_id`; the reply response uses the send response shape. List again and confirm the original message and reply have the same `thread_id`.
 
-</Agent>
+</Visibility>

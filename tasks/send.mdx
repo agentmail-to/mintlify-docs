@@ -3,13 +3,13 @@ title: Send and reply
 description: Send messages, reply or forward with threading, schedule drafts, and make sends idempotent.
 ---
 
-<Human>
+<Visibility for="humans">
 
 Send from an inbox, reply in a thread, or create a draft for later delivery. Every successful send returns `message_id` and `thread_id`.
 
 ## Send a new message
 
-`POST /inboxes/{inbox_id}/messages/send` sends immediately. `inbox_id` is the inbox email address. Supply at least one of `to`, `cc`, or `bcc`.
+Send immediately from an inbox. `inbox_id` is the inbox email address, and at least one of `to`, `cc`, or `bcc` must be non-empty.
 
 <CodeGroup>
 
@@ -46,6 +46,13 @@ print(message.message_id, message.thread_id)
 
 </CodeGroup>
 
+```json Sample response
+{
+  "message_id": "<message_id>",
+  "thread_id": "<thread_id>"
+}
+```
+
 | Field | Type | Notes |
 | --- | --- | --- |
 | `to`, `cc`, `bcc` | address array | At least one must be non-empty. |
@@ -62,7 +69,7 @@ Shared-domain (`agentmail.to`) sends always include AgentMail `List-Unsubscribe`
 
 ## Attach files
 
-Each attachment needs exactly one source: base64 `content` or a `url` AgentMail fetches at send time. URL fetches follow redirects, time out after 10 seconds, return 403 for source 4xx except 408 and 429, and 503 for network or 5xx failures. Passing both sources, or neither, returns 400. `content_type` is inferred from `filename` or the URL response; `content_disposition` defaults to `inline` with `content_id`, otherwise `attachment`.
+Attach a file by giving it exactly one source: base64 `content`, or a `url` AgentMail fetches at send time. Passing both, or neither, returns 400.
 
 ```json
 {"attachments":[
@@ -70,6 +77,8 @@ Each attachment needs exactly one source: base64 `content` or a `url` AgentMail 
   {"filename":"logo.png","url":"https://example.com/logo.png","content_id":"logo"}
 ]}
 ```
+
+`content_type` is inferred from `filename` or the URL response. `content_disposition` defaults to `inline` when a `content_id` is set, otherwise `attachment`. URL fetches follow redirects and time out after 10 seconds; a source 4xx becomes 403 (except 408 and 429), and a network error or 5xx becomes 503.
 
 ## Reply, reply-all, or forward
 
@@ -117,11 +126,24 @@ reply = client.inboxes.messages.reply(
 
 ## Create, schedule, and send drafts
 
-Create with `POST /inboxes/{inbox_id}/drafts`, update with `PATCH /inboxes/{inbox_id}/drafts/{draft_id}`, or send with `POST /inboxes/{inbox_id}/drafts/{draft_id}/send`. Sending deletes the draft and returns `message_id` and `thread_id`. Create reply, reply-all, and forward drafts through these create and update routes, setting the appropriate source-message fields at creation.
+A draft is an unsent message. Create one, update it as many times as you need, then send it — or set `send_at` to an ISO 8601 datetime and AgentMail sends it at that time. Reply, reply-all, and forward drafts use the same routes: set the source-message fields when you create the draft.
 
-Set `send_at` to an ISO 8601 datetime to schedule. A zero-recipient draft is accepted as `scheduled`, then silently becomes `failed` at fire time. Set recipients before its scheduled time and monitor `send_status`.
+| Action | Endpoint |
+| --- | --- |
+| Create | `POST /inboxes/{inbox_id}/drafts` |
+| Update | `PATCH /inboxes/{inbox_id}/drafts/{draft_id}` |
+| Send | `POST /inboxes/{inbox_id}/drafts/{draft_id}/send` |
 
 <CodeGroup>
+
+```bash CLI
+agentmail inboxes:drafts create \
+  --inbox-id "agent@yourdomain.com" \
+  --to "prospect@example.com" \
+  --subject "Following up" \
+  --text "Checking in." \
+  --send-at "2026-07-13T09:00:00Z"
+```
 
 ```bash curl
 curl -X POST "https://api.agentmail.to/v0/inboxes/agent@yourdomain.com/drafts" \
@@ -149,11 +171,29 @@ draft = client.inboxes.drafts.create(
 
 </CodeGroup>
 
-- **Reschedule**: `PATCH` with a new `send_at`.
-- **Cancel**: `DELETE /inboxes/{inbox_id}/drafts/{draft_id}`. `PATCH` with `"send_at": null` returns 400, so you cannot unschedule and keep the draft.
-- **Send now**: `POST .../drafts/{draft_id}/send`. TypeScript requires `client.inboxes.drafts.send(inboxId, draftId, {})`; omitting `{}` throws a client-side `JsonError`.
+```json Sample response
+{
+  "inbox_id": "agent@yourdomain.com",
+  "draft_id": "<draft_id>",
+  "labels": ["drafts", "scheduled"],
+  "to": ["prospect@example.com"],
+  "subject": "Following up",
+  "text": "Checking in.",
+  "send_status": "scheduled",
+  "send_at": "2026-07-13T09:00:00Z"
+}
+```
 
-`send_status` is `scheduled`, `sending`, or `failed`. A `sending` draft cannot be canceled. Set a new `send_at` to retry `failed`; there is no `sent` status because successful sends delete the draft.
+`send_status` is `scheduled`, `sending`, or `failed`. Sending deletes the draft and returns `message_id` and `thread_id` — there is no `sent` status because a sent draft no longer exists.
+
+- **Reschedule**: update the draft with a new `send_at`.
+- **Cancel**: delete the draft. Updating with `"send_at": null` returns 400, so you cannot unschedule and keep the draft. A draft already `sending` cannot be canceled.
+- **Send now**: call the send endpoint. In TypeScript pass an empty options object — `client.inboxes.drafts.send(inboxId, draftId, {})` — or the client throws a `JsonError` before any request is made.
+- **Retry a `failed` draft**: set a new `send_at`.
+
+<Warning>
+A draft with no recipients is accepted as `scheduled`, then silently becomes `failed` at fire time. Set recipients before the scheduled time and monitor `send_status`.
+</Warning>
 
 ## Prevent reply loops
 
@@ -161,7 +201,7 @@ Skip `message.sent` events and messages whose `from` is your inbox address. Do n
 
 ## Make sends idempotent
 
-Set `Idempotency-Key` on `messages/send`, `reply`, `reply-all`, `forward`, or `drafts/{draft_id}/send`. Requests without it are not deduplicated.
+A retry after a timeout can send the same email twice. To make retries safe, set an `Idempotency-Key` header on any send: new messages, replies, forwards, and draft sends. Requests without the header are not deduplicated.
 
 <CodeGroup>
 
@@ -191,11 +231,13 @@ message = client.inboxes.messages.send(
 
 </CodeGroup>
 
-The key is reserved before the email leaves and finalized with the result in the same commit that stores the message. A crash cannot produce a sent email with no record. A matching retry returns the original result for 24 hours. Different requests or concurrent duplicates return 409; ambiguous failures retain the key for up to 15 minutes. Keys are organization-scoped, 1–256 characters from `A-Z a-z 0-9 - . _ ~`.
+Retrying the same request with the same key returns the original result for 24 hours instead of sending again. A different request reusing the key, or a concurrent duplicate, returns 409; after an ambiguous failure the key stays reserved for up to 15 minutes. Keys are organization-scoped, 1–256 characters from `A-Z a-z 0-9 - . _ ~`.
 
-</Human>
+The key is reserved before the email leaves and finalized in the same commit that stores the message, so a crash cannot produce a sent email with no record.
 
-<Agent>
+</Visibility>
+
+<Visibility for="agents">
 
 # Send, reply, forward, and schedule email from an AgentMail inbox
 
@@ -279,4 +321,4 @@ curl "https://api.agentmail.to/v0/inboxes/$INBOX_ID/messages/$MESSAGE_ID" \
 
 - [Quickstart](/quickstart)
 
-</Agent>
+</Visibility>

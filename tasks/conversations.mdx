@@ -3,7 +3,7 @@ title: "Manage conversations"
 description: "Fetch full threads, track agent state with labels, and search email at inbox, pod, or organization scope."
 ---
 
-<Human>
+<Visibility for="humans">
 
 Every message belongs to a thread. Replies attach through `in_reply_to`, so you can fetch, label, and search a conversation as one resource.
 
@@ -11,7 +11,7 @@ All requests use `https://api.agentmail.to/v0` with `Authorization: Bearer $AGEN
 
 ## Fetch a thread
 
-`GET /threads/{thread_id}` returns thread metadata and all messages. Messages are ordered by `timestamp` ascending: `messages[0]` is oldest and the final element is newest. `last_message_id` identifies the newest message without reading `messages`.
+Fetch a thread to get its metadata and every message in the conversation. Messages are ordered oldest first, so the final element is the newest; `last_message_id` identifies it without reading `messages`.
 
 <CodeGroup>
 
@@ -48,23 +48,34 @@ print(thread.messages[-1].text)  # newest message
 
 </CodeGroup>
 
-| Field | Meaning |
-| --- | --- |
-| `labels` | Union of labels on all thread messages |
-| `senders`, `recipients` | Every address in the thread, as `username@domain.com` or `Display Name <username@domain.com>` |
-| `subject`, `preview` | Subject and a text preview of the last message |
-| `timestamp` | Last sent or received message timestamp |
-| `received_timestamp`, `sent_timestamp` | Last received and last sent timestamps |
-| `message_count`, `size` | Message count and thread size in bytes |
-| `last_message_id` | Newest message ID |
+```json Sample response
+{
+  "inbox_id": "agent@yourdomain.com",
+  "thread_id": "<thread_id>",
+  "labels": ["sent", "received", "unread"],
+  "senders": ["customer@example.com"],
+  "recipients": ["agent@yourdomain.com"],
+  "subject": "Invoice 1042",
+  "preview": "Thanks, payment confirmed...",
+  "timestamp": "2026-07-30T10:03:12Z",
+  "message_count": 2,
+  "last_message_id": "<message_id>",
+  "messages": [
+    { "message_id": "<message_id>", "from": "agent@yourdomain.com", "text": "Invoice 1042 is attached.", "labels": ["sent"], "timestamp": "2026-07-29T16:40:00Z" },
+    { "message_id": "<message_id>", "from": "customer@example.com", "text": "Thanks, payment confirmed.", "labels": ["received", "unread"], "timestamp": "2026-07-30T10:03:12Z" }
+  ]
+}
+```
 
-`GET /threads` lists threads newest-first with `count`, optional `next_page_token`, and a `labels` filter. Its scope comes from the API key. Use `GET /inboxes/{inbox_id}/threads` or `GET /pods/{pod_id}/threads` to set scope explicitly. `senders`, `recipients`, and `subject` filters are served by search and limit results to 100.
+Thread `labels` is the union of labels on all messages; `timestamp` is the newest message's time, and `senders` and `recipients` collect every address in the conversation.
+
+To find threads instead of fetching one, list them — newest first, with a `labels` filter and `next_page_token` paging. Listing scope comes from the API key; use `GET /inboxes/{inbox_id}/threads` or `GET /pods/{pod_id}/threads` to set it explicitly. The `senders`, `recipients`, and `subject` filters are served by search and cap results at 100.
 
 ## Track agent state with labels
 
-System labels are set by the delivery pipeline and cannot be changed through the API: `received`, `sent`, `bounced`, `complained`, `delayed`, `delivered`, `rejected`, `opened`, and `scheduled`. Use custom labels for agent state, such as `triaged` after classification or `escalated` for human handoff, then filter list endpoints by `labels`.
+Use custom labels to record agent state on a conversation — `triaged` after classification, `escalated` for human handoff — then filter list endpoints by `labels` to build work queues. System labels (`received`, `sent`, `bounced`, `complained`, `delayed`, `delivered`, `rejected`, `opened`, and `scheduled`) are set by the delivery pipeline and cannot be changed through the API.
 
-`PATCH /threads/{thread_id}` accepts `add_labels` and `remove_labels` and applies the change to every message in the thread. List threads with `labels=unread`, then remove `unread` and add your state label in one request.
+Update a thread's labels with `add_labels` and `remove_labels`; the change applies to every message in the thread. A common pattern is one request that removes `unread` and adds your state label.
 
 <CodeGroup>
 
@@ -96,6 +107,14 @@ print(updated.labels)
 
 </CodeGroup>
 
+```json Sample response
+{
+  "inbox_id": "agent@yourdomain.com",
+  "thread_id": "<thread_id>",
+  "labels": ["sent", "received", "triaged"]
+}
+```
+
 - Labels are trimmed and lowercased on write; each is limited to 256 characters.
 - A system label in `add_labels` or `remove_labels` returns 400 `ValidationError`.
 - When a label is in both fields, removal wins.
@@ -112,6 +131,10 @@ Thread search is relevance-ranked full-text search. It matches senders, recipien
 | Inbox | `GET /inboxes/{inbox_id}/threads/search` |
 
 <CodeGroup>
+
+```bash CLI
+agentmail threads search -q "invoice 1042"
+```
 
 ```bash curl
 curl -G "https://api.agentmail.to/v0/threads/search" \
@@ -136,9 +159,26 @@ for thread in results.threads:
 
 </CodeGroup>
 
-Results are relevance-ranked, not recency-ranked. `highlights` may contain matched fragments for `from`, `recipients`, `subject`, and `text`, with terms wrapped in `**`; a key appears only when that field matched. `limit` defaults to 50 and cannot exceed 100. Use `page_token` to page and `before` or `after` to bound time. Search always excludes spam, trash, blocked, and unauthenticated threads.
+```json Sample response
+{
+  "count": 1,
+  "threads": [
+    {
+      "thread_id": "<thread_id>",
+      "subject": "Invoice 1042",
+      "preview": "Thanks, payment confirmed...",
+      "highlights": {
+        "subject": ["**Invoice** **1042**"],
+        "text": ["your **invoice** **1042** is attached"]
+      }
+    }
+  ]
+}
+```
 
-`GET /inboxes/{inbox_id}/messages/search` searches individual messages at inbox scope only. There is no organization- or pod-scope message search. For content across inboxes, search organization-scope threads, then fetch their messages.
+Results are ranked by relevance, not recency. A `highlights` key appears only when that field matched, with matched terms wrapped in `**`. `limit` defaults to 50 and cannot exceed 100; page with `page_token` and bound time with `before` or `after`. Search always excludes spam, trash, blocked, and unauthenticated threads.
+
+Message search exists at inbox scope only (`GET /inboxes/{inbox_id}/messages/search`). For content across inboxes, search organization-scope threads, then fetch their messages.
 
 Use list filters for sender or subject results ordered by recency. Use search for body content or relevance ranking.
 
@@ -146,9 +186,9 @@ Use list filters for sender or subject results ordered by recency. Use search fo
 
 Simultaneous replies or a label update racing an inbound message can produce HTTP 409 `RaceConditionError`. Retry the request. Label updates converge on retry because they add and remove labels rather than replace the label set. If the retry depends on the current labels, fetch the thread first.
 
-</Human>
+</Visibility>
 
-<Agent>
+<Visibility for="agents">
 
 # Fetch, label, and search AgentMail conversation threads
 
@@ -245,4 +285,4 @@ Success returns HTTP 200 with `{"count": ..., "threads": [...]}`. A thread confi
 - [Quickstart](/quickstart)
 - API reference: https://docs.agentmail.to/api-reference
 
-</Agent>
+</Visibility>

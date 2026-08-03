@@ -3,7 +3,7 @@ title: How AgentMail is architected
 description: See how inboxes own messages, threads, and drafts, then learn the advanced pod and API key scope rules.
 ---
 
-<Human>
+<Visibility for="humans">
 
 AgentMail centers on inboxes. Create an inbox, then send, receive, read, and organize the messages, threads, and drafts it owns. Start with the [Quickstart](/quickstart) if you have not created an inbox yet.
 
@@ -65,18 +65,21 @@ curl https://api.agentmail.to/v0/auth/me \
   -H "Authorization: Bearer $AGENTMAIL_API_KEY"
 ```
 
-`GET /v0/auth/me` returns the caller's scope:
+```json Sample response
+{
+  "scope_type": "pod",
+  "scope_id": "<pod_id>",
+  "organization_id": "<organization_id>",
+  "pod_id": "<pod_id>",
+  "api_key_id": "<api_key_id>"
+}
+```
 
-- **`scope_type`**: `organization`, `pod`, or `inbox`. An organization-scoped key needs a pod path segment; a pod- or inbox-scoped key does not.
-- **`scope_id`**: the ID for the level named by `scope_type`.
-- **`organization_id`**: the key's organization. This field is always present.
-- **`pod_id`**: present for pod- and inbox-scoped keys.
-- **`inbox_id`**: present for inbox-scoped keys. It is the inbox email address.
-- **`api_key_id`**: present when authentication used an API key, and absent for JWT and proxy credentials.
+`scope_type` names the key's level (`organization`, `pod`, or `inbox`) and `scope_id` is the ID at that level. `organization_id` is always present; `pod_id` appears for pod- and inbox-scoped keys, and `inbox_id` (the inbox email address) only for inbox-scoped keys. `api_key_id` is present when authentication used an API key and absent for JWT and proxy credentials.
 
-</Human>
+</Visibility>
 
-<Agent>
+<Visibility for="agents">
 
 # Use AgentMail inboxes and determine advanced tenancy scope only when needed
 
@@ -153,4 +156,4 @@ A successful call returns a `200` JSON response with the caller's scope:
 - [Introduction](/introduction)
 - [Quickstart](/quickstart)
 
-</Agent>
+</Visibility>

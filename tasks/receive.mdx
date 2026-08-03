@@ -3,7 +3,7 @@ title: "Receive email"
 description: "List inbound threads, read new reply content, and download attachments from an AgentMail inbox."
 ---
 
-<Human>
+<Visibility for="humans">
 
 Receive email by polling threads in an AgentMail inbox. This page covers pull-based receiving. Webhook and WebSocket events such as `message.received` are configured separately.
 
@@ -11,7 +11,7 @@ All requests use `https://api.agentmail.to/v0` with `Authorization: Bearer $AGEN
 
 ## Create or choose an inbox
 
-Create an inbox with `POST /v0/inboxes`. Omit `username` to generate one and `domain` to use `agentmail.to`. Custom domains must be verified; enabled subdomains of a verified domain also work.
+Create an inbox to receive into. Omit `username` to generate one, and omit `domain` to use `agentmail.to`. Custom domains must be verified first; enabled subdomains of a verified domain also work.
 
 <CodeGroup>
 
@@ -52,7 +52,17 @@ print(inbox.inbox_id)  # support@agentmail.to
 
 </CodeGroup>
 
-Python wraps create fields in `CreateInboxRequest`, imported from `agentmail.inboxes`. The returned `inbox_id` is the email address used by endpoints that take `inbox_id`.
+```json Sample response
+{
+  "pod_id": "<pod_id>",
+  "inbox_id": "support@agentmail.to",
+  "email": "support@agentmail.to",
+  "created_at": "2026-07-30T09:12:44Z",
+  "updated_at": "2026-07-30T09:12:44Z"
+}
+```
+
+The returned `inbox_id` is the inbox's email address; pass it wherever an endpoint takes `inbox_id`. In Python, create fields are wrapped in `CreateInboxRequest`, imported from `agentmail.inboxes`.
 
 ## Understand inbound messages
 
@@ -74,12 +84,12 @@ Messages with present but failing SPF, DKIM, or DMARC are dropped before deliver
 
 ## List unread threads
 
-`GET /v0/threads` lists threads across inboxes visible to your API key, newest first. Use `GET /v0/inboxes/{inbox_id}/threads` for one inbox. Poll with `labels=unread` to find unprocessed conversations.
+List threads visible to your API key, newest first, and filter by the `unread` label to find conversations your agent has not processed yet. To scope to a single inbox, use `GET /inboxes/{inbox_id}/threads` instead of `GET /threads`.
 
 <CodeGroup>
 
 ```bash CLI
-agentmail threads list
+agentmail threads list --label unread
 ```
 
 ```bash curl
@@ -104,13 +114,33 @@ for thread in threads.threads:
 
 </CodeGroup>
 
-The response has `count`, optional `next_page_token`, and `threads[]` ordered by descending `timestamp`. Each item includes `thread_id`, `senders`, `recipients`, `subject`, the last-message `preview`, `message_count`, and `last_message_id`. Page with `limit` and `page_token`.
+```json Sample response
+{
+  "count": 1,
+  "threads": [
+    {
+      "inbox_id": "support@agentmail.to",
+      "thread_id": "<thread_id>",
+      "labels": ["received", "unread"],
+      "timestamp": "2026-07-30T10:03:12Z",
+      "senders": ["customer@example.com"],
+      "recipients": ["support@agentmail.to"],
+      "subject": "Order 4821 never arrived",
+      "preview": "Hi, I placed order 4821 two weeks ago and...",
+      "message_count": 1,
+      "last_message_id": "<message_id>"
+    }
+  ]
+}
+```
 
-Search filters `senders`, `recipients`, and `subject` cap `limit` at 100. They match word prefixes, not arbitrary substrings: `subject=Verification` matches "Verification test mail" but `subject=cation test` does not. A full email address can return no results while its username prefix matches, so filter on the username portion. Digit-only values are parsed as numbers and return `400`; include a non-digit character.
+Threads are ordered newest first. Page with `limit` and `page_token`; when more results remain, the response includes `next_page_token`.
+
+Filtering by `senders`, `recipients`, or `subject` matches word prefixes, not arbitrary substrings, and caps `limit` at 100. A full email address can return no results while its username prefix matches, so filter on the username portion. Digit-only values are parsed as numbers and return `400`; include a non-digit character.
 
 ## Fetch and mark a thread processed
 
-`GET /v0/threads/{thread_id}` returns `messages[]` in ascending `timestamp` order, so the last item is newest.
+Fetch a thread to read its messages. `messages[]` is ordered oldest first, so the last item is the newest message.
 
 <CodeGroup>
 
@@ -139,9 +169,36 @@ print(latest.subject, latest.preview)
 
 </CodeGroup>
 
+```json Sample response
+{
+  "inbox_id": "support@agentmail.to",
+  "thread_id": "<thread_id>",
+  "labels": ["received", "unread"],
+  "subject": "Order 4821 never arrived",
+  "messages": [
+    {
+      "message_id": "<message_id>",
+      "from": "customer@example.com",
+      "to": ["support@agentmail.to"],
+      "subject": "Order 4821 never arrived",
+      "text": "Hi, I placed order 4821 two weeks ago and...",
+      "labels": ["received", "unread"],
+      "timestamp": "2026-07-30T10:03:12Z"
+    }
+  ]
+}
+```
+
 An unknown `thread_id` returns `404` with `{"name": "NotFoundError", "message": "Thread not found"}`. Branch on HTTP status and the PascalCase `name`, not the message.
 
-After processing a message, remove `unread` with `PATCH /v0/inboxes/{inbox_id}/messages/{message_id}` using `remove_labels: ["unread"]`. You can also add `read`. The next unread poll skips that message.
+After processing a message, remove its `unread` label (and optionally add `read`) so the next unread poll skips it:
+
+```bash
+curl -X PATCH "https://api.agentmail.to/v0/inboxes/support@agentmail.to/messages/<message_id>" \
+  -H "Authorization: Bearer $AGENTMAIL_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"add_labels": ["read"], "remove_labels": ["unread"]}'
+```
 
 ## Read only the new reply content
 
@@ -174,7 +231,7 @@ content = latest.extracted_text or latest.text or latest.html
 
 ## Download attachments and raw email
 
-Thread and message objects contain attachment metadata (`attachment_id`, `filename`, `size`, `content_type`), not bytes. Get an attachment to receive a signed `download_url` and `expires_at`; fetch it before it expires.
+Thread and message objects carry attachment metadata, not bytes. Get an attachment to receive a signed download URL, then fetch it before the URL expires.
 
 <CodeGroup>
 
@@ -204,9 +261,20 @@ print(attachment.download_url, attachment.expires_at)
 
 </CodeGroup>
 
+```json Sample response
+{
+  "attachment_id": "att_456",
+  "filename": "invoice.pdf",
+  "size": 48213,
+  "content_type": "application/pdf",
+  "download_url": "https://…signed URL…",
+  "expires_at": "2026-07-30T11:03:12Z"
+}
+```
+
 The per-message endpoint is `GET /v0/inboxes/{inbox_id}/messages/{message_id}/attachments/{attachment_id}`.
 
-For original headers, MIME structure, or signature verification, use `GET /v0/inboxes/{inbox_id}/messages/{message_id}/raw`. It returns a signed `.eml` `download_url`, `size`, and `expires_at`.
+For original headers, MIME structure, or signature verification, fetch the raw `.eml` file. The response is the same shape: a signed `download_url` with `size` and `expires_at`.
 
 <CodeGroup>
 
@@ -236,9 +304,9 @@ print(raw.download_url)
 
 </CodeGroup>
 
-</Human>
+</Visibility>
 
-<Agent>
+<Visibility for="agents">
 
 # Receive email with AgentMail
 
@@ -330,4 +398,4 @@ Success returns threads visible to the API key. An empty organization returns `c
 - [Quickstart](/quickstart)
 - [API reference](https://docs.agentmail.to/api-reference)
 
-</Agent>
+</Visibility>

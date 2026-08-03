@@ -3,7 +3,7 @@ title: Control who can email your agent
 description: Use allow and block lists to decide which senders reach your agent's inbox and which recipients it can email.
 ---
 
-<Human>
+<Visibility for="humans">
 
 Allow and block lists control who can email your agent and who it can email. An entry is a full address (`partner@example.com`) or domain (`example.com`); each list has a **direction** (`send`, `receive`, or `reply`) and **type** (`allow` or `block`).
 
@@ -30,7 +30,7 @@ On `/v0/lists/...`, the API key determines scope: organization keys manage organ
 
 ## Add and remove entries
 
-Create an entry with its direction, type, and address or domain. Entries containing `@` are emails; all others are domains. `reason` is optional, limited to 1,024 characters, and is returned when the entry blocks something.
+Create an entry with its direction, type, and address or domain. The optional `reason` (up to 1,024 characters) is stored with the entry.
 
 <CodeGroup>
 
@@ -87,6 +87,20 @@ client.inboxes.lists.create(
 ```
 
 </CodeGroup>
+
+```json Sample response
+{
+  "entry": "noise@example.com",
+  "entry_type": "email",
+  "direction": "receive",
+  "list_type": "block",
+  "reason": "automated newsletter",
+  "organization_id": "<organization_id>",
+  "created_at": "2026-07-30T09:12:44Z"
+}
+```
+
+Entries containing `@` come back as `entry_type: "email"`; all others as `"domain"`. The `reason` is echoed whenever this entry blocks something.
 
 Delete an entry on the same path. Deletion returns `204` and applies to the next send or delivery.
 
@@ -171,9 +185,9 @@ For custom-domain sends, deleting the entry clears the block. Shared `agentmail.
 SES-level suppression can only be cleared through support. If a shared-domain recipient remains unreachable after deletion, contact [support@agentmail.cc](mailto:support@agentmail.cc). Custom-domain sends do not use the shared suppression list.
 </Note>
 
-</Human>
+</Visibility>
 
-<Agent>
+<Visibility for="agents">
 
 # Control who can email an AgentMail inbox and who it can email
 
@@ -273,4 +287,4 @@ The command returns the entry object, such as `{"entry": "user@example.com", "di
 - [Send and reply](./send)
 - [Receive email](./receive)
 
-</Agent>
+</Visibility>

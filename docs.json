@@ -26,8 +26,7 @@
             "group": "Start here",
             "pages": [
               "introduction",
-              "quickstart",
-              "architecture"
+              "quickstart"
             ]
           },
           {
@@ -37,6 +36,12 @@
               "tasks/send",
               "tasks/conversations",
               "tasks/inbound-control"
+            ]
+          },
+          {
+            "group": "Concepts",
+            "pages": [
+              "architecture"
             ]
           }
         ]
