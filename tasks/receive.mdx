@@ -1,41 +1,19 @@
 ---
 title: "Receive email"
-description: "Pick up inbound mail from an AgentMail inbox: list threads, fetch new messages, strip quoted history, and download attachments."
+description: "List inbound threads, read new reply content, and download attachments from an AgentMail inbox."
 ---
 
 <Visibility for="humans">
 
-Every AgentMail inbox receives mail at its address as soon as it exists. This page covers the pull side of receiving: create or choose an inbox, list the threads that arrived, fetch a thread's messages, read only the new content in a reply, and download attachments or the raw email file. Push delivery (webhook and WebSocket events like `message.received`) is a separate setup and is not covered here.
+Receive email by polling threads in an AgentMail inbox. This page covers pull-based receiving. Webhook and WebSocket events such as `message.received` are configured separately.
 
 All requests use `https://api.agentmail.to/v0` with `Authorization: Bearer $AGENTMAIL_API_KEY`.
 
 ## Create or choose an inbox
 
-An inbox is addressable the moment you create it with `POST /v0/inboxes`. Every field is optional: skip `username` and one is generated randomly, skip `domain` and the address lands on `agentmail.to`. To receive on your own domain, pass a domain you have verified (or any subdomain of a verified domain with subdomains enabled, like `bot.example.com`).
+Create an inbox to receive into. Omit `username` to generate one, and omit `domain` to use `agentmail.to`. Custom domains must be verified first; enabled subdomains of a verified domain also work.
 
 <CodeGroup>
-
-```python Python
-from agentmail import AgentMail
-from agentmail.inboxes import CreateInboxRequest
-import os
-
-client = AgentMail(api_key=os.getenv("AGENTMAIL_API_KEY"))
-
-# The Python SDK wraps create parameters in a request object.
-# CreateInboxRequest imports from agentmail.inboxes, not the top-level package.
-inbox = client.inboxes.create(request=CreateInboxRequest(username="support"))
-print(inbox.inbox_id)  # support@agentmail.to
-```
-
-```typescript TypeScript
-import { AgentMailClient } from "agentmail";
-
-const client = new AgentMailClient({ apiKey: process.env.AGENTMAIL_API_KEY! });
-
-const inbox = await client.inboxes.create({ username: "support" });
-console.log(inbox.inboxId); // support@agentmail.to
-```
 
 ```bash CLI
 agentmail inboxes create \
@@ -50,58 +28,68 @@ curl -X POST "https://api.agentmail.to/v0/inboxes" \
   -d '{"username": "support"}'
 ```
 
-</CodeGroup>
+```typescript TypeScript
+import { AgentMailClient } from "agentmail";
 
-The returned `inbox_id` is the inbox's email address (`username@domain`). You pass it anywhere an endpoint takes `inbox_id`.
+const client = new AgentMailClient({ apiKey: process.env.AGENTMAIL_API_KEY! });
+const inbox = await client.inboxes.create({ username: "support" });
 
-## What arrives
-
-When someone emails your inbox, AgentMail stores the email as a message and files it into a thread, the container that groups a conversation. A fresh email starts a new thread; a reply lands in the existing one. Every inbound message is labeled `received` and `unread` on arrival, and classification can add more:
-
-| Label             | Applied when                                                             |
-| ----------------- | ------------------------------------------------------------------------ |
-| `received`        | Every inbound message. System label, cannot be added or removed via API. |
-| `unread`          | Every inbound message. Remove it once your agent has processed the message. |
-| `spam`            | The message failed spam screening.                                       |
-| `unauthenticated` | The sender's SPF, DKIM, and DMARC headers were missing entirely.         |
-| `blocked`         | The sender's address or domain matches one of your block list entries.   |
-
-Mail whose authentication headers are present but explicitly fail SPF, DKIM, or DMARC is dropped before it reaches an inbox, and there is no API to retrieve dropped mail. Missing headers are treated more leniently because some legitimate senders omit them: the message is delivered, labeled `unauthenticated`.
-
-You can watch mail land without writing any code: the [console](https://console.agentmail.to) shows each inbox's threads as they arrive, which is the quickest way to confirm a test email actually made it in.
-
-<Frame caption="An inbox in the AgentMail console — each row is a thread holding the received mail.">
-  <img className="block dark:hidden" src="/images/screenshots/console-inbox.png" alt="AgentMail console showing an inbox with two received threads in the thread list" />
-  <img className="hidden dark:block" src="/images/screenshots/console-inbox-dark.png" alt="AgentMail console showing an inbox with two received threads in the thread list" />
-</Frame>
-
-<Warning>
-**Expected mail can look missing.** Listing endpoints hide `spam`, `unauthenticated`, `blocked`, and trashed items by default. If a sender's test email "never arrived", list with `include_spam=true` or `include_unauthenticated=true` before assuming it was dropped. Opting in also requires the API key to hold the matching label read permission (for example `label_spam_read`).
-</Warning>
-
-## List threads
-
-`GET /v0/threads` lists threads across every inbox your API key can see, newest first. Scope to one inbox with `GET /v0/inboxes/{inbox_id}/threads`. Filter with `labels` to poll for work; `labels=unread` returns only conversations with unprocessed mail.
-
-<CodeGroup>
-
-```python Python
-threads = client.threads.list(labels=["unread"])
-
-for t in threads.threads:
-    print(t.thread_id, t.subject, t.preview)
+console.log(inbox.inboxId); // support@agentmail.to
 ```
 
-```typescript TypeScript
-const threads = await client.threads.list({ labels: ["unread"] });
+```python Python
+import os
+from agentmail import AgentMail
+from agentmail.inboxes import CreateInboxRequest
 
-for (const t of threads.threads) {
-  console.log(t.threadId, t.subject, t.preview);
+client = AgentMail(api_key=os.getenv("AGENTMAIL_API_KEY"))
+inbox = client.inboxes.create(
+    request=CreateInboxRequest(username="support")
+)
+
+print(inbox.inbox_id)  # support@agentmail.to
+```
+
+</CodeGroup>
+
+```json Sample response
+{
+  "pod_id": "<pod_id>",
+  "inbox_id": "support@agentmail.to",
+  "email": "support@agentmail.to",
+  "created_at": "2026-07-30T09:12:44Z",
+  "updated_at": "2026-07-30T09:12:44Z"
 }
 ```
 
+The returned `inbox_id` is the inbox's email address; pass it wherever an endpoint takes `inbox_id`. In Python, create fields are wrapped in `CreateInboxRequest`, imported from `agentmail.inboxes`.
+
+## Understand inbound messages
+
+AgentMail stores each email as a message in a thread. A new email starts a thread; replies join it. Inbound messages get `received` and `unread`; classification can add labels:
+
+| Label | Applied when |
+| --- | --- |
+| `received` | Every inbound message. This system label cannot be changed through the API. |
+| `unread` | Every inbound message. Remove it after processing. |
+| `spam` | The message failed spam screening. |
+| `unauthenticated` | SPF, DKIM, and DMARC headers were all missing. |
+| `blocked` | The sender address or domain matches a block-list entry. |
+
+Messages with present but failing SPF, DKIM, or DMARC are dropped before delivery and cannot be retrieved. Messages with missing authentication headers are delivered with `unauthenticated`.
+
+<Warning>
+**Expected email can look missing.** Thread listings hide `spam`, `unauthenticated`, `blocked`, and trashed items by default. Use the relevant `include_*` flag, such as `include_spam=true`, and an API key with the matching label-read permission, such as `label_spam_read`.
+</Warning>
+
+## List unread threads
+
+List threads visible to your API key, newest first, and filter by the `unread` label to find conversations your agent has not processed yet. To scope to a single inbox, use `GET /inboxes/{inbox_id}/threads` instead of `GET /threads`.
+
+<CodeGroup>
+
 ```bash CLI
-agentmail threads list
+agentmail threads list --label unread
 ```
 
 ```bash curl
@@ -109,31 +97,52 @@ curl "https://api.agentmail.to/v0/threads?labels=unread" \
   -H "Authorization: Bearer $AGENTMAIL_API_KEY"
 ```
 
-</CodeGroup>
+```typescript TypeScript
+const threads = await client.threads.list({ labels: ["unread"] });
 
-The response holds `count`, an optional `next_page_token`, and `threads[]` ordered by `timestamp` descending. Each item carries `thread_id`, `senders`, `recipients`, `subject`, a text `preview` of the last message, `message_count`, and `last_message_id`. Page with `limit` and `page_token`.
-
-You can also filter by `senders`, `recipients`, or `subject`. Filtered requests are served by search and cap `limit` at 100, and matching is by word prefix, not arbitrary substring: `subject=Verification` matches "Verification test mail", but the mid-word fragment `subject=cation test` matches nothing. Two behaviors to plan around when filtering by address: a full literal address (`agent-a@agentmail.to`) can return zero results while a prefix of its username (`senders=agent-a`) matches, so filter on the username portion; and a value made entirely of digits is parsed as a number and rejected with `400`, so keep at least one non-digit character in the filter value.
-
-## Fetch one thread
-
-`GET /v0/threads/{thread_id}` returns the full thread, including `messages[]` ordered by `timestamp` ascending, so the last element is the newest message. This is the call that gives you message bodies.
-
-<CodeGroup>
+for (const thread of threads.threads) {
+  console.log(thread.threadId, thread.subject, thread.preview);
+}
+```
 
 ```python Python
-thread = client.threads.get(thread_id="thread_123")
+threads = client.threads.list(labels=["unread"])
 
-latest = thread.messages[-1]
-print(latest.subject, latest.preview)
+for thread in threads.threads:
+    print(thread.thread_id, thread.subject, thread.preview)
 ```
 
-```typescript TypeScript
-const thread = await client.threads.get("thread_123");
+</CodeGroup>
 
-const latest = thread.messages[thread.messages.length - 1];
-console.log(latest.subject, latest.preview);
+```json Sample response
+{
+  "count": 1,
+  "threads": [
+    {
+      "inbox_id": "support@agentmail.to",
+      "thread_id": "<thread_id>",
+      "labels": ["received", "unread"],
+      "timestamp": "2026-07-30T10:03:12Z",
+      "senders": ["customer@example.com"],
+      "recipients": ["support@agentmail.to"],
+      "subject": "Order 4821 never arrived",
+      "preview": "Hi, I placed order 4821 two weeks ago and...",
+      "message_count": 1,
+      "last_message_id": "<message_id>"
+    }
+  ]
+}
 ```
+
+Threads are ordered newest first. Page with `limit` and `page_token`; when more results remain, the response includes `next_page_token`.
+
+Filtering by `senders`, `recipients`, or `subject` matches word prefixes, not arbitrary substrings, and caps `limit` at 100. A full email address can return no results while its username prefix matches, so filter on the username portion. Digit-only values are parsed as numbers and return `400`; include a non-digit character.
+
+## Fetch and mark a thread processed
+
+Fetch a thread to read its messages. `messages[]` is ordered oldest first, so the last item is the newest message.
+
+<CodeGroup>
 
 ```bash CLI
 agentmail threads get --thread-id thread_123
@@ -144,41 +153,87 @@ curl "https://api.agentmail.to/v0/threads/thread_123" \
   -H "Authorization: Bearer $AGENTMAIL_API_KEY"
 ```
 
-</CodeGroup>
+```typescript TypeScript
+const thread = await client.threads.get("thread_123");
+const latest = thread.messages[thread.messages.length - 1];
 
-An unknown `thread_id` returns `404` with a body like `{"name": "NotFoundError", "message": "Thread not found"}`; branch on the HTTP status and the PascalCase `name` field, not the message text.
-
-Once your agent has handled a message, remove its `unread` label with `PATCH /v0/inboxes/{inbox_id}/messages/{message_id}` (`remove_labels: ["unread"]`, optionally `add_labels: ["read"]`). Your next `labels=unread` poll then skips it, which is what keeps the agent from reprocessing the same mail.
-
-## Read only the new content
-
-A message body comes in up to four fields. `text` and `html` are the full body as sent, including the quoted history that clients append to replies and forwards. `extracted_text` and `extracted_html` contain just the new content, with the quoted history stripped by the Talon extraction library. For an agent responding to replies, feed it `extracted_text` so the model sees one message instead of the whole conversation again.
-
-```python Python
-for message in thread.messages:
-    content = message.extracted_text or message.text
+console.log(latest.subject, latest.preview);
 ```
 
-Fall back as shown: `extracted_text` and `extracted_html` are optional, and `text` itself can be absent when the sender transmitted an HTML-only email with no plain-text part (Gmail and Outlook do this for some forwards). `html` is the last resort.
+```python Python
+thread = client.threads.get(thread_id="thread_123")
+latest = thread.messages[-1]
 
-## Download attachments and the raw message
+print(latest.subject, latest.preview)
+```
 
-Messages and threads list attachment metadata (`attachment_id`, `filename`, `size`, `content_type`), but not the bytes. To download, request the attachment by ID and you get back a `download_url`, a signed URL that expires at the returned `expires_at` timestamp. Fetch the URL promptly rather than storing it.
+</CodeGroup>
+
+```json Sample response
+{
+  "inbox_id": "support@agentmail.to",
+  "thread_id": "<thread_id>",
+  "labels": ["received", "unread"],
+  "subject": "Order 4821 never arrived",
+  "messages": [
+    {
+      "message_id": "<message_id>",
+      "from": "customer@example.com",
+      "to": ["support@agentmail.to"],
+      "subject": "Order 4821 never arrived",
+      "text": "Hi, I placed order 4821 two weeks ago and...",
+      "labels": ["received", "unread"],
+      "timestamp": "2026-07-30T10:03:12Z"
+    }
+  ]
+}
+```
+
+An unknown `thread_id` returns `404` with `{"name": "NotFoundError", "message": "Thread not found"}`. Branch on HTTP status and the PascalCase `name`, not the message.
+
+After processing a message, remove its `unread` label (and optionally add `read`) so the next unread poll skips it:
+
+```bash
+curl -X PATCH "https://api.agentmail.to/v0/inboxes/support@agentmail.to/messages/<message_id>" \
+  -H "Authorization: Bearer $AGENTMAIL_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"add_labels": ["read"], "remove_labels": ["unread"]}'
+```
+
+## Read only the new reply content
+
+`text` and `html` contain the full sent body, including quoted history. `extracted_text` and `extracted_html` contain new content with quoted history stripped by Talon. Use `extracted_text` for a reply, then fall back to `text`; `text` can be absent for HTML-only email, so use `html` last.
 
 <CodeGroup>
 
-```python Python
-attachment = client.threads.get_attachment(
-    thread_id="thread_123",
-    attachment_id="att_456",
-)
-print(attachment.download_url, attachment.expires_at)
+```bash CLI
+agentmail threads get --thread-id thread_123 \
+  | jq -r '.messages[-1].extracted_text // .messages[-1].text // .messages[-1].html'
+```
+
+```bash curl
+curl "https://api.agentmail.to/v0/threads/thread_123" \
+  -H "Authorization: Bearer $AGENTMAIL_API_KEY" \
+  | jq -r '.messages[-1].extracted_text // .messages[-1].text // .messages[-1].html'
 ```
 
 ```typescript TypeScript
-const attachment = await client.threads.getAttachment("thread_123", "att_456");
-console.log(attachment.downloadUrl, attachment.expiresAt);
+const latest = thread.messages[thread.messages.length - 1];
+const content = latest.extractedText ?? latest.text ?? latest.html;
 ```
+
+```python Python
+latest = thread.messages[-1]
+content = latest.extracted_text or latest.text or latest.html
+```
+
+</CodeGroup>
+
+## Download attachments and raw email
+
+Thread and message objects carry attachment metadata, not bytes. Get an attachment to receive a signed download URL, then fetch it before the URL expires.
+
+<CodeGroup>
 
 ```bash CLI
 agentmail threads get-attachment \
@@ -191,26 +246,37 @@ curl "https://api.agentmail.to/v0/threads/thread_123/attachments/att_456" \
   -H "Authorization: Bearer $AGENTMAIL_API_KEY"
 ```
 
-</CodeGroup>
-
-The same shape exists per message at `GET /v0/inboxes/{inbox_id}/messages/{message_id}/attachments/{attachment_id}`.
-
-When you need the original email exactly as it crossed the wire (custom headers, MIME structure, signature verification), `GET /v0/inboxes/{inbox_id}/messages/{message_id}/raw` returns a signed `download_url` for the raw `.eml` file plus its `size` in bytes and `expires_at`.
-
-<CodeGroup>
+```typescript TypeScript
+const attachment = await client.threads.getAttachment("thread_123", "att_456");
+console.log(attachment.downloadUrl, attachment.expiresAt);
+```
 
 ```python Python
-raw = client.inboxes.messages.get_raw(
-    inbox_id="support@agentmail.to",
-    message_id="msg_789",
+attachment = client.threads.get_attachment(
+    thread_id="thread_123",
+    attachment_id="att_456",
 )
-print(raw.download_url)
+print(attachment.download_url, attachment.expires_at)
 ```
 
-```typescript TypeScript
-const raw = await client.inboxes.messages.getRaw("support@agentmail.to", "msg_789");
-console.log(raw.downloadUrl);
+</CodeGroup>
+
+```json Sample response
+{
+  "attachment_id": "att_456",
+  "filename": "invoice.pdf",
+  "size": 48213,
+  "content_type": "application/pdf",
+  "download_url": "https://…signed URL…",
+  "expires_at": "2026-07-30T11:03:12Z"
+}
 ```
+
+The per-message endpoint is `GET /v0/inboxes/{inbox_id}/messages/{message_id}/attachments/{attachment_id}`.
+
+For original headers, MIME structure, or signature verification, fetch the raw `.eml` file. The response is the same shape: a signed `download_url` with `size` and `expires_at`.
+
+<CodeGroup>
 
 ```bash CLI
 agentmail inboxes:messages get-raw \
@@ -223,15 +289,28 @@ curl "https://api.agentmail.to/v0/inboxes/support@agentmail.to/messages/msg_789/
   -H "Authorization: Bearer $AGENTMAIL_API_KEY"
 ```
 
+```typescript TypeScript
+const raw = await client.inboxes.messages.getRaw("support@agentmail.to", "msg_789");
+console.log(raw.downloadUrl);
+```
+
+```python Python
+raw = client.inboxes.messages.get_raw(
+    inbox_id="support@agentmail.to",
+    message_id="msg_789",
+)
+print(raw.download_url)
+```
+
 </CodeGroup>
 
 </Visibility>
 
 <Visibility for="agents">
 
-**Receive email with AgentMail**
+# Receive email with AgentMail
 
-Poll an AgentMail inbox for inbound mail: list threads, fetch messages, extract new reply content, download attachments and the raw .eml. Use this for pull-based receiving; webhook/WebSocket push delivery is configured separately and is not covered here.
+Poll an AgentMail inbox for inbound threads, reply content, attachments, and raw `.eml` files. Webhook and WebSocket receiving are separate.
 
 ## Do this
 
@@ -240,95 +319,79 @@ export AGENTMAIL_API_KEY="your-key"
 BASE="https://api.agentmail.to/v0"
 AUTH="Authorization: Bearer $AGENTMAIL_API_KEY"
 
-# 1. Create an inbox. All body fields optional; username random if omitted,
-#    domain defaults to agentmail.to. Response inbox_id is the email address.
-curl -X POST "$BASE/inboxes" -H "$AUTH" -H "Content-Type: application/json" \
-  -d '{"username": "support"}'
+agentmail inboxes create --username support --domain agentmail.to
+agentmail threads list
+agentmail threads get --thread-id "$THREAD_ID"
+agentmail threads get-attachment \
+  --thread-id "$THREAD_ID" \
+  --attachment-id "$ATTACHMENT_ID"
+agentmail inboxes:messages get-raw \
+  --inbox-id "$INBOX_ID" \
+  --message-id "$MESSAGE_ID"
 
-# 2. List unread threads across all visible inboxes, newest first.
-curl "$BASE/threads?labels=unread" -H "$AUTH"
-
-# 3. Fetch one thread; messages[] is ordered by timestamp ascending (last = newest).
-curl "$BASE/threads/$THREAD_ID" -H "$AUTH"
-
-# 4. Download an attachment (returns signed download_url + expires_at).
-curl "$BASE/threads/$THREAD_ID/attachments/$ATTACHMENT_ID" -H "$AUTH"
-
-# 5. Get the raw .eml (returns signed download_url + size + expires_at).
-curl "$BASE/inboxes/$INBOX_ID/messages/$MESSAGE_ID/raw" -H "$AUTH"
-
-# 6. Mark a message processed so labels=unread polls skip it.
 curl -X PATCH "$BASE/inboxes/$INBOX_ID/messages/$MESSAGE_ID" \
   -H "$AUTH" -H "Content-Type: application/json" \
-  -d '{"add_labels": ["read"], "remove_labels": ["unread"]}'
+  -d '{"add_labels":["read"],"remove_labels":["unread"]}'
 ```
 
 ## SDK
 
-Install: `pip install agentmail` (Python) or `npm install agentmail` (TypeScript). Clients: `AgentMail(api_key=...)` / `new AgentMailClient({ apiKey })`.
+Install: `npm install agentmail` (TypeScript) or `pip install agentmail` (Python). Clients: `new AgentMailClient({ apiKey })` / `AgentMail(api_key=...)`.
 
-| Operation | Python | TypeScript |
+| Operation | TypeScript | Python |
 | --- | --- | --- |
-| Create inbox | `client.inboxes.create(request=CreateInboxRequest(username=..., domain=...))` | `client.inboxes.create({ username, domain })` |
-| List threads (org-wide) | `client.threads.list(labels=[...], limit=..., page_token=...)` | `client.threads.list({ labels, limit, pageToken })` |
-| Get thread | `client.threads.get(thread_id=...)` | `client.threads.get(threadId)` |
-| Get attachment | `client.threads.get_attachment(thread_id, attachment_id)` | `client.threads.getAttachment(threadId, attachmentId)` |
-| Get raw .eml | `client.inboxes.messages.get_raw(inbox_id, message_id)` | `client.inboxes.messages.getRaw(inboxId, messageId)` |
-| Update labels | `client.inboxes.messages.update(inbox_id, message_id, add_labels=[...], remove_labels=[...])` | `client.inboxes.messages.update(inboxId, messageId, { addLabels, removeLabels })` |
+| Create inbox | `client.inboxes.create({ username, domain })` | `client.inboxes.create(request=CreateInboxRequest(username=..., domain=...))` |
+| List threads | `client.threads.list({ labels, limit, pageToken })` | `client.threads.list(labels=[...], limit=..., page_token=...)` |
+| Get thread | `client.threads.get(threadId)` | `client.threads.get(thread_id=...)` |
+| Get attachment | `client.threads.getAttachment(threadId, attachmentId)` | `client.threads.get_attachment(thread_id, attachment_id)` |
+| Get raw `.eml` | `client.inboxes.messages.getRaw(inboxId, messageId)` | `client.inboxes.messages.get_raw(inbox_id, message_id)` |
+| Update labels | `client.inboxes.messages.update(inboxId, messageId, { addLabels, removeLabels })` | `client.inboxes.messages.update(inbox_id, message_id, add_labels=[...], remove_labels=[...])` |
 
-Python `inboxes.create` takes a single keyword-only `request` parameter, not flat keyword arguments; `CreateInboxRequest` imports from `agentmail.inboxes` (`from agentmail.inboxes import CreateInboxRequest`), not the top-level `agentmail` package.
+Python requires `request=CreateInboxRequest(...)` for `inboxes.create`; import `CreateInboxRequest` from `agentmail.inboxes`.
 
 Reference: https://docs.agentmail.to/api-reference
 
 ## Facts
 
-- Base URL is `https://api.agentmail.to/v0`; auth is `Authorization: Bearer <api key>`.
-- `inbox_id` is the inbox's email address in the form `username@domain`.
-- `POST /v0/inboxes` accepts optional `username`, `domain`, `display_name`, `client_id`; `domain` defaults to `agentmail.to` and custom domains must be verified (or be a subdomain of a verified domain with subdomains enabled).
-- Every inbound message gets labels `received` and `unread`; classification may add `spam`, `unauthenticated`, or `blocked`.
-- `spam` means the message failed spam screening; `unauthenticated` means SPF/DKIM/DMARC headers were missing; `blocked` means the sender matched a block list entry.
-- Inbound mail whose authentication headers are present but fail SPF/DKIM/DMARC is dropped before delivery and cannot be retrieved.
-- `GET /v0/threads` returns `{count, limit?, next_page_token?, threads[]}` ordered by `timestamp` descending; `GET /v0/inboxes/{inbox_id}/threads` is the per-inbox variant.
-- `GET /v0/threads` hides `spam`, `unauthenticated`, `blocked`, and trashed threads unless `include_spam`, `include_unauthenticated`, `include_blocked`, or `include_trash` is true AND the API key holds the matching label read permission (for example `label_spam_read`).
-- `GET /v0/threads` supports `senders`, `recipients`, and `subject` filters; filtered requests are served by search and cap `limit` at 100.
-- Filter matching is word/prefix-based, not substring: `subject=Verification` matches "Verification test mail", but the mid-word fragment `subject=cation test` returns 0 results.
-- Filtering by a full literal email address (`senders=agent-a@agentmail.to`) can return 0 results while a prefix of the username (`senders=agent-a`) matches; filter on the username portion.
-- Digit-only filter values (for example `recipients=20260713`) are parsed as a number and rejected with 400; include at least one non-digit character.
-- `GET /v0/threads/{thread_id}` returns the thread with `messages[]` ordered by `timestamp` ascending.
-- Message body fields: `text` (plain body as sent), `html` (HTML body as sent), `extracted_text` and `extracted_html` (new content only, quoted history stripped by Talon). All four are optional; `text` is absent for HTML-only email.
-- Attachment and raw-message downloads return a signed `download_url` that expires at `expires_at`; raw responses also include `size` in bytes.
-- Raw .eml endpoint: `GET /v0/inboxes/{inbox_id}/messages/{message_id}/raw`.
-- Per-message attachment endpoint: `GET /v0/inboxes/{inbox_id}/messages/{message_id}/attachments/{attachment_id}`.
-- Mark processed: `PATCH /v0/inboxes/{inbox_id}/messages/{message_id}` with `{"remove_labels": ["unread"]}`.
+- Base URL: `https://api.agentmail.to/v0`. Auth: `Authorization: Bearer <api key>`.
+- `inbox_id` is `username@domain`.
+- Inbox creation accepts optional `username`, `domain`, `display_name`, and `client_id`. The default domain is `agentmail.to`; custom domains must be verified, or be an enabled subdomain of one.
+- Inbound messages receive `received` and `unread`; classification can add `spam`, `unauthenticated`, or `blocked`.
+- Present but failing SPF, DKIM, or DMARC causes the email to be dropped. Missing headers deliver the email with `unauthenticated`.
+- `GET /v0/threads` returns `{count, limit?, next_page_token?, threads[]}` in descending `timestamp` order. `GET /v0/inboxes/{inbox_id}/threads` scopes to one inbox.
+- Listings hide spam, unauthenticated, blocked, and trashed threads by default. Use the relevant `include_*` flag and matching label-read permission.
+- Thread filters `senders`, `recipients`, and `subject` use word-prefix matching, cap `limit` at 100, and do not match arbitrary substrings. Filter addresses by username prefix; digit-only values return `400`.
+- `GET /v0/threads/{thread_id}` returns `messages[]` in ascending `timestamp` order.
+- `text` and `html` are full bodies. Optional `extracted_text` and `extracted_html` omit quoted history. `text` can be absent for HTML-only email.
+- Attachment and raw-email endpoints return a signed `download_url` and `expires_at`; raw email also returns `size`.
+- Attachment endpoint: `GET /v0/inboxes/{inbox_id}/messages/{message_id}/attachments/{attachment_id}`. Raw endpoint: `GET /v0/inboxes/{inbox_id}/messages/{message_id}/raw`.
+- Mark processed with `PATCH /v0/inboxes/{inbox_id}/messages/{message_id}` and `{"remove_labels":["unread"]}`.
 
 ## Not supported
 
-- Python `client.inboxes.create()` does not accept flat keyword arguments like `username=` or `domain=`; pass `request=CreateInboxRequest(...)`.
-- `senders`, `recipients`, and `subject` filters do not do arbitrary substring matching; mid-word fragments and full literal email addresses can return 0 results.
-- No error body carries a top-level `code` field; snake_case codes (for example `invalid_type`) appear only per-entry inside a 400's `errors[]`.
-- No dedicated mark-as-read endpoint; read state is the `unread` label, managed via the message PATCH endpoint.
-- The `received` system label cannot be added or removed through the API.
-- No API retrieves mail dropped for failed SPF/DKIM/DMARC authentication.
-- Attachment metadata in thread/message objects contains no bytes and no URL; the download URL only comes from the get-attachment endpoints.
-- `download_url` values expire at `expires_at`; they are not stable long-term links.
+- Python `client.inboxes.create()` does not accept flat `username=` or `domain=` arguments.
+- Filters do not support arbitrary substrings; full literal addresses can return no results.
+- Error bodies have no top-level `code`. Field-level snake_case codes occur only in a 400 response's `errors[]`.
+- `received` cannot be changed through the API.
+- Dropped authentication failures cannot be retrieved.
+- Attachment metadata has no bytes or download URL. Signed URLs are temporary.
 
 ## Errors
 
-| Name | HTTP | Body shape | Cause | Fix |
-| --- | --- | --- | --- | --- |
-| `NotFoundError` | 404 | `{name, message}` | Unknown `thread_id`, `inbox_id`, `message_id`, or `attachment_id`, or the item carries a label the key cannot read | Verify the ID; check label read permissions and `include_*` flags |
-| `ValidationError` | 400 | `{name, errors[]}` (no top-level `message`) | Invalid request body or query parameters, including digit-only `senders`/`recipients`/`subject` filter values | Read `errors[]`; each entry has a path, a message, and a snake_case code (for example `invalid_type`) for the invalid field |
+| Name | HTTP | Body | Fix |
+| --- | --- | --- | --- |
+| `NotFoundError` | 404 | `{name, message}` | Verify the ID, label-read permissions, and `include_*` flags. |
+| `ValidationError` | 400 | `{name, errors[]}` | Read each entry's path, message, and snake_case code. |
 
-The only field present in every error body is the PascalCase `name`; branch on the HTTP status and `name`. There is no top-level `code`, and `message` is not guaranteed: 404 bodies have `{name, message}`, while 400 bodies have `{name, errors[]}` with the detail (path, message, snake_case code) per entry inside `errors[]`.
+Branch on HTTP status and PascalCase `name`. Only `name` is present in every error body: 404 has `message`; 400 detail is in `errors[]`.
 
 ## Verify
 
 ```bash
-curl "https://api.agentmail.to/v0/threads?limit=1" \
-  -H "Authorization: Bearer $AGENTMAIL_API_KEY"
+agentmail threads list
 ```
 
-Success is HTTP 200 with a body shaped like `{"count": 1, "threads": [{"thread_id": "...", "labels": [...], "subject": "...", ...}]}`. An empty organization returns `{"count": 0, "threads": []}`.
+Success returns threads visible to the API key. An empty organization returns `count: 0` and an empty `threads` list.
 
 ## Related
 

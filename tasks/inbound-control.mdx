@@ -5,79 +5,43 @@ description: Use allow and block lists to decide which senders reach your agent'
 
 <Visibility for="humans">
 
-An agent inbox with no filter answers anyone, including spammers, phishers, and other bots. Lists put a policy in front of both directions: who can email your agent, and who your agent can email. A list entry is either a full address (`partner@example.com`) or a whole domain (`example.com`), and every list is identified by two dimensions: a **direction** (`send`, `receive`, or `reply`) and a **type** (`allow` or `block`).
+Allow and block lists control who can email your agent and who it can email. An entry is a full address (`partner@example.com`) or domain (`example.com`); each list has a **direction** (`send`, `receive`, or `reply`) and **type** (`allow` or `block`).
 
-## The six lists
+## Choose the list
 
-| List | What it does |
+| List | Effect |
 | --- | --- |
-| `receive` / `allow` | Only accept new inbound mail from these addresses or domains |
+| `receive` / `allow` | Accept new inbound mail only from these addresses or domains |
 | `receive` / `block` | Block new inbound mail from these addresses or domains |
-| `send` / `allow` | Only send to these addresses or domains |
+| `send` / `allow` | Send only to these addresses or domains |
 | `send` / `block` | Refuse sends to these addresses or domains |
-| `reply` / `allow` | Only accept replies from these addresses or domains |
+| `reply` / `allow` | Accept replies only from these addresses or domains |
 | `reply` / `block` | Block replies from these addresses or domains |
 
-`receive` and `reply` are separate branches of the inbound path. When mail arrives, AgentMail resolves its `In-Reply-To` header against the inbox's existing threads. If the message answers something your inbox sent, only the `reply` lists are checked and the `receive` lists are skipped; if it starts a new thread, only the `receive` lists are checked. This split matters for agents that initiate outbound mail: you can lock `receive` down to your own domain while leaving `reply` lists empty, so responses to the agent's own messages still come through.
+AgentMail resolves an inbound message's `In-Reply-To` header against existing inbox threads. Replies to a message the inbox sent use only `reply` lists; new threads use only `receive` lists. For example, restrict `receive` to your domain while leaving `reply` lists empty to accept replies to the agent's outbound messages.
 
-## Scopes cascade from inbox to pod to org
+## Set the scope
 
-Each of the six lists exists at three scopes, and evaluation walks from the most specific to the broadest:
+Lists exist at inbox, pod, and organization scope. AgentMail checks inbox (`/inboxes/{inbox_id}/lists/...`), then pod (`/pods/{pod_id}/lists/...`), then organization (`/lists/...`); the first match wins. At one scope, it checks exact email before domain, and `allow` before `block`. An inbox allow entry for `alice@example.com` therefore takes precedence over an organization block for `example.com`.
 
-1. **Inbox** (`/inboxes/{inbox_id}/lists/...`) is checked first.
-2. **Pod** (`/pods/{pod_id}/lists/...`) is checked next.
-3. **Organization** (`/lists/...`) is checked last.
+If an allow list for a direction has entries at any scanned scope, an unmatched sender or recipient is blocked with reason `not in allow list`. One organization-level `receive` allow entry makes new inbound mail default-deny for every inbox in that organization.
 
-The first match wins and stops the cascade. Within each scope, an exact address match is checked before a domain match, and at each of those an `allow` match is checked before a `block` match. So an inbox-level allow entry for `alice@example.com` admits her even if the org blocks `example.com`.
-
-One rule catches most people out: **if an allow list for the direction has any entries at any scanned scope, a sender or recipient that matches nothing is treated as blocked** (with the reason `not in allow list`). Adding a single entry to an org-level `receive` allow list therefore flips every inbox in the org from "accept by default" to "reject by default" for new inbound mail.
-
-On unprefixed paths like `/v0/lists/...`, the scope comes from your API key: an org key manages org lists, a pod key manages that pod's lists, an inbox key that inbox's lists. The `/pods/{pod_id}/...` and `/inboxes/{inbox_id}/...` variants name the scope explicitly.
+On `/v0/lists/...`, the API key determines scope: organization keys manage organization lists, pod keys manage that pod's lists, and inbox keys manage that inbox's lists. `/pods/{pod_id}/...` and `/inboxes/{inbox_id}/...` set scope explicitly.
 
 ## Add and remove entries
 
-Add an entry with the direction, type, and the address or domain. AgentMail derives the entry type itself: anything containing `@` is an email, anything else is a domain. A `reason` (up to 1,024 characters) is optional and shows up when the entry later blocks something.
+Create an entry with its direction, type, and address or domain. The optional `reason` (up to 1,024 characters) is stored with the entry.
 
 <CodeGroup>
 
-```python Python
-from agentmail import AgentMail
-
-client = AgentMail()  # reads AGENTMAIL_API_KEY
-
-# Org scope: only accept new inbound mail from your company
-client.lists.create("receive", "allow", entry="yourcompany.com")
-
-# Inbox scope: block one sender for a single inbox
-client.inboxes.lists.create(
-    "agent@yourdomain.com", "receive", "block",
-    entry="noise@example.com", reason="automated newsletter",
-)
-```
-
-```typescript TypeScript
-import { AgentMailClient } from "agentmail";
-
-const client = new AgentMailClient({ apiKey: process.env.AGENTMAIL_API_KEY });
-
-// Org scope: only accept new inbound mail from your company
-await client.lists.create("receive", "allow", { entry: "yourcompany.com" });
-
-// Inbox scope: block one sender for a single inbox
-await client.inboxes.lists.create("agent@yourdomain.com", "receive", "block", {
-  entry: "noise@example.com",
-  reason: "automated newsletter",
-});
-```
-
 ```bash CLI
-# Org scope: only accept new inbound mail from your company
+# Organization scope: accept new inbound mail only from your company
 agentmail lists create \
   --direction receive \
   --type allow \
   --entry yourcompany.com
 
-# Inbox scope: block one sender for a single inbox
+# Inbox scope: block one sender
 agentmail inboxes:lists create \
   --inbox-id agent@yourdomain.com \
   --direction receive \
@@ -91,28 +55,56 @@ curl -X POST "https://api.agentmail.to/v0/lists/receive/allow" \
   -H "Authorization: Bearer $AGENTMAIL_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"entry": "yourcompany.com"}'
+
+curl -X POST "https://api.agentmail.to/v0/inboxes/agent@yourdomain.com/lists/receive/block" \
+  -H "Authorization: Bearer $AGENTMAIL_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"entry": "noise@example.com", "reason": "automated newsletter"}'
+```
+
+```typescript TypeScript
+import { AgentMailClient } from "agentmail";
+
+const client = new AgentMailClient({ apiKey: process.env.AGENTMAIL_API_KEY });
+
+await client.lists.create("receive", "allow", { entry: "yourcompany.com" });
+await client.inboxes.lists.create("agent@yourdomain.com", "receive", "block", {
+  entry: "noise@example.com",
+  reason: "automated newsletter",
+});
+```
+
+```python Python
+from agentmail import AgentMail
+
+client = AgentMail()  # reads AGENTMAIL_API_KEY
+
+client.lists.create("receive", "allow", entry="yourcompany.com")
+client.inboxes.lists.create(
+    "agent@yourdomain.com", "receive", "block",
+    entry="noise@example.com", reason="automated newsletter",
+)
 ```
 
 </CodeGroup>
 
-Every inbox's six lists are also editable in the [console](https://console.agentmail.to) under **Allow/Block Lists**, where a blocked entry shows the `reason` you attached:
+```json Sample response
+{
+  "entry": "noise@example.com",
+  "entry_type": "email",
+  "direction": "receive",
+  "list_type": "block",
+  "reason": "automated newsletter",
+  "organization_id": "<organization_id>",
+  "created_at": "2026-07-30T09:12:44Z"
+}
+```
 
-<Frame caption="An inbox's lists in the console — one receive-direction block entry with its reason.">
-  <img className="block dark:hidden" src="/images/screenshots/console-lists.png" alt="AgentMail console Allow/Block Lists page for an inbox showing the six lists by direction, with one block entry including its address and reason" />
-  <img className="hidden dark:block" src="/images/screenshots/console-lists-dark.png" alt="AgentMail console Allow/Block Lists page for an inbox showing the six lists by direction, with one block entry including its address and reason" />
-</Frame>
+Entries containing `@` come back as `entry_type: "email"`; all others as `"domain"`. The `reason` is echoed whenever this entry blocks something.
 
-Removing an entry is a delete on the same path. Deletion returns `204` and takes effect on the next send or delivery.
+Delete an entry on the same path. Deletion returns `204` and applies to the next send or delivery.
 
 <CodeGroup>
-
-```python Python
-client.lists.delete("receive", "block", entry="noise@example.com")
-```
-
-```typescript TypeScript
-await client.lists.delete("receive", "block", "noise@example.com");
-```
 
 ```bash CLI
 agentmail lists delete \
@@ -126,24 +118,30 @@ curl -X DELETE "https://api.agentmail.to/v0/lists/receive/block/noise@example.co
   -H "Authorization: Bearer $AGENTMAIL_API_KEY"
 ```
 
+```typescript TypeScript
+await client.lists.delete("receive", "block", "noise@example.com");
+```
+
+```python Python
+client.lists.delete("receive", "block", entry="noise@example.com")
+```
+
 </CodeGroup>
 
-Reading lists works with any key, but creating and deleting entries requires a verified organization.
+Any key can read lists. Creating and deleting entries requires a verified organization.
 
-## What happens to filtered mail
+## Inspect filtered mail
 
-The two directions fail differently, and the difference is deliberate.
+Blocked inbound mail is delivered with a `blocked` label, not bounced or dropped. Message and thread listings exclude `blocked`, `spam`, `unauthenticated`, and `trash` by default. Pass `include_blocked=true` and use a key with `label_blocked_read` to inspect blocked mail.
 
-**Inbound** mail from a blocked sender is not bounced or dropped. It is delivered with a `blocked` label and hidden: message and thread listings exclude `blocked` (along with `spam`, `unauthenticated`, and `trash`) by default. To audit what got filtered, pass `include_blocked=true` when listing; your key also needs the `label_blocked_read` permission. The same mechanism handles the other two inbound classifications:
+- `spam` means the message failed the delivery spam verdict.
+- `unauthenticated` means SPF, DKIM, and DMARC headers were all absent. Mail with present but failing authentication headers is dropped before delivery and cannot be recovered.
 
-- `spam`: the message failed the spam verdict on delivery.
-- `unauthenticated`: the message arrived with no SPF, DKIM, or DMARC headers at all. Mail whose auth headers are present but *failing* is dropped before delivery and cannot be recovered.
+A blocked outbound recipient, or a recipient missing from a populated `send` allow list, causes `403 MessageRejectedError`. The response names every blocked recipient and its reason; AgentMail sends nothing.
 
-**Outbound** sends fail loudly. If any recipient matches a `send` block list (or misses a populated `send` allow list), the send returns `403 MessageRejectedError` naming each blocked recipient and the entry's reason, and nothing is sent.
+## Handle automatic blocks
 
-## Automatic blocks
-
-AgentMail also writes `send` block entries itself, at the org scope, in response to delivery feedback:
+AgentMail creates organization-scope `send` block entries from delivery feedback:
 
 | Trigger | Entry `reason` | Deletable via API |
 | --- | --- | --- |
@@ -151,23 +149,13 @@ AgentMail also writes `send` block entries itself, at the org scope, in response
 | Spam complaint | `complained` | No (read-only) |
 | List-Unsubscribe click | `Unsubscribed via List-Unsubscribe` | No (read-only) |
 
-Only permanent bounces create entries. A transient bounce (a remote server temporarily deferring mail) does not block the address, because the recipient is real and future sends should succeed.
-
-Complaint and unsubscribe entries are read-only because the recipient asked to stop hearing from you; re-enabling those sends programmatically would damage your sender reputation. Attempting to delete one returns `409 CannotDeleteError`.
+Transient bounces create no entry. Complaint and unsubscribe entries remain read-only because the recipient asked to stop hearing from you, and programmatically re-enabling sends would damage your sender reputation. Deleting either returns `409 CannotDeleteError`.
 
 ## Unblock a recipient
 
-If an address bounced once (a typo you fixed, a mailbox that was full) and you need to send to it again, delete its auto-created entry from the org send block list:
+To send to an address after resolving a permanent bounce, delete its organization `send` block entry:
 
 <CodeGroup>
-
-```python Python
-client.lists.delete("send", "block", entry="user@example.com")
-```
-
-```typescript TypeScript
-await client.lists.delete("send", "block", "user@example.com");
-```
 
 ```bash CLI
 agentmail lists delete \
@@ -181,107 +169,118 @@ curl -X DELETE "https://api.agentmail.to/v0/lists/send/block/user@example.com" \
   -H "Authorization: Bearer $AGENTMAIL_API_KEY"
 ```
 
+```typescript TypeScript
+await client.lists.delete("send", "block", "user@example.com");
+```
+
+```python Python
+client.lists.delete("send", "block", entry="user@example.com")
+```
+
 </CodeGroup>
 
-That clears AgentMail's own block, which is the whole story for custom-domain sending. Sends from the shared `agentmail.to` domain have a second layer: an account-level suppression list at the email provider (Amazon SES) that is populated automatically on bounce and complaint feedback, and on unsubscribe clicks. Deleting the AgentMail entry does not clear that layer, so shared-domain sends to the address can still be suppressed.
+For custom-domain sends, deleting the entry clears the block. Shared `agentmail.to` sends also use an Amazon SES account-level suppression list, populated by bounce and complaint feedback and unsubscribe clicks. Deleting the AgentMail entry does not clear that suppression.
 
 <Note>
-Clearing SES-level suppression is support-only today. If a shared-domain recipient stays unreachable after you delete the block entry, contact [support@agentmail.cc](mailto:support@agentmail.cc). Sending from a custom domain avoids the shared suppression list entirely.
+SES-level suppression can only be cleared through support. If a shared-domain recipient remains unreachable after deletion, contact [support@agentmail.cc](mailto:support@agentmail.cc). Custom-domain sends do not use the shared suppression list.
 </Note>
 
 </Visibility>
 
 <Visibility for="agents">
 
-**Control who can email an AgentMail inbox and who it can email**
+# Control who can email an AgentMail inbox and who it can email
 
-Allow/block lists filter inbound senders and outbound recipients per inbox, pod, or organization. Use them to lock an agent inbox to trusted senders or restrict which addresses it may email.
+Allow and block lists filter inbound senders and outbound recipients by inbox, pod, or organization scope.
 
 ## Do this
 
-Only accept new inbound mail from one domain, and block one sender for a single inbox:
+Use the CLI to accept new inbound mail from one domain, block a sender for one inbox, and unblock a recipient:
 
 ```bash
-# Org-scope receive allow list (flips org inbound to default-deny)
-curl -X POST "https://api.agentmail.to/v0/lists/receive/allow" \
-  -H "Authorization: Bearer $AGENTMAIL_API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{"entry": "yourcompany.com"}'
+# Organization-scope receive allow list. Unmatched new inbound senders are blocked.
+agentmail lists create \
+  --direction receive \
+  --type allow \
+  --entry yourcompany.com
 
-# Inbox-scope receive block entry with a reason
-curl -X POST "https://api.agentmail.to/v0/inboxes/agent@yourdomain.com/lists/receive/block" \
-  -H "Authorization: Bearer $AGENTMAIL_API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{"entry": "noise@example.com", "reason": "automated newsletter"}'
+# Inbox-scope receive block entry
+agentmail inboxes:lists create \
+  --inbox-id agent@yourdomain.com \
+  --direction receive \
+  --type block \
+  --entry noise@example.com \
+  --reason "automated newsletter"
 
-# Unblock a recipient (delete an org send block entry), returns 204
-curl -X DELETE "https://api.agentmail.to/v0/lists/send/block/user@example.com" \
-  -H "Authorization: Bearer $AGENTMAIL_API_KEY"
+# Delete an organization send block entry. Returns 204.
+agentmail lists delete \
+  --direction send \
+  --type block \
+  --entry user@example.com
 ```
 
 ## SDK
 
-Install: `pip install agentmail` (Python), `npm install agentmail` (TypeScript), `npm install -g agentmail-cli` (CLI).
+Install: `npm install agentmail` (TypeScript), `pip install agentmail` (Python), or `npm install -g agentmail-cli` (CLI).
 
-| Operation | Python | TypeScript |
+| Operation | TypeScript | Python |
 | --- | --- | --- |
-| Create entry (org) | `client.lists.create(direction, type, entry=..., reason=...)` | `client.lists.create(direction, type, { entry, reason })` |
-| List entries (org) | `client.lists.list(direction, type, limit=..., page_token=...)` | `client.lists.list(direction, type, { limit, pageToken })` |
-| Get entry (org) | `client.lists.get(direction, type, entry=...)` | `client.lists.get(direction, type, entry)` |
-| Delete entry (org) | `client.lists.delete(direction, type, entry=...)` | `client.lists.delete(direction, type, entry)` |
-| Pod scope | `client.pods.lists.<op>(pod_id, direction, type, ...)` | `client.pods.lists.<op>(podId, direction, type, ...)` |
-| Inbox scope | `client.inboxes.lists.<op>(inbox_id, direction, type, ...)` | `client.inboxes.lists.<op>(inboxId, direction, type, ...)` |
+| Create entry (organization) | `client.lists.create(direction, type, { entry, reason })` | `client.lists.create(direction, type, entry=..., reason=...)` |
+| List entries (organization) | `client.lists.list(direction, type, { limit, pageToken })` | `client.lists.list(direction, type, limit=..., page_token=...)` |
+| Get entry (organization) | `client.lists.get(direction, type, entry)` | `client.lists.get(direction, type, entry=...)` |
+| Delete entry (organization) | `client.lists.delete(direction, type, entry)` | `client.lists.delete(direction, type, entry=...)` |
+| Pod scope | `client.pods.lists.<op>(podId, direction, type, ...)` | `client.pods.lists.<op>(pod_id, direction, type, ...)` |
+| Inbox scope | `client.inboxes.lists.<op>(inboxId, direction, type, ...)` | `client.inboxes.lists.<op>(inbox_id, direction, type, ...)` |
 
-CLI: `agentmail lists create|list|get|delete --direction <d> --type <t> [--entry <e>] [--reason <r>]`; pod scope `agentmail pods:lists ... --pod-id <id>`; inbox scope `agentmail inboxes:lists ... --inbox-id <address>`.
+CLI: `agentmail lists create|list|get|delete --direction <d> --type <t> [--entry <e>] [--reason <r>]`; pod scope: `agentmail pods:lists ... --pod-id <id>`; inbox scope: `agentmail inboxes:lists ... --inbox-id <address>`.
 
 SDK reference: https://docs.agentmail.to/api-reference
 
 ## Facts
 
-- Endpoints (org scope): `GET /v0/lists/{direction}/{type}`, `POST /v0/lists/{direction}/{type}`, `GET /v0/lists/{direction}/{type}/{entry}`, `DELETE /v0/lists/{direction}/{type}/{entry}`.
-- Pod-scope endpoints prefix with `/v0/pods/{pod_id}`; inbox-scope endpoints prefix with `/v0/inboxes/{inbox_id}`. Unprefixed `/v0/lists/...` paths resolve scope from the API key.
-- `direction` enum: `send`, `receive`, `reply`. `type` enum: `allow`, `block`.
-- Entry type is derived, not passed: an entry containing `@` is stored as `entry_type: "email"`, otherwise `entry_type: "domain"`.
-- `reason` on create is optional, max 1,024 characters.
-- Create returns the entry object: `entry`, `organization_id`, `direction`, `list_type`, `entry_type`, optional `reason`, optional `read_only`, `created_at`. Delete returns HTTP 204.
-- Evaluation cascade: inbox scope, then pod scope, then org scope; first match wins. Within a scope the check order is: email allow, email block, domain allow, domain block.
-- If any allow list for the direction has at least one entry at any scanned scope (inbox, pod, or org), an entry that matches nothing is blocked with reason `not in allow list`.
-- Inbound mail that answers a message the inbox sent (resolved via the `In-Reply-To` header) is checked against `reply` lists only; new-thread inbound mail is checked against `receive` lists only. Empty reply lists allow all replies.
-- Inbound blocked mail is still stored, labeled `blocked`, and excluded from message/thread listings by default; retrieve with `include_blocked=true` plus the `label_blocked_read` permission. Same pattern for `spam` (`include_spam`, `label_spam_read`) and `unauthenticated` (`include_unauthenticated`, `label_unauthenticated_read`).
-- `spam` label: message failed the spam verdict. `unauthenticated` label: SPF/DKIM/DMARC headers entirely absent. Mail with present-but-failing auth headers is dropped before delivery and is unrecoverable.
-- Auto-created block entries are org-scope `send`/`block`: permanent bounce (reason `bounced`, deletable), spam complaint (reason `complained`, read-only), List-Unsubscribe click (reason `Unsubscribed via List-Unsubscribe`, read-only). Transient bounces create no entry.
-- Reading lists requires only `list_entry_read` (granted to all keys); create and delete require a verified organization.
-- Sends from the shared `agentmail.to` domain also honor an SES account-level suppression list, populated automatically on bounce/complaint feedback and on unsubscribe clicks. Custom-domain sends do not use the shared suppression list.
+- Organization endpoints: `GET /v0/lists/{direction}/{type}`, `POST /v0/lists/{direction}/{type}`, `GET /v0/lists/{direction}/{type}/{entry}`, and `DELETE /v0/lists/{direction}/{type}/{entry}`.
+- Pod endpoints start with `/v0/pods/{pod_id}`; inbox endpoints start with `/v0/inboxes/{inbox_id}`. Unprefixed `/v0/lists/...` resolves scope from the API key.
+- `direction`: `send`, `receive`, `reply`. `type`: `allow`, `block`.
+- An entry containing `@` has `entry_type: "email"`; other entries have `entry_type: "domain"`. Do not pass an entry type.
+- `reason` is optional and limited to 1,024 characters. Create returns `entry`, `organization_id`, `direction`, `list_type`, `entry_type`, optional `reason`, optional `read_only`, and `created_at`; delete returns HTTP 204.
+- Evaluation order is inbox, pod, organization. The first match wins; within a scope, AgentMail checks email allow, email block, domain allow, then domain block.
+- If an allow list has entries at any scanned scope for a direction, unmatched entries are blocked with reason `not in allow list`.
+- Inbound replies resolved through `In-Reply-To` use `reply` lists only; new threads use `receive` lists only. Empty reply lists accept all replies.
+- Blocked inbound mail is stored with the `blocked` label and omitted from message and thread lists by default. Use `include_blocked=true` and `label_blocked_read`. The same pattern applies to `spam` (`include_spam`, `label_spam_read`) and `unauthenticated` (`include_unauthenticated`, `label_unauthenticated_read`).
+- `spam` means the delivery spam verdict failed. `unauthenticated` means SPF, DKIM, and DMARC headers were absent; mail with present but failing headers is dropped before delivery.
+- Automatic organization `send`/`block` entries: permanent bounce (`bounced`, deletable), spam complaint (`complained`, read-only), and List-Unsubscribe click (`Unsubscribed via List-Unsubscribe`, read-only). Transient bounces create no entry. Complaint and unsubscribe entries remain read-only because the recipient asked to stop hearing from you, and programmatically re-enabling sends would damage your sender reputation; deletion returns `409 CannotDeleteError`.
+- Reading lists requires `list_entry_read`, which all keys have. Creating and deleting require a verified organization.
+- Shared `agentmail.to` sends also use an SES account-level suppression list for bounce and complaint feedback and unsubscribe clicks. Custom-domain sends do not use that list.
 
 ## Not supported
 
-- No API to view or clear SES account-level suppression; clearing it is support-only (support@agentmail.cc).
-- Read-only block entries (`complained`, `Unsubscribed via List-Unsubscribe`) cannot be deleted via the API.
-- No update/PATCH on list entries; delete and re-create instead.
-- No wildcard or regex entries; only exact email addresses and exact domains.
-- Blocking inbound mail does not bounce or reject it at SMTP level; it is delivered with the `blocked` label.
-- No per-entry expiry or TTL on list entries.
+- You cannot view or clear SES account-level suppression through the API. Contact support@agentmail.cc.
+- You cannot delete read-only `complained` or `Unsubscribed via List-Unsubscribe` entries.
+- No update/PATCH, wildcard or regex entries, or per-entry expiry/TTL. Delete and create a replacement entry.
+- Inbound blocks do not reject mail at SMTP level; they deliver it with the `blocked` label.
 
 ## Errors
 
 | Error | HTTP | Cause | Fix |
 | --- | --- | --- | --- |
-| `MessageRejectedError` | 403 | Send recipient matches a send block list or misses a populated send allow list; message lists each blocked recipient and reason | Delete the block entry or add the recipient to the allow list |
-| `CannotDeleteError` | 409 | DELETE on a read-only entry (reason `complained` or `Unsubscribed via List-Unsubscribe`) | Do not re-enable; recipient opted out. Contact support if genuinely erroneous |
-| `NotFoundError` | 404 | GET or DELETE on an entry not present in that scope's list | Check scope (org vs pod vs inbox), direction, and type |
-| `ValidationError` | 400 | Invalid entry string or reason over 1,024 characters | Send a valid email address or bare domain |
-| `ForbiddenError` | 403 | Create or delete attempted by an unverified organization | Verify the organization first |
+| `MessageRejectedError` | 403 | Recipient matches a send block list or misses a populated send allow list | Delete the block entry or add the recipient to the allow list |
+| `CannotDeleteError` | 409 | Delete a read-only `complained` or `Unsubscribed via List-Unsubscribe` entry | Keep the recipient blocked; contact support if the entry is erroneous |
+| `NotFoundError` | 404 | Entry is absent from that scope's list | Check scope, direction, and type |
+| `ValidationError` | 400 | Invalid entry or `reason` over 1,024 characters | Use a valid email address or bare domain |
+| `ForbiddenError` | 403 | Create or delete with an unverified organization | Verify the organization |
 
 ## Verify
 
-Confirm an entry exists (and see its `read_only` flag before attempting delete):
+Confirm an entry and inspect `read_only` before deletion:
 
 ```bash
-curl "https://api.agentmail.to/v0/lists/send/block/user@example.com" \
-  -H "Authorization: Bearer $AGENTMAIL_API_KEY"
+agentmail lists get \
+  --direction send \
+  --type block \
+  --entry user@example.com
 ```
 
-Success returns the entry object, e.g. `{"entry": "user@example.com", "direction": "send", "list_type": "block", "entry_type": "email", "reason": "bounced", ...}`. A 404 means the address is not on that list.
+The command returns the entry object, such as `{"entry": "user@example.com", "direction": "send", "list_type": "block", "entry_type": "email", "reason": "bounced", ...}`. A 404 means the address is absent from that list.
 
 ## Related
 

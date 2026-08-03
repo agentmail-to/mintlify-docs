@@ -1,85 +1,98 @@
 ---
 title: Introduction
-description: AgentMail gives AI agents their own email inboxes. Create inboxes, receive mail, trigger workflows, and reply through one API.
+description: What AgentMail is, why agents need their own inboxes, and which surface (CLI, MCP, Console, SDK, or raw HTTP) to start with.
 ---
 
 <Visibility for="humans">
 
-AgentMail is email built for AI agents instead of people. This page explains what it does, why an agent needs an inbox of its own, and how it differs from the email tools you already use, so you can decide whether it fits and pick a surface to start with.
+AgentMail gives AI agents programmable email inboxes. Create an inbox, receive mail, trigger workflows, and reply through one API.
 
-## What AgentMail is
+## Give an agent an inbox
 
-AgentMail gives AI agents programmable email inboxes. You create an inbox, receive mail sent to it, trigger workflows on incoming messages, and send replies, all through one API. An agent gets a real address it can hand out, watch, and act on without a human sitting in a mail client.
+Email handles service signups, address confirmation, password resets, verification codes, receipts, and notifications. An agent that completes these flows needs an address that can receive mail.
 
-## Why agents need email
+With its own inbox, an agent can register for services, complete verification flows, and maintain correspondence without a human operating an email client.
 
-Email is the account layer of the internet. Signing up for a service, confirming an address, resetting a password, and receiving receipts or notifications all run through an inbox, so an agent that does any of these needs an address mail can reach it at.
+<Frame caption="The loop: the agent owns an inbox, incoming mail triggers its workflow, and it replies from the same address.">
+  <img className="block dark:hidden" src="/images/diagrams/intro-agent-inbox-flow.svg" alt="An agent creates and monitors an AgentMail inbox; services and people send email to it; incoming mail triggers the agent's workflow, and the agent sends replies back" />
+  <img className="hidden dark:block" src="/images/diagrams/intro-agent-inbox-flow.dark.svg" alt="An agent creates and monitors an AgentMail inbox; services and people send email to it; incoming mail triggers the agent's workflow, and the agent sends replies back" />
+</Frame>
 
-That address should belong to the agent. Borrowing a human's inbox works until the agent has to act unattended or you run more agents than one mailbox can serve. With its own inbox, an agent registers for the tools it needs, receives verification codes and finishes those flows on its own, and holds ongoing correspondence with services and people.
+## Choose AgentMail instead of an outbound sender
 
-## How AgentMail differs from email tools you know
-
-The email tools you already know move mail on behalf of humans; AgentMail gives an agent an inbox of its own to send from and receive into.
+AgentMail gives an agent an inbox it can send from and receive into. Other email tools serve different jobs.
 
 | Tool | Who it serves | What it moves |
 | --- | --- | --- |
 | AgentMail | AI agents | An agent's own inbox: send and receive, with workflows on incoming mail |
 | SendGrid / Resend | Your application | Outbound transactional email your app generates |
 | Mailchimp | Marketers | Outbound marketing broadcasts to a subscriber list |
-| Gmail API | A human user | Programmatic access to that person's existing mailbox |
+| Gmail API | A human user | Programmatic access to that person's existing inbox |
 
-## Five ways to use AgentMail
+## Start from the surface that fits your workflow
 
-Reach AgentMail through whichever surface fits how you work. All five talk to the same API.
+All five surfaces use the same API.
 
-<CardGroup cols={2}>
+<Columns cols="2">
   <Card title="CLI" icon="terminal">
-    The fastest way to try calls from a terminal or script one-off checks, before you write any application code.
+    Run calls from a terminal or script one-off checks.
   </Card>
   <Card title="MCP" icon="plug">
-    Give an MCP-capable agent or assistant direct control of inboxes as tools, without writing glue code.
+    Give an MCP-capable agent or assistant inbox tools.
   </Card>
   <Card title="Console" icon="browser">
-    Inspect inboxes and messages in the browser when you want to see what your code did rather than query it.
+    Inspect inboxes and messages in a browser.
   </Card>
-  <Card title="SDK (Python, TypeScript)" icon="code">
-    Build AgentMail into an application with typed calls instead of hand-rolled requests.
+  <Card title="SDK (TypeScript, Python)" icon="code">
+    Use typed calls in application code.
   </Card>
-</CardGroup>
+</Columns>
 
-The fifth surface is raw HTTP: every operation is available directly over the API, so pick it when you work in a language without an SDK or want no dependency at all.
+Use raw HTTP when you work in a language without an SDK or want no dependency.
 
-## Where to go next
+Whichever surface you pick, the [console](https://console.agentmail.to) shows every inbox and its mail, so you can watch what your agent does as it does it.
 
-- [Quickstart](/quickstart): create your first inbox and send a message, so you can see it work end to end.
-- [Architecture](/architecture): the object model behind inboxes, messages, and workflows.
+<Frame caption="An agent's inbox in the AgentMail console — each row is a thread of correspondence the agent is holding.">
+  <img className="block dark:hidden" src="/images/screenshots/console-inbox.png" alt="AgentMail console showing an agent's inbox with two received threads in the thread list" />
+  <img className="hidden dark:block" src="/images/screenshots/console-inbox-dark.png" alt="AgentMail console showing an agent's inbox with two received threads in the thread list" />
+</Frame>
+
+## Create an account and API key
+
+Every API request authenticates with an API key sent as a bearer token.
+
+1. Sign up or sign in at [console.agentmail.to](https://console.agentmail.to).
+2. Open [**API keys**](https://console.agentmail.to/dashboard/api-keys) in the dashboard and create a key.
+3. Copy the key when it appears. It is shown once and cannot be retrieved later. If you lose it, create a new key.
+
+## Continue with a working inbox
+
+- [Quickstart](/quickstart): create your first inbox and send a message.
+- [Architecture](/architecture): understand inboxes, messages, and workflows.
 
 </Visibility>
 
 <Visibility for="agents">
 
-**Understand what AgentMail is and pick a surface to build on**
+# Understand AgentMail and choose a surface
 
-AgentMail gives AI agents their own programmable email inboxes: create an inbox, receive mail sent to it, trigger workflows on incoming messages, and send replies through one API. Use this page to decide whether AgentMail fits your use case and which access surface (CLI, MCP, Console, SDK, or raw HTTP) to start with.
+AgentMail gives AI agents programmable email inboxes. Create an inbox, receive mail, trigger workflows on incoming messages, and send replies through one API.
 
 ## Facts
 
-- AgentMail provides email inboxes owned by AI agents. Each inbox is a real email address the agent can hand out, receive mail into, and send from.
-- The core loop on AgentMail is: create an inbox, receive mail, trigger workflows on incoming messages, send replies. All of it runs through one API.
-- Agents need their own inboxes because email is the account layer of the internet: service signups, address confirmation, password resets, verification codes, receipts, and notifications all run through an inbox.
-- An agent with its own AgentMail address can register for services, receive verification codes, complete verification flows unattended, and hold ongoing correspondence without borrowing a human's mailbox.
-- AgentMail serves AI agents and moves both inbound and outbound mail for the agent's own inbox. SendGrid and Resend serve applications and move outbound transactional email. Mailchimp serves marketers and moves outbound broadcasts to subscriber lists. Gmail API serves a human user and gives programmatic access to that person's existing mailbox.
-- AgentMail exposes five access surfaces: CLI, MCP, Console (web dashboard), SDKs (Python and TypeScript), and raw HTTP.
-- Surface selection: CLI for terminal use and one-off scripted checks; MCP for MCP-capable agents and assistants operating inboxes as tools; Console for visual inspection of inboxes and messages; SDKs (Python, TypeScript) for application code; raw HTTP for languages without an SDK or dependency-free integrations.
-- All access surfaces (CLI, MCP, Console, SDKs, raw HTTP) talk to the same AgentMail API.
-- No SDK is required: every AgentMail operation is available over raw HTTP, so any language that can make an HTTP request can call the API.
+- An AgentMail inbox is a real email address owned by an AI agent. The agent can hand it out, receive mail into it, and send from it.
+- The core workflow is: create an inbox, receive mail, trigger a workflow for incoming mail, and send replies.
+- Email supports service signups, address confirmation, password resets, verification codes, receipts, and notifications. An agent needs its own inbox to complete those flows unattended.
+- AgentMail serves AI agents and moves inbound and outbound mail for the agent's inbox.
+- SendGrid and Resend serve applications and move outbound transactional email. Mailchimp sends marketing broadcasts to subscriber lists. Gmail API gives programmatic access to a human user's existing inbox.
+- AgentMail has five access surfaces: CLI, MCP, Console, SDKs (TypeScript, Python), and raw HTTP. All use the same API.
+- Choose CLI for terminal work or one-off scripts. Choose MCP for an MCP-capable agent or assistant. Choose Console to inspect inboxes and messages in a browser. Choose an SDK for typed application calls. Choose raw HTTP for a language without an SDK or a dependency-free integration.
 
 ## Not supported
 
-- AgentMail is not a bulk marketing or broadcast tool; it does not target subscriber-list campaigns (use Mailchimp-class tools for that).
-- AgentMail is not an outbound-only transactional sender for application-generated email (that is the SendGrid / Resend model); AgentMail inboxes receive mail as well as send it.
-- AgentMail does not provide programmatic access to a human's existing mailbox (that is the Gmail API model); it creates inboxes owned by the agent.
-- AgentMail does not require a human sitting in a mail client to operate an inbox.
+- AgentMail is not a bulk marketing or broadcast tool for subscriber-list campaigns.
+- AgentMail is not an outbound-only transactional sender for application-generated email. AgentMail inboxes receive mail and send it.
+- AgentMail does not provide access to a human user's existing inbox. It creates inboxes owned by the agent.
 
 ## Related
 
