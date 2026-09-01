@@ -1,5 +1,5 @@
-// AgentMail landing — use-case cards. Four end-to-end workflows customers
-// actually build, each with a hand-built UI mock (no images).
+// AgentMail landing — example cards. The three cookbooks from the docs'
+// Examples section, each with a hand-built UI mock (no images).
 // All constants live INSIDE the component body (Mintlify snippet rule).
 
 export const LandingUseCases = () => {
@@ -11,7 +11,7 @@ export const LandingUseCases = () => {
     <section className="aml-section aml-uc">
       <div className="aml-secthead">
         <div className="aml-secthead-left">
-          <div className="aml-kicker">USE CASES</div>
+          <div className="aml-kicker">EXAMPLES</div>
           <h2 className="aml-h2">
             <span className="ln">Built For Real</span>
             <span className="ln aml-grad">Email Workflows.</span>
@@ -19,27 +19,24 @@ export const LandingUseCases = () => {
         </div>
         <div className="aml-secthead-right">
           <p className="aml-secthead-copy">
-            End-to-end cookbooks your agent can follow. Every example ships in
-            TypeScript and Python, with a repo.
+            Three end-to-end cookbooks, built on Vercel Eve with AgentMail as
+            the email layer. Copy the prompt into your coding agent and build
+            it.
           </p>
-          <a className="aml-btn aml-btn--ghost" href="/quickstart">
-            <span>View all examples</span>
-            <span className="arrow" aria-hidden="true">→</span>
-          </a>
         </div>
       </div>
 
       <div className="uc-grid">
-        {/* 1 — Outbound GTM */}
-        <a className="uc-card" href="/tasks/send">
+        {/* 1 — Outbound GTM / SDR agent */}
+        <a className="uc-card" href="/examples/outbound-gtm-sdr-agent">
           <div className="uc-tag-row">
             <span className="uc-tag">/messages/send</span>
             <span className="uc-arrow">↗</span>
           </div>
-          <h3 className="uc-title">Outbound GTM agent</h3>
+          <h3 className="uc-title">Outbound GTM / SDR agent</h3>
           <p className="uc-desc">
-            Personalized outreach, reply classification, and warm handoff to a
-            human when a lead is hot.
+            Researches every lead, sends personal first touches from its own
+            inbox, follows up on silence, and hands hot leads to a human.
           </p>
           <div className="uc-mock">
             <div className="uc-row"><span>Re: pricing for 50 seats</span><Chip variant="fill">INTERESTED</Chip></div>
@@ -49,69 +46,44 @@ export const LandingUseCases = () => {
           </div>
         </a>
 
-        {/* 2 — Inbox per user */}
-        <a className="uc-card" href="/architecture">
-          <div className="uc-tag-row">
-            <span className="uc-tag">/pods · /inboxes</span>
-            <span className="uc-arrow">↗</span>
-          </div>
-          <h3 className="uc-title">An inbox for every user</h3>
-          <p className="uc-desc">
-            Provision a pod and an inbox per customer. Scoped keys keep every
-            tenant isolated.
-          </p>
-          <div className="uc-mock">
-            <div className="uc-row"><span className="uc-mono"><em>acme</em> ava@acme-mail.com</span><span className="uc-check">✓</span></div>
-            <div className="uc-row"><span className="uc-mono"><em>bolt</em> mia@bolt-mail.com</span><span className="uc-check">✓</span></div>
-            <div className="uc-row"><span className="uc-mono"><em>zeno</em> kai@zeno-mail.com</span><span className="uc-check">✓</span></div>
-            <div className="uc-note">+ 4,318 more inboxes</div>
-          </div>
-        </a>
-
-        {/* 3 — OTP */}
-        <a className="uc-card" href="/tasks/receive">
+        {/* 2 — Customer support agent */}
+        <a className="uc-card" href="/examples/customer-support-agent">
           <div className="uc-tag-row">
             <span className="uc-tag">message.received</span>
             <span className="uc-arrow">↗</span>
           </div>
-          <h3 className="uc-title">Sign up and read the OTP</h3>
+          <h3 className="uc-title">Customer support agent</h3>
           <p className="uc-desc">
-            Email is the account layer of the internet. Your agent signs up for
-            services and completes verification on its own.
+            Answers every support email from your docs and past threads,
+            in-thread. When it is not sure, it leaves a draft for a human.
           </p>
           <div className="uc-mock">
-            <div className="uc-mail-head">
-              <div className="uc-mail-subj">Your verification code</div>
-              <div className="uc-mail-from">no-reply@notion.so → ava@yourco.com</div>
-            </div>
-            <div className="uc-code">
-              {["4", "8", "2", "9", "1", "3"].map((d, i) => (
-                <span key={i} className="uc-digit">{d}</span>
-              ))}
-            </div>
-            <div className="uc-verify">
-              <Chip variant="fill">account verified ✓</Chip>
-              <span className="uc-note-inline">read by agent in 0.4s</span>
-            </div>
+            <div className="uc-row"><span>How do I rotate an API key?</span><Chip>ANSWERED</Chip></div>
+            <div className="uc-row"><span>Can't log in to the dashboard</span><Chip>ANSWERED</Chip></div>
+            <div className="uc-row"><span>Refund for a duplicate charge</span><Chip variant="fill">DRAFT</Chip></div>
+            <div className="uc-note">unsure → saved as a draft for review</div>
           </div>
         </a>
 
-        {/* 4 — Support triage */}
-        <a className="uc-card" href="/tasks/conversations">
-          <div className="uc-tag-row">
-            <span className="uc-tag">webhooks</span>
-            <span className="uc-arrow">↗</span>
+        {/* 3 — AI employee with its own inbox (wide) */}
+        <a className="uc-card uc-card--wide" href="/examples/ai-employee-with-its-own-inbox">
+          <div className="uc-wide-copy">
+            <div className="uc-tag-row">
+              <span className="uc-tag">/inboxes</span>
+              <span className="uc-arrow">↗</span>
+            </div>
+            <h3 className="uc-title">An AI employee with its own inbox</h3>
+            <p className="uc-desc">
+              A teammate with a real address on your domain. CC it into
+              threads, forward it documents, or email it tasks directly — it
+              does the work and replies to everyone with the result.
+            </p>
           </div>
-          <h3 className="uc-title">Support triage agent</h3>
-          <p className="uc-desc">
-            Classify, label, draft, and escalate — straight from the support
-            inbox.
-          </p>
           <div className="uc-mock">
-            <div className="uc-row"><span>Refund for a duplicate charge</span><span className="uc-chips"><Chip>billing</Chip><Chip variant="fill">urgent</Chip></span></div>
-            <div className="uc-row"><span>Can't log in to the dashboard</span><Chip>account</Chip></div>
-            <div className="uc-row"><span>Feature idea: dark mode</span><Chip>backlog</Chip></div>
-            <div className="uc-note">3 drafts ready for review</div>
+            <div className="uc-row"><span>CC: ava — take over the vendor renewal</span><Chip variant="fill">ON IT</Chip></div>
+            <div className="uc-row"><span>Fwd: Q3 offsite budget.xlsx</span><Chip>SUMMARIZED</Chip></div>
+            <div className="uc-row"><span>Can you schedule the Acme kickoff?</span><Chip>REPLIED ALL</Chip></div>
+            <div className="uc-note">07:30 — morning digest: 6 tasks done</div>
           </div>
         </a>
       </div>
@@ -140,6 +112,18 @@ export const LandingUseCases = () => {
         a.uc-card { text-decoration: none; color: inherit; }
         .uc-card:hover { transform: translateY(-3px); box-shadow: var(--aml-shadow); }
         .uc-card:hover .uc-arrow { color: var(--aml-ink); }
+        .uc-card--wide {
+          grid-column: 1 / -1;
+          flex-direction: row;
+          align-items: center;
+          gap: 32px;
+        }
+        .uc-wide-copy {
+          flex: 1 1 46%;
+          min-width: 0;
+          display: flex; flex-direction: column; gap: 10px;
+        }
+        .uc-card--wide .uc-mock { flex: 1 1 54%; min-width: 0; margin-top: 0; }
         .uc-tag-row { display: flex; justify-content: space-between; align-items: center; }
         .uc-tag {
           font-family: var(--aml-mono); font-size: 12px; color: var(--aml-ink-2);
@@ -175,13 +159,14 @@ export const LandingUseCases = () => {
           border: 1px solid var(--aml-card-bd);
           font-size: 13px; color: var(--aml-ink-2);
         }
-        .uc-mono { font-family: var(--aml-mono); font-size: 12px; color: var(--aml-ink); }
-        .uc-mono em { font-style: normal; color: var(--aml-muted); margin-right: 8px; font-size: 11px; }
-        .uc-check { color: var(--aml-ink); font-weight: 500; }
-        .uc-chips { display: inline-flex; gap: 6px; }
+        .uc-row > span:first-child {
+          min-width: 0;
+          overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        }
         .uc-chip {
           font-family: var(--aml-mono); font-size: 10px; letter-spacing: 0.02em;
           padding: 4px 9px; border-radius: 6px; white-space: nowrap;
+          flex: none;
         }
         .uc-chip--outline {
           color: var(--aml-muted);
@@ -193,26 +178,12 @@ export const LandingUseCases = () => {
         .uc-note {
           font-family: var(--aml-mono); font-size: 10.5px; color: var(--aml-muted);
         }
-        .uc-note-inline {
-          font-family: var(--aml-mono); font-size: 10.5px; color: var(--aml-muted);
-        }
-        .uc-mail-head { display: flex; flex-direction: column; gap: 2px; }
-        .uc-mail-subj { font-size: 13.5px; font-weight: 500; color: var(--aml-ink); }
-        .uc-mail-from { font-family: var(--aml-mono); font-size: 10.5px; color: var(--aml-muted); }
-        .uc-code { display: flex; gap: 8px; }
-        .uc-digit {
-          font-family: var(--aml-mono); font-size: 16px; color: var(--aml-ink);
-          background: var(--aml-card);
-          border: 1px solid var(--aml-card-bd);
-          border-radius: 8px;
-          padding: 8px 11px;
-        }
-        .uc-verify { display: flex; align-items: center; gap: 8px; }
         @media (max-width: 900px) {
           .uc-grid { grid-template-columns: minmax(0, 1fr); }
+          .uc-card--wide { flex-direction: column; align-items: stretch; gap: 10px; }
+          .uc-card--wide .uc-mock { margin-top: 8px; }
         }
         @media (max-width: 480px) {
-          .uc-code { flex-wrap: wrap; }
           .aml-uc .aml-btn { width: auto; }
         }
       `}</style>

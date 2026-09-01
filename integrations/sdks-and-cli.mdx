@@ -1,0 +1,1342 @@
+---
+title: "SDKs and CLI"
+description: "Install the CLI, TypeScript, or Python client, authenticate once, and look up any operation's exact call on each surface."
+---
+
+<Visibility for="humans">
+
+<Info>If you don't have an API key yet, follow the [Quickstart](/quickstart) first.</Info>
+
+## Installation
+
+<CodeGroup>
+
+```bash CLI - npm
+npm install -g agentmail-cli
+```
+
+```bash TypeScript
+npm install agentmail
+```
+
+```bash Python
+pip install agentmail
+```
+
+```bash CLI - Homebrew
+brew install agentmail-to/tap/agentmail
+```
+
+</CodeGroup>
+
+<Note>
+The CLI prebuilt binaries for macOS, Linux, and Windows are on the [releases page](https://github.com/agentmail-to/agentmail-cli/releases).
+</Note>
+
+<Note>
+There is also a Go SDK ([agentmail-go](https://github.com/agentmail-to/agentmail-go)), installed with `go get github.com/agentmail-to/agentmail-go`. The examples on this page show the CLI, TypeScript, and Python.
+</Note>
+
+All three read your API key from the `AGENTMAIL_API_KEY` environment variable, so exporting it once is enough. You can also pass it explicitly: `--api-key` on any CLI command, `apiKey` in the TypeScript constructor, `api_key` in the Python one. Make a first call to check that the key works. The SDK call here, `auth.me`, returns the key's identity: which organization, pod, or inbox it is scoped to, which is how code holding a key discovers what it can act on.
+
+<CodeGroup>
+
+```bash CLI
+export AGENTMAIL_API_KEY="<API_KEY>"
+
+agentmail inboxes list
+```
+
+```typescript TypeScript
+import { AgentMailClient } from "agentmail";
+
+const client = new AgentMailClient(); // reads AGENTMAIL_API_KEY
+console.log(await client.auth.me());
+```
+
+```python Python
+from agentmail import AgentMail
+
+client = AgentMail()  # reads AGENTMAIL_API_KEY
+print(client.auth.me())
+```
+
+</CodeGroup>
+
+The rest of this page is a reference, one section per resource area. Each operation gets its exact call on every surface, and the linked task page covers the parameters, responses, and errors in depth. The TypeScript and Python snippets reuse the `client` from above.
+
+<Accordion title="Troubleshooting">
+If the first call fails:
+
+- **`401`.** The key is missing or invalid.
+- **`404`.** The request URL is incorrect (usually, a base URL that already contains `/v0`, see [Client configuration](#client-configuration)).
+</Accordion>
+
+## SDK/CLI Reference
+
+### Inboxes
+
+An inbox is an email address your agent owns. The [Quickstart](/quickstart) walks through creating your first one and using it.
+
+Create an inbox. Omit `username` and AgentMail generates the address:
+
+<CodeGroup>
+
+```bash CLI
+agentmail inboxes create --display-name "Support agent"
+```
+
+```typescript TypeScript
+const inbox = await client.inboxes.create({ displayName: "Support agent" });
+```
+
+```python Python
+from agentmail.inboxes import CreateInboxRequest
+
+inbox = client.inboxes.create(request=CreateInboxRequest(display_name="Support agent"))
+```
+
+</CodeGroup>
+
+List your inboxes, or get one by its `inbox_id`. Each inbox's address is in the `email` field of what comes back:
+
+<CodeGroup>
+
+```bash CLI
+agentmail inboxes list
+
+agentmail inboxes get --inbox-id "example@agentmail.to"
+```
+
+```typescript TypeScript
+const inboxes = await client.inboxes.list();
+
+const inbox = await client.inboxes.get("example@agentmail.to");
+```
+
+```python Python
+inboxes = client.inboxes.list()
+
+inbox = client.inboxes.get(inbox_id="example@agentmail.to")
+```
+
+</CodeGroup>
+
+Create and update also take a custom `metadata` map for your own bookkeeping (tenant ids, feature flags): string, number, or boolean values, up to 256 keys, keys and string values up to 256 characters. An update merges the map you send, a `null` value removes that key, and `"metadata": null` clears the whole map.
+
+Update an inbox's `display_name`, the sender name recipients see ([details](/core/send#set-the-name-recipients-see)). The change applies to mail sent afterward:
+
+<CodeGroup>
+
+```bash CLI
+agentmail inboxes update \
+  --inbox-id "example@agentmail.to" \
+  --display-name "Acme Updates"
+```
+
+```typescript TypeScript
+const inbox = await client.inboxes.update("example@agentmail.to", {
+  displayName: "Acme Updates",
+});
+```
+
+```python Python
+inbox = client.inboxes.update(
+    inbox_id="example@agentmail.to",
+    display_name="Acme Updates",
+)
+```
+
+</CodeGroup>
+
+Delete an inbox. This permanently removes its messages, threads, and drafts:
+
+<CodeGroup>
+
+```bash CLI
+agentmail inboxes delete --inbox-id "example@agentmail.to"
+```
+
+```typescript TypeScript
+await client.inboxes.delete("example@agentmail.to");
+```
+
+```python Python
+client.inboxes.delete(inbox_id="example@agentmail.to")
+```
+
+</CodeGroup>
+
+<Accordion title="Troubleshooting">
+- **`403` on create with a `username` you passed.** The name is taken. The error lists up to three available alternatives in `suggestions`.
+</Accordion>
+
+### Messages
+
+For depth, [Receive email](/core/receive) has the inbound calls and [Send and reply](/core/send) the outbound ones.
+
+Send an email. It returns the new message's `message_id` and the `thread_id` of the conversation it starts, which you keep to reply or follow up later:
+
+<CodeGroup>
+
+```bash CLI
+agentmail inboxes:messages send \
+  --inbox-id "example@agentmail.to" \
+  --to "you@example.com" \
+  --subject "Your receipt" \
+  --text "Thanks for your order."
+```
+
+```typescript TypeScript
+const sent = await client.inboxes.messages.send("example@agentmail.to", {
+  to: ["you@example.com"],
+  subject: "Your receipt",
+  text: "Thanks for your order.",
+});
+```
+
+```python Python
+sent = client.inboxes.messages.send(
+    inbox_id="example@agentmail.to",
+    to=["you@example.com"],
+    subject="Your receipt",
+    text="Thanks for your order.",
+)
+```
+
+</CodeGroup>
+
+List an inbox's messages, newest first with optional `labels` and time filters, then get one by id to read its full body:
+
+<CodeGroup>
+
+```bash CLI
+agentmail inboxes:messages list --inbox-id "example@agentmail.to"
+
+agentmail inboxes:messages get \
+  --inbox-id "example@agentmail.to" \
+  --message-id "<message_id>"
+```
+
+```typescript TypeScript
+const messages = await client.inboxes.messages.list("example@agentmail.to");
+
+const message = await client.inboxes.messages.get("example@agentmail.to", "<message_id>");
+```
+
+```python Python
+messages = client.inboxes.messages.list(inbox_id="example@agentmail.to")
+
+message = client.inboxes.messages.get(
+    inbox_id="example@agentmail.to",
+    message_id="<message_id>",
+)
+```
+
+</CodeGroup>
+
+Reply to a message, or forward it to someone new with its attachments riding along. Reply-all (`reply-all`, `replyAll`, `reply_all`) takes the same inputs as reply and answers everyone on the thread:
+
+<CodeGroup>
+
+```bash CLI
+agentmail inboxes:messages reply \
+  --inbox-id "example@agentmail.to" \
+  --message-id "<message_id>" \
+  --text "Thanks, got your message."
+
+agentmail inboxes:messages forward \
+  --inbox-id "example@agentmail.to" \
+  --message-id "<message_id>" \
+  --to "teammate@example.com" \
+  --text "Forwarding for your records."
+```
+
+```typescript TypeScript
+const reply = await client.inboxes.messages.reply(
+  "example@agentmail.to",
+  "<message_id>",
+  { text: "Thanks, got your message." },
+);
+
+const forwarded = await client.inboxes.messages.forward(
+  "example@agentmail.to",
+  "<message_id>",
+  { to: ["teammate@example.com"], text: "Forwarding for your records." },
+);
+```
+
+```python Python
+reply = client.inboxes.messages.reply(
+    inbox_id="example@agentmail.to",
+    message_id="<message_id>",
+    text="Thanks, got your message.",
+)
+
+forwarded = client.inboxes.messages.forward(
+    inbox_id="example@agentmail.to",
+    message_id="<message_id>",
+    to=["teammate@example.com"],
+    text="Forwarding for your records.",
+)
+```
+
+</CodeGroup>
+
+Update a message's labels, the state an agent leaves on mail it has handled ([label patterns](/core/conversations#track-conversation-state-with-labels)):
+
+<CodeGroup>
+
+```bash CLI
+agentmail inboxes:messages update \
+  --inbox-id "example@agentmail.to" \
+  --message-id "<message_id>" \
+  --add-labels triaged \
+  --remove-labels unread
+```
+
+```typescript TypeScript
+await client.inboxes.messages.update("example@agentmail.to", "<message_id>", {
+  addLabels: ["triaged"],
+  removeLabels: ["unread"],
+});
+```
+
+```python Python
+client.inboxes.messages.update(
+    inbox_id="example@agentmail.to",
+    message_id="<message_id>",
+    add_labels=["triaged"],
+    remove_labels=["unread"],
+)
+```
+
+</CodeGroup>
+
+Download an attachment. The call returns short-lived links to the file rather than bytes ([details](/core/receive#download-an-attachment-from-a-message)):
+
+<CodeGroup>
+
+```bash CLI
+agentmail inboxes:messages get-attachment \
+  --inbox-id "example@agentmail.to" \
+  --message-id "<message_id>" \
+  --attachment-id "<attachment_id>"
+```
+
+```typescript TypeScript
+const attachment = await client.inboxes.messages.getAttachment(
+  "example@agentmail.to",
+  "<message_id>",
+  "<attachment_id>",
+);
+```
+
+```python Python
+attachment = client.inboxes.messages.get_attachment(
+    inbox_id="example@agentmail.to",
+    message_id="<message_id>",
+    attachment_id="<attachment_id>",
+)
+```
+
+</CodeGroup>
+
+### Threads
+
+A thread is a whole conversation, the message that started it plus every reply. The full detail is on [Manage conversations](/core/conversations).
+
+List the threads in an inbox, one summary per conversation:
+
+<CodeGroup>
+
+```bash CLI
+agentmail inboxes:threads list --inbox-id "example@agentmail.to"
+```
+
+```typescript TypeScript
+const threads = await client.inboxes.threads.list("example@agentmail.to");
+```
+
+```python Python
+threads = client.inboxes.threads.list(inbox_id="example@agentmail.to")
+```
+
+</CodeGroup>
+
+Read a whole thread by its `thread_id`, every message included, oldest first:
+
+<CodeGroup>
+
+```bash CLI
+agentmail threads get --thread-id "<thread_id>"
+```
+
+```typescript TypeScript
+const thread = await client.threads.get("<thread_id>");
+```
+
+```python Python
+thread = client.threads.get(thread_id="<thread_id>")
+```
+
+</CodeGroup>
+
+Search threads with free text, ranked by relevance across senders, recipients, subjects, and message bodies. The same search exists for messages as `inboxes:messages search` (`client.inboxes.messages.search`):
+
+<CodeGroup>
+
+```bash CLI
+agentmail inboxes:threads search \
+  --inbox-id "example@agentmail.to" \
+  -q "refund"
+```
+
+```typescript TypeScript
+const results = await client.inboxes.threads.search("example@agentmail.to", { q: "refund" });
+```
+
+```python Python
+results = client.inboxes.threads.search(inbox_id="example@agentmail.to", q="refund")
+```
+
+</CodeGroup>
+
+Drop the inbox to list or search across every inbox your key's scope covers, the view for a supervisor agent or a dashboard:
+
+<CodeGroup>
+
+```bash CLI
+agentmail threads list
+
+agentmail threads search -q "refund"
+```
+
+```typescript TypeScript
+const all = await client.threads.list();
+
+const found = await client.threads.search({ q: "refund" });
+```
+
+```python Python
+all_threads = client.threads.list()
+
+found = client.threads.search(q="refund")
+```
+
+</CodeGroup>
+
+### Drafts
+
+A draft is a saved, unsent message. The lifecycle is on [Schedule an email with a draft](/core/send#schedule-an-email-with-a-draft).
+
+Create a draft. Give it a `send_at` time and AgentMail delivers it at that time, with no scheduler on your side. In TypeScript a draft's recipient fields take arrays, even for a single address:
+
+<CodeGroup>
+
+```bash CLI
+agentmail inboxes:drafts create \
+  --inbox-id "example@agentmail.to" \
+  --to "you@example.com" \
+  --subject "Following up" \
+  --text "Checking in ahead of our call tomorrow." \
+  --send-at "2026-08-26T09:00:00Z"
+```
+
+```typescript TypeScript
+const draft = await client.inboxes.drafts.create("example@agentmail.to", {
+  to: ["you@example.com"],
+  subject: "Following up",
+  text: "Checking in ahead of our call tomorrow.",
+  sendAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours from now
+});
+```
+
+```python Python
+from datetime import datetime, timedelta, timezone
+
+draft = client.inboxes.drafts.create(
+    inbox_id="example@agentmail.to",
+    to=["you@example.com"],
+    subject="Following up",
+    text="Checking in ahead of our call tomorrow.",
+    send_at=datetime.now(timezone.utc) + timedelta(hours=24),
+)
+```
+
+</CodeGroup>
+
+List an inbox's drafts to see what is written or queued:
+
+<CodeGroup>
+
+```bash CLI
+agentmail inboxes:drafts list --inbox-id "example@agentmail.to"
+```
+
+```typescript TypeScript
+const drafts = await client.inboxes.drafts.list("example@agentmail.to");
+```
+
+```python Python
+drafts = client.inboxes.drafts.list(inbox_id="example@agentmail.to")
+```
+
+</CodeGroup>
+
+Send a draft immediately, the approval step when a human reviews what an agent wrote. In TypeScript the request object is required, so pass `{}` when you have no label edits:
+
+<CodeGroup>
+
+```bash CLI
+agentmail inboxes:drafts send \
+  --inbox-id "example@agentmail.to" \
+  --draft-id "<draft_id>"
+```
+
+```typescript TypeScript
+const sent = await client.inboxes.drafts.send(
+  "example@agentmail.to",
+  "<draft_id>",
+  {},
+);
+```
+
+```python Python
+sent = client.inboxes.drafts.send(
+    inbox_id="example@agentmail.to",
+    draft_id="<draft_id>",
+)
+```
+
+</CodeGroup>
+
+Delete a draft, which also cancels a scheduled send:
+
+<CodeGroup>
+
+```bash CLI
+agentmail inboxes:drafts delete \
+  --inbox-id "example@agentmail.to" \
+  --draft-id "<draft_id>"
+```
+
+```typescript TypeScript
+await client.inboxes.drafts.delete("example@agentmail.to", "<draft_id>");
+```
+
+```python Python
+client.inboxes.drafts.delete(
+    inbox_id="example@agentmail.to",
+    draft_id="<draft_id>",
+)
+```
+
+</CodeGroup>
+
+### Webhooks
+
+A webhook pushes signed events to your HTTPS endpoint the moment mail arrives, bounces, or gets opened. The event catalog, payloads, and delivery contract are on [Webhooks](/advanced/webhooks).
+
+Create a webhook. The response includes the `secret` your receiver verifies delivery signatures with. AgentMail delivers through Svix, and the `svix` libraries for TypeScript and Python do the [verification](/advanced/webhooks#verify-the-signature-on-every-delivery) in one call:
+
+<CodeGroup>
+
+```bash CLI
+agentmail webhooks create \
+  --url "https://worker.example.com/webhooks" \
+  --event-type message.received \
+  --event-type message.bounced \
+  --client-id "inbound-agent-v1"
+```
+
+```typescript TypeScript
+const webhook = await client.webhooks.create({
+  url: "https://worker.example.com/webhooks",
+  eventTypes: ["message.received", "message.bounced"],
+  clientId: "inbound-agent-v1",
+});
+```
+
+```python Python
+webhook = client.webhooks.create(
+    url="https://worker.example.com/webhooks",
+    event_types=["message.received", "message.bounced"],
+    client_id="inbound-agent-v1",
+)
+```
+
+</CodeGroup>
+
+Both SDKs export a typed class for every [payload shape](/advanced/webhooks#events-reference), so a receiver can work with typed fields instead of raw JSON: `serialization.events.MessageReceivedEvent.parse(payload)` in TypeScript, and `MessageReceivedEvent(**payload)` imported from `agentmail` in Python.
+
+List your webhooks, or get one by id to read its `secret` again:
+
+<CodeGroup>
+
+```bash CLI
+agentmail webhooks list
+
+agentmail webhooks get --webhook-id "<webhook_id>"
+```
+
+```typescript TypeScript
+const all = await client.webhooks.list();
+
+const webhook = await client.webhooks.get("<webhook_id>");
+```
+
+```python Python
+all = client.webhooks.list()
+
+webhook = client.webhooks.get(webhook_id="<webhook_id>")
+```
+
+</CodeGroup>
+
+Update a webhook. `event_types` replaces the subscribed list in full, so send every type you want after the change:
+
+<CodeGroup>
+
+```bash CLI
+agentmail webhooks update \
+  --webhook-id "<webhook_id>" \
+  --event-type '["message.received", "message.delivered"]'
+```
+
+```typescript TypeScript
+const webhook = await client.webhooks.update("<webhook_id>", {
+  eventTypes: ["message.received", "message.delivered"],
+});
+```
+
+```python Python
+webhook = client.webhooks.update(
+    webhook_id="<webhook_id>",
+    event_types=["message.received", "message.delivered"],
+)
+```
+
+</CodeGroup>
+
+Delete a webhook, which stops its deliveries immediately:
+
+<CodeGroup>
+
+```bash CLI
+agentmail webhooks delete --webhook-id "<webhook_id>"
+```
+
+```typescript TypeScript
+await client.webhooks.delete("<webhook_id>");
+```
+
+```python Python
+client.webhooks.delete(webhook_id="<webhook_id>")
+```
+
+</CodeGroup>
+
+<Note>
+The TypeScript and Python SDKs also include WebSocket clients that stream the same events over a persistent connection, so agents without a public URL can subscribe too. See [WebSockets](/advanced/websockets).
+</Note>
+
+### Domains
+
+A verified custom domain lets your agents send and receive as `support@example.com`. [Custom domains](/advanced/custom-domains) walks through the DNS records, verification statuses, and troubleshooting.
+
+Register a domain. The response carries the exact DNS records to publish:
+
+<CodeGroup>
+
+```bash CLI
+agentmail domains create --domain "example.com"
+```
+
+```typescript TypeScript
+const domain = await client.domains.create({ domain: "example.com" });
+```
+
+```python Python
+domain = client.domains.create(domain="example.com")
+```
+
+</CodeGroup>
+
+Request verification once the records are published, then get the domain to watch its `status`. Inboxes can be created on it when the status reads `VERIFIED`:
+
+<CodeGroup>
+
+```bash CLI
+agentmail domains verify --domain-id "example.com"
+
+agentmail domains get --domain-id "example.com"
+```
+
+```typescript TypeScript
+await client.domains.verify("example.com");
+
+const domain = await client.domains.get("example.com");
+```
+
+```python Python
+client.domains.verify(domain_id="example.com")
+
+domain = client.domains.get(domain_id="example.com")
+```
+
+</CodeGroup>
+
+Update a domain's settings: bounce and complaint feedback, inboxes on any subdomain, and open tracking:
+
+<CodeGroup>
+
+```bash CLI
+agentmail domains update \
+  --domain-id "example.com" \
+  --subdomains-enabled=true
+```
+
+```typescript TypeScript
+const domain = await client.domains.update("example.com", {
+  subdomainsEnabled: true,
+});
+```
+
+```python Python
+domain = client.domains.update(
+    domain_id="example.com",
+    subdomains_enabled=True,
+)
+```
+
+</CodeGroup>
+
+List your registered domains, or delete one permanently:
+
+<CodeGroup>
+
+```bash CLI
+agentmail domains list
+
+agentmail domains delete --domain-id "example.com"
+```
+
+```typescript TypeScript
+const domains = await client.domains.list();
+
+await client.domains.delete("example.com");
+```
+
+```python Python
+domains = client.domains.list()
+
+client.domains.delete(domain_id="example.com")
+```
+
+</CodeGroup>
+
+### Allow and block lists
+
+Each inbox has an allow and a block list per direction (`receive`, `reply`, `send`) that decide whose mail gets through. [Control who can email your agent](/core/inbound-control) covers how entries match and interact.
+
+Add an entry. An entry containing `@` matches one address, anything else matches a whole domain:
+
+<CodeGroup>
+
+```bash CLI
+agentmail inboxes:lists create \
+  --inbox-id "example@agentmail.to" \
+  --direction receive \
+  --type block \
+  --entry blocked-sender@example.com \
+  --reason "unwanted newsletter"
+```
+
+```typescript TypeScript
+await client.inboxes.lists.create("example@agentmail.to", "receive", "block", {
+  entry: "blocked-sender@example.com",
+  reason: "unwanted newsletter",
+});
+```
+
+```python Python
+client.inboxes.lists.create(
+    inbox_id="example@agentmail.to",
+    direction="receive",
+    type="block",
+    entry="blocked-sender@example.com",
+    reason="unwanted newsletter",
+)
+```
+
+</CodeGroup>
+
+List one list's entries to see what filtering is active:
+
+<CodeGroup>
+
+```bash CLI
+agentmail inboxes:lists list \
+  --inbox-id "example@agentmail.to" \
+  --direction receive \
+  --type block
+```
+
+```typescript TypeScript
+const entries = await client.inboxes.lists.list("example@agentmail.to", "receive", "block");
+```
+
+```python Python
+entries = client.inboxes.lists.list(
+    inbox_id="example@agentmail.to",
+    direction="receive",
+    type="block",
+)
+```
+
+</CodeGroup>
+
+Remove an entry, identified by the same direction, type, and value it was created with:
+
+<CodeGroup>
+
+```bash CLI
+agentmail inboxes:lists delete \
+  --inbox-id "example@agentmail.to" \
+  --direction receive \
+  --type block \
+  --entry blocked-sender@example.com
+```
+
+```typescript TypeScript
+await client.inboxes.lists.delete(
+  "example@agentmail.to",
+  "receive",
+  "block",
+  "blocked-sender@example.com",
+);
+```
+
+```python Python
+client.inboxes.lists.delete(
+    inbox_id="example@agentmail.to",
+    direction="receive",
+    type="block",
+    entry="blocked-sender@example.com",
+)
+```
+
+</CodeGroup>
+
+### Pods
+
+A pod is an isolated workspace inside your organization, usually one per tenant. [Build a multi-tenant platform](/advanced/multi-tenant) shows the full provisioning and offboarding flow.
+
+Create a pod. `client_id` is your own tenant id and makes the create idempotent, so a retry returns the existing pod instead of a duplicate:
+
+<CodeGroup>
+
+```bash CLI
+agentmail pods create \
+  --name "Acme Corp" \
+  --client-id "customer-042"
+```
+
+```typescript TypeScript
+const pod = await client.pods.create({
+  name: "Acme Corp",
+  clientId: "customer-042",
+});
+```
+
+```python Python
+pod = client.pods.create(name="Acme Corp", client_id="customer-042")
+```
+
+</CodeGroup>
+
+List your pods, or get one by its `pod_id`:
+
+<CodeGroup>
+
+```bash CLI
+agentmail pods list
+
+agentmail pods get --pod-id "<pod_id>"
+```
+
+```typescript TypeScript
+const pods = await client.pods.list();
+
+const pod = await client.pods.get("<pod_id>");
+```
+
+```python Python
+pods = client.pods.list()
+
+pod = client.pods.get(pod_id="<pod_id>")
+```
+
+</CodeGroup>
+
+Work with a pod's own resources through the pod routes. Inboxes, threads, drafts, domains, lists, webhooks, API keys, and metrics all exist under the pod (`pods:inboxes`, `pods:domains`, and so on in the CLI, `client.pods.inboxes` and siblings in the SDKs), which is how you get per-tenant views like every unread conversation in one pod:
+
+<CodeGroup>
+
+```bash CLI
+agentmail pods:threads list \
+  --pod-id "<pod_id>" \
+  --label unread
+```
+
+```typescript TypeScript
+const threads = await client.pods.threads.list("<pod_id>", {
+  labels: ["unread"],
+});
+```
+
+```python Python
+threads = client.pods.threads.list(pod_id="<pod_id>", labels=["unread"])
+```
+
+</CodeGroup>
+
+Delete a pod once it is empty:
+
+<CodeGroup>
+
+```bash CLI
+agentmail pods delete --pod-id "<pod_id>"
+```
+
+```typescript TypeScript
+await client.pods.delete("<pod_id>");
+```
+
+```python Python
+client.pods.delete(pod_id="<pod_id>")
+```
+
+</CodeGroup>
+
+### API keys
+
+Create an organization-level key. The full `api_key` value is returned only this once, so store it right away. A lost key cannot be read again, only deleted and replaced:
+
+<CodeGroup>
+
+```bash CLI
+agentmail api-keys create --name "worker-key"
+```
+
+```typescript TypeScript
+const key = await client.apiKeys.create({ name: "worker-key" });
+```
+
+```python Python
+key = client.api_keys.create(name="worker-key")
+```
+
+</CodeGroup>
+
+List your keys, or delete one by its `api_key_id`:
+
+<CodeGroup>
+
+```bash CLI
+agentmail api-keys list
+
+agentmail api-keys delete --api-key-id "<api_key_id>"
+```
+
+```typescript TypeScript
+const keys = await client.apiKeys.list();
+
+await client.apiKeys.delete("<api_key_id>");
+```
+
+```python Python
+keys = client.api_keys.list()
+
+client.api_keys.delete(api_key_id="<api_key_id>")
+```
+
+</CodeGroup>
+
+Mint scoped keys under an inbox or a pod. An inbox key can act only on its inbox and a pod key only inside its pod, the pattern for handing a key to a single agent or a [tenant's service](/advanced/multi-tenant):
+
+<CodeGroup>
+
+```bash CLI
+agentmail inboxes:api-keys create \
+  --inbox-id "example@agentmail.to" \
+  --name "agent-key"
+
+agentmail pods:api-keys create \
+  --pod-id "<pod_id>" \
+  --name "tenant-key"
+```
+
+```typescript TypeScript
+const inboxKey = await client.inboxes.apiKeys.create("example@agentmail.to", {
+  name: "agent-key",
+});
+
+const podKey = await client.pods.apiKeys.create("<pod_id>", {
+  name: "tenant-key",
+});
+```
+
+```python Python
+inbox_key = client.inboxes.api_keys.create(
+    inbox_id="example@agentmail.to",
+    name="agent-key",
+)
+
+pod_key = client.pods.api_keys.create(pod_id="<pod_id>", name="tenant-key")
+```
+
+</CodeGroup>
+
+### Metrics and usage
+
+Two read-only series describe your account: event counts for what happened in a window, and usage totals for what a scope holds over time. [Plans and Usage Tracking](/advanced/plans-and-usage#measure-your-usage) covers the parameters, scopes, and permissions.
+
+Count email events over a window, or read running totals of storage, messages, and resources:
+
+<CodeGroup>
+
+```typescript TypeScript
+const events = await client.metrics.queryEvents({
+  eventTypes: ["message.sent", "message.bounced"],
+  period: 3600,
+});
+
+const usage = await client.metrics.queryUsage({
+  usageTypes: ["storage_bytes", "message_count"],
+  period: 86400,
+});
+```
+
+```python Python
+events = client.metrics.query_events(
+    event_types=["message.sent", "message.bounced"],
+    period=3600,
+)
+
+usage = client.metrics.query_usage(
+    usage_types=["storage_bytes", "message_count"],
+    period=86400,
+)
+```
+
+</CodeGroup>
+
+Read your organization's effective limits next to its current counts. These are the values enforcement uses, add-ons and grants included, so compare them before a batch of creates to catch a cap early:
+
+<CodeGroup>
+
+```bash CLI
+agentmail organizations get
+```
+
+```typescript TypeScript
+const org = await client.organizations.get();
+```
+
+```python Python
+org = client.organizations.get()
+```
+
+</CodeGroup>
+
+### Agent sign-up
+
+An agent can create its own organization, inbox, and API key with one call, no Console needed. Sign-up is for first-time users only, and the returned `api_key` is shown just this once. A 6-digit code goes to the human's email, and verifying with it (authenticated with the new key) lifts the [pre-verification limits](/advanced/plans-and-usage#start-on-the-free-plan). The [Quickstart](/quickstart#0-get-an-api-key) walks through the flow:
+
+<CodeGroup>
+
+```bash CLI
+agentmail agent sign-up \
+  --human-email "you@example.com" \
+  --username "my-agent"
+# returns api_key, inbox_id, and organization_id
+
+export AGENTMAIL_API_KEY="<api_key from the response>"
+agentmail agent verify --otp-code "<6-digit code>"
+```
+
+```typescript TypeScript
+const signup = await client.agent.signUp({
+  humanEmail: "you@example.com",
+  username: "my-agent",
+});
+// returns apiKey, inboxId, and organizationId
+
+const agentClient = new AgentMailClient({ apiKey: signup.apiKey });
+await agentClient.agent.verify({ otpCode: "<6-digit code>" });
+```
+
+```python Python
+signup = client.agent.sign_up(
+    human_email="you@example.com",
+    username="my-agent",
+)
+# returns api_key, inbox_id, and organization_id
+
+agent_client = AgentMail(api_key=signup.api_key)
+agent_client.agent.verify(otp_code="<6-digit code>")
+```
+
+</CodeGroup>
+
+### Client configuration
+
+The CLI and SDKs add the `v0/` API prefix to every request themselves, so a base URL must always be the bare host, `https://api.agentmail.to`. You only set a base URL when you are pointing at something other than the default US production host, for example the EU region `https://api.agentmail.eu`:
+
+- CLI: the `--base-url` flag on any command
+- TypeScript: the `baseUrl` constructor option, or `environment` with a predefined region like `AgentMailEnvironment.EuProd`
+- Python: the `environment` constructor option, either a predefined region like `AgentMailEnvironment.EU_PROD` or a custom `AgentMailEnvironment(http=..., websockets=...)`
+
+Both SDKs retry failed requests automatically with exponential backoff: 2 retries by default, on `408`, `429`, and `5xx` responses, waiting out a `Retry-After` header first. The request timeout defaults to 60 seconds. Every SDK method also takes per-request options, a final argument in TypeScript and `request_options` in Python, which override retries, timeout, and headers for that one call. The [idempotency key on sends](/core/send#make-sends-idempotent) travels the same way.
+
+<CodeGroup>
+
+```bash CLI
+# base URL must be the bare host, no /v0
+agentmail --base-url "https://api.agentmail.to" inboxes list
+
+# output format and GJSON transforms
+agentmail inboxes list --format pretty
+agentmail inboxes list --transform "inboxes.#.inbox_id"
+```
+
+```typescript TypeScript
+import { AgentMailClient } from "agentmail";
+
+const client = new AgentMailClient({
+  baseUrl: "https://api.agentmail.to", // bare host, no /v0
+  maxRetries: 2, // the default
+  timeoutInSeconds: 60, // the default
+});
+
+// per-request overrides
+const inboxes = await client.inboxes.list({ limit: 1 }, { maxRetries: 3, timeoutInSeconds: 30 });
+```
+
+```python Python
+from agentmail import AgentMail
+from agentmail.environment import AgentMailEnvironment
+
+client = AgentMail(
+    environment=AgentMailEnvironment(
+        http="https://api.agentmail.to",  # bare host, no /v0
+        websockets="wss://ws.agentmail.to",
+    ),
+    timeout=20.0,  # the default is 60 seconds
+)
+
+# per-request overrides
+inboxes = client.inboxes.list(limit=1, request_options={"max_retries": 3, "timeout_in_seconds": 30})
+```
+
+</CodeGroup>
+
+The CLI prints JSON by default. `--format` switches the output (`pretty` for a human-readable view, `yaml`, or `explore` for an interactive one), `--transform` filters it with [GJSON syntax](https://github.com/tidwall/gjson/blob/master/SYNTAX.md), and `--debug` logs each HTTP request and response, the quickest way to see what a command sent.
+
+<Accordion title="Troubleshooting">
+- **Every call returns a `404`.** The base URL is incorrect (usually, it already contains `/v0`, which doubles into requests to `/v0/v0/...`). Pass the bare host instead.
+</Accordion>
+
+### Pagination
+
+Every list endpoint pages the same way. A page carries `count` (entries in this page) and, when more remain, a `next_page_token`. Pass that token back as `page_token` to get the next page, and stop when the response has no `next_page_token`. `limit` caps the page size, and most lists also take `ascending` to flip to oldest first.
+
+To drain a whole list, loop until the token is gone:
+
+<CodeGroup>
+
+```bash CLI
+# the CLI takes the same parameters; pass the previous page's token
+agentmail inboxes list --limit 50
+agentmail inboxes list --limit 50 --page-token "<next_page_token from the previous page>"
+```
+
+```bash API
+curl "https://api.agentmail.to/v0/inboxes?limit=50" \
+  -H "Authorization: Bearer $AGENTMAIL_API_KEY"
+# then, while the response contains next_page_token:
+curl "https://api.agentmail.to/v0/inboxes?limit=50&page_token=<next_page_token>" \
+  -H "Authorization: Bearer $AGENTMAIL_API_KEY"
+```
+
+```typescript TypeScript
+let pageToken: string | undefined = undefined;
+do {
+  const page = await client.inboxes.list({ limit: 50, pageToken });
+  for (const inbox of page.inboxes) {
+    console.log(inbox.inboxId);
+  }
+  pageToken = page.nextPageToken;
+} while (pageToken);
+```
+
+```python Python
+page_token = None
+while True:
+    page = client.inboxes.list(limit=50, page_token=page_token)
+    for inbox in page.inboxes:
+        print(inbox.inbox_id)
+    page_token = page.next_page_token
+    if not page_token:
+        break
+```
+
+</CodeGroup>
+
+The same loop works on any list: swap `inboxes` for `threads`, `messages`, `drafts`, `webhooks`, `domains`, or `pods`, and read the matching array field from each page.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="MCP and Skills" icon="plug" href="/integrations/mcp-and-skills">
+    Give a coding agent these same operations as tools instead of code.
+  </Card>
+  <Card title="Webhooks" icon="bell" href="/advanced/webhooks">
+    React to mail the moment it arrives instead of polling.
+  </Card>
+</CardGroup>
+
+</Visibility>
+
+<Visibility for="agents">
+
+# Call any AgentMail operation from the CLI, TypeScript, Python, or Go
+
+Install the CLI, TypeScript, or Python client, authenticate once with `AGENTMAIL_API_KEY`, and look up any operation's exact call on each surface. All surfaces call the same API with the same key, so a shell script that provisions inboxes can run next to an application that answers mail.
+
+## Do this
+
+```bash
+npm install -g agentmail-cli
+export AGENTMAIL_API_KEY="<API_KEY>"
+agentmail inboxes list
+```
+
+A JSON inbox list confirms the key works. In the SDKs, make the first call `auth.me` instead. It returns the key's identity, the organization, pod, or inbox it is scoped to, which is how code holding a key discovers what it can act on.
+
+## SDK
+
+```bash
+npm install -g agentmail-cli                  # CLI (also: brew install agentmail-to/tap/agentmail)
+npm install agentmail                         # TypeScript
+pip install agentmail                         # Python
+go get github.com/agentmail-to/agentmail-go   # Go
+```
+
+Construct clients once: TypeScript `import { AgentMailClient } from "agentmail"` then `const client = new AgentMailClient()`, Python `from agentmail import AgentMail` then `client = AgentMail()`. Both read `AGENTMAIL_API_KEY`. Prebuilt CLI binaries for macOS, Linux, and Windows are on the agentmail-cli GitHub releases page. The examples on the page cover CLI, TypeScript, and Python, and the Go SDK at `github.com/agentmail-to/agentmail-go` covers the same API.
+
+| Operation | CLI | TypeScript | Python |
+| --- | --- | --- | --- |
+| Check the key works, read its scope | `agentmail inboxes list` | `client.auth.me()` | `client.auth.me()` |
+| Create inbox | `agentmail inboxes create` | `client.inboxes.create({ displayName })` | `client.inboxes.create(request=CreateInboxRequest(display_name=...))` |
+| List / get inboxes | `agentmail inboxes list`, `agentmail inboxes get` | `client.inboxes.list()`, `client.inboxes.get(inboxId)` | `client.inboxes.list()`, `client.inboxes.get(inbox_id=...)` |
+| Update inbox | `agentmail inboxes update` | `client.inboxes.update(inboxId, { displayName })` | `client.inboxes.update(inbox_id=..., display_name=...)` |
+| Delete inbox | `agentmail inboxes delete` | `client.inboxes.delete(inboxId)` | `client.inboxes.delete(inbox_id=...)` |
+| Send message | `agentmail inboxes:messages send` | `client.inboxes.messages.send(inboxId, { to, subject, text })` | `client.inboxes.messages.send(inbox_id=..., to=[...], subject=..., text=...)` |
+| List / get messages | `agentmail inboxes:messages list`, `agentmail inboxes:messages get` | `client.inboxes.messages.list(inboxId)`, `client.inboxes.messages.get(inboxId, messageId)` | `client.inboxes.messages.list(inbox_id=...)`, `client.inboxes.messages.get(inbox_id=..., message_id=...)` |
+| Reply / reply all | `agentmail inboxes:messages reply`, `agentmail inboxes:messages reply-all` | `client.inboxes.messages.reply(inboxId, messageId, { text })`, `client.inboxes.messages.replyAll(...)` | `client.inboxes.messages.reply(inbox_id=..., message_id=..., text=...)`, `client.inboxes.messages.reply_all(...)` |
+| Forward message | `agentmail inboxes:messages forward` | `client.inboxes.messages.forward(inboxId, messageId, { to, text })` | `client.inboxes.messages.forward(inbox_id=..., message_id=..., to=[...], text=...)` |
+| Update message labels | `agentmail inboxes:messages update` | `client.inboxes.messages.update(inboxId, messageId, { addLabels, removeLabels })` | `client.inboxes.messages.update(inbox_id=..., message_id=..., add_labels=[...], remove_labels=[...])` |
+| Get attachment | `agentmail inboxes:messages get-attachment` | `client.inboxes.messages.getAttachment(inboxId, messageId, attachmentId)` | `client.inboxes.messages.get_attachment(inbox_id=..., message_id=..., attachment_id=...)` |
+| Search messages | `agentmail inboxes:messages search` | `client.inboxes.messages.search(inboxId, { q })` | `client.inboxes.messages.search(inbox_id=..., q=...)` |
+| List / search threads in one inbox | `agentmail inboxes:threads list`, `agentmail inboxes:threads search -q` | `client.inboxes.threads.list(inboxId)`, `client.inboxes.threads.search(inboxId, { q })` | `client.inboxes.threads.list(inbox_id=...)`, `client.inboxes.threads.search(inbox_id=..., q=...)` |
+| Get thread | `agentmail threads get` | `client.threads.get(threadId)` | `client.threads.get(thread_id=...)` |
+| List / search threads across the key's scope | `agentmail threads list`, `agentmail threads search -q` | `client.threads.list()`, `client.threads.search({ q })` | `client.threads.list()`, `client.threads.search(q=...)` |
+| Create draft | `agentmail inboxes:drafts create` | `client.inboxes.drafts.create(inboxId, { to, subject, text, sendAt })` | `client.inboxes.drafts.create(inbox_id=..., to=[...], subject=..., text=..., send_at=...)` |
+| List drafts | `agentmail inboxes:drafts list` | `client.inboxes.drafts.list(inboxId)` | `client.inboxes.drafts.list(inbox_id=...)` |
+| Send / delete draft | `agentmail inboxes:drafts send`, `agentmail inboxes:drafts delete` | `client.inboxes.drafts.send(inboxId, draftId, {})`, `client.inboxes.drafts.delete(inboxId, draftId)` | `client.inboxes.drafts.send(inbox_id=..., draft_id=...)`, `client.inboxes.drafts.delete(inbox_id=..., draft_id=...)` |
+| Create webhook | `agentmail webhooks create` | `client.webhooks.create({ url, eventTypes, clientId })` | `client.webhooks.create(url=..., event_types=[...], client_id=...)` |
+| List / get webhooks | `agentmail webhooks list`, `agentmail webhooks get` | `client.webhooks.list()`, `client.webhooks.get(webhookId)` | `client.webhooks.list()`, `client.webhooks.get(webhook_id=...)` |
+| Update / delete webhook | `agentmail webhooks update`, `agentmail webhooks delete` | `client.webhooks.update(webhookId, { eventTypes })`, `client.webhooks.delete(webhookId)` | `client.webhooks.update(webhook_id=..., event_types=[...])`, `client.webhooks.delete(webhook_id=...)` |
+| Register domain | `agentmail domains create` | `client.domains.create({ domain })` | `client.domains.create(domain=...)` |
+| Verify / get domain | `agentmail domains verify`, `agentmail domains get` | `client.domains.verify(domainId)`, `client.domains.get(domainId)` | `client.domains.verify(domain_id=...)`, `client.domains.get(domain_id=...)` |
+| Update domain settings | `agentmail domains update` | `client.domains.update(domainId, { subdomainsEnabled })` | `client.domains.update(domain_id=..., subdomains_enabled=...)` |
+| List / delete domains | `agentmail domains list`, `agentmail domains delete` | `client.domains.list()`, `client.domains.delete(domainId)` | `client.domains.list()`, `client.domains.delete(domain_id=...)` |
+| Add allow or block entry | `agentmail inboxes:lists create` | `client.inboxes.lists.create(inboxId, direction, type, { entry, reason })` | `client.inboxes.lists.create(inbox_id=..., direction=..., type=..., entry=..., reason=...)` |
+| List / delete entries | `agentmail inboxes:lists list`, `agentmail inboxes:lists delete` | `client.inboxes.lists.list(inboxId, direction, type)`, `client.inboxes.lists.delete(inboxId, direction, type, entry)` | `client.inboxes.lists.list(inbox_id=..., direction=..., type=...)`, `client.inboxes.lists.delete(inbox_id=..., direction=..., type=..., entry=...)` |
+| Create pod | `agentmail pods create` | `client.pods.create({ name, clientId })` | `client.pods.create(name=..., client_id=...)` |
+| List / get / delete pods | `agentmail pods list`, `agentmail pods get`, `agentmail pods delete` | `client.pods.list()`, `client.pods.get(podId)`, `client.pods.delete(podId)` | `client.pods.list()`, `client.pods.get(pod_id=...)`, `client.pods.delete(pod_id=...)` |
+| Pod-scoped resources | `agentmail pods:inboxes`, `agentmail pods:threads`, `agentmail pods:domains`, and siblings | `client.pods.inboxes`, `client.pods.threads`, and siblings | `client.pods.inboxes`, `client.pods.threads`, and siblings |
+| Create org API key | `agentmail api-keys create` | `client.apiKeys.create({ name })` | `client.api_keys.create(name=...)` |
+| List / delete API keys | `agentmail api-keys list`, `agentmail api-keys delete` | `client.apiKeys.list()`, `client.apiKeys.delete(apiKeyId)` | `client.api_keys.list()`, `client.api_keys.delete(api_key_id=...)` |
+| Mint scoped API key | `agentmail inboxes:api-keys create`, `agentmail pods:api-keys create` | `client.inboxes.apiKeys.create(inboxId, { name })`, `client.pods.apiKeys.create(podId, { name })` | `client.inboxes.api_keys.create(inbox_id=..., name=...)`, `client.pods.api_keys.create(pod_id=..., name=...)` |
+| Query event counts / usage totals | not shown on this page | `client.metrics.queryEvents({ eventTypes, period })`, `client.metrics.queryUsage({ usageTypes, period })` | `client.metrics.query_events(event_types=[...], period=...)`, `client.metrics.query_usage(usage_types=[...], period=...)` |
+| Get org limits and counts | `agentmail organizations get` | `client.organizations.get()` | `client.organizations.get()` |
+| Agent sign-up / verify | `agentmail agent sign-up`, `agentmail agent verify --otp-code` | `client.agent.signUp({ humanEmail, username })`, `client.agent.verify({ otpCode })` | `client.agent.sign_up(human_email=..., username=...)`, `client.agent.verify(otp_code=...)` |
+
+## Facts
+
+- All three surfaces read the API key from the `AGENTMAIL_API_KEY` environment variable. Explicit alternatives: `--api-key` on any CLI command, `apiKey` in the TypeScript constructor, `api_key` in the Python constructor.
+- The CLI and SDKs add the `v0/` API prefix to every request themselves. A base URL must be the bare host: `https://api.agentmail.to` (default US) or `https://api.agentmail.eu` (EU region).
+- Base URL overrides: the `--base-url` flag (CLI), the `baseUrl` option or `environment` with `AgentMailEnvironment.EuProd` (TypeScript), `environment` with `AgentMailEnvironment.EU_PROD` or a custom `AgentMailEnvironment(http=..., websockets=...)` (Python).
+- Both SDKs retry failed requests with exponential backoff: 2 retries by default, on `408`, `429`, and `5xx`, waiting out a `Retry-After` header first. The request timeout defaults to 60 seconds.
+- Per-request options override retries, timeout, and headers for one call: a final options argument in TypeScript, `request_options` in Python. The idempotency key on sends travels the same way.
+- Inbox create: omit `username` and AgentMail generates the address. Python create takes a request object, imported with `from agentmail.inboxes import CreateInboxRequest`. Each inbox's address is in the `email` field of responses.
+- Send returns the new message's `message_id` and the `thread_id` of the conversation it starts. Keep both to reply or follow up later.
+- Custom `metadata` on inbox create and update: string, number, or boolean values, up to 256 keys, keys and string values up to 256 characters. An update merges the map, a `null` value removes that key, and `"metadata": null` clears the whole map.
+- Deleting an inbox permanently removes its messages, threads, and drafts.
+- Message list returns newest first with optional `labels` and time filters. Thread get returns every message, oldest first.
+- Every list endpoint paginates the same way: pass `limit` (`--limit`) and `page_token` (`--page-token`, `pageToken`), read `count` and the entries from the page, then pass the response's `next_page_token` back as `page_token`. Loop until a response has no `next_page_token`. Most lists also take `ascending` for oldest first.
+- Search is free text, ranked by relevance across senders, recipients, subjects, and message bodies. It exists for threads and for messages, per inbox or across the key's scope.
+- A draft with `send_at` is delivered by AgentMail at that time, with no scheduler on your side. Deleting a draft also cancels a scheduled send.
+- TypeScript draft recipient fields take arrays even for a single address, and TypeScript `drafts.send` requires a request object, `{}` when there are no label edits.
+- Webhook create returns the `secret` used to verify delivery signatures. AgentMail delivers through Svix, and the `svix` libraries for TypeScript and Python verify in one call. Webhook delete stops deliveries immediately.
+- Typed webhook payload classes: `serialization.events.MessageReceivedEvent.parse(payload)` in TypeScript, `MessageReceivedEvent(**payload)` imported from `agentmail` in Python. Both SDKs also include WebSocket clients that stream the same events over a persistent connection.
+- Domain create returns the exact DNS records to publish. After `verify`, watch `status` with get. Inboxes can be created on the domain when `status` reads `VERIFIED`.
+- Allow and block lists exist per inbox, per direction (`receive`, `reply`, `send`). An entry containing `@` matches one address, anything else matches a whole domain. Delete an entry with the same direction, type, and value it was created with.
+- Pod create with `client_id` (your own tenant id) is idempotent: a retry returns the existing pod. Inboxes, threads, drafts, domains, lists, webhooks, API keys, and metrics all exist under pod routes. Delete a pod once it is empty.
+- The full `api_key` value is returned only once, at creation. An inbox key acts only on its inbox, a pod key only inside its pod.
+- Agent sign-up returns `api_key`, `inbox_id`, and `organization_id`, and emails a 6-digit code to the human. `agent verify`, authenticated with the new key, lifts the pre-verification limits.
+- `organizations get` returns the organization's effective limits, add-ons and grants included, next to its current counts. These are the values enforcement uses.
+- CLI output is JSON by default. `--format` takes `pretty`, `yaml`, or `explore`, `--transform` filters with GJSON syntax, and `--debug` logs each HTTP request and response.
+
+## Not supported
+
+- A lost API key value cannot be read again. Delete the key and create a replacement.
+- Agent sign-up is for first-time users only.
+- Webhook update does not merge `event_types`. The list sent replaces the subscription in full, so include every type wanted after the change.
+- The metrics queries appear in TypeScript and Python only on this page. No CLI command is documented for them.
+
+## Errors
+
+| Error | HTTP status | Cause | Fix |
+| --- | --- | --- | --- |
+| Key missing or invalid | 401 | No usable key: `AGENTMAIL_API_KEY` unset and no explicit key on the call, or the value is wrong. | Export a valid `AGENTMAIL_API_KEY`, or pass `--api-key` (CLI), `apiKey` (TypeScript), `api_key` (Python). |
+| `username` taken on inbox create | 403 | The requested `username` is already in use. | The response carries up to three available alternatives in `suggestions`. Use one, or omit `username` for a generated address. |
+| Every call returns `404` | 404 | The base URL already contains `/v0`, which doubles into requests to `/v0/v0/...`. | Set the base URL to the bare host, `https://api.agentmail.to`. |
+
+## Verify
+
+```bash
+agentmail inboxes list
+```
+
+Success prints JSON with an `inboxes` array, one entry per inbox with its `inbox_id` and address in `email`. A `401` means the key is missing or invalid, a `404` means the base URL is wrong.
+
+## Related
+
+- `/quickstart` - get an API key and create a first inbox.
+- `/integrations/mcp-and-skills` - the same operations as MCP tools instead of code.
+- `/core/receive` - inbound calls, parameters, and attachment downloads in depth.
+- `/core/send` - outbound parameters, scheduled drafts, and idempotent sends.
+- `/core/conversations` - threads and label patterns.
+- `/core/inbound-control` - how allow and block list entries match and interact.
+- `/advanced/webhooks` - event catalog, payload shapes, and delivery contract.
+- `/advanced/websockets` - the SDK WebSocket clients that stream the same events.
+- `/advanced/custom-domains` - DNS records, verification statuses, and troubleshooting.
+- `/advanced/multi-tenant` - pod provisioning and offboarding flow.
+- `/advanced/plans-and-usage` - metrics parameters, scopes, and permissions.
+
+</Visibility>

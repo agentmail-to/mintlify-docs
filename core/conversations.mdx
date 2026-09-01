@@ -1,0 +1,712 @@
+---
+title: "Manage conversations"
+description: "List and read whole email threads, search them, watch every inbox in your organization, and track conversation state with labels."
+---
+
+<Visibility for="humans">
+
+
+<img src="/images/banners/core-conversations.svg" alt="" noZoom />
+<Info>If you don't have an API key yet, follow the [Quickstart](/quickstart) first.</Info>
+
+## List the threads in an inbox
+
+A message is one email. A thread is the conversation around it: the message that started it plus every reply, in both directions. 
+
+`inbox_id` is the only required input. 
+
+<CodeGroup>
+
+```bash CLI
+agentmail inboxes:threads list \
+  --inbox-id "example@agentmail.to"
+```
+
+```bash API
+curl "https://api.agentmail.to/v0/inboxes/example@agentmail.to/threads" \
+  -H "Authorization: Bearer $AGENTMAIL_API_KEY"
+```
+
+```typescript TypeScript
+const threads = await client.inboxes.threads.list("example@agentmail.to");
+for (const thread of threads.threads) {
+  console.log(thread.threadId, thread.subject, thread.messageCount);
+}
+```
+
+```python Python
+threads = client.inboxes.threads.list(inbox_id="example@agentmail.to")
+for thread in threads.threads:
+    print(thread.thread_id, thread.subject, thread.message_count)
+```
+
+</CodeGroup>
+
+| Param | Type | What it means |
+| --- | --- | --- |
+| `limit` | integer | Threads per page. |
+| `page_token` | string | Where to resume. Pass the `next_page_token` from the previous page. |
+| `labels` | string[] | Only threads that carry every label you list. See [Track conversation state with labels](#track-conversation-state-with-labels). |
+| `before`, `after` | RFC 3339 timestamp | Bound the results by time, like `2026-08-24T00:00:00Z`. |
+| `ascending` | boolean | Oldest first instead of newest first. |
+| `senders`, `recipients`, `subject` | string[] | Match against any sender, any recipient, or the subject. Values match whole words and word starts. Pass several and every value must match. |
+| `include_spam`, `include_blocked`, `include_unauthenticated`, `include_trash` | boolean | Also return threads those labels normally hide. |
+
+Sending an email creates a new `thread_id`, which you can use when reading the thread.
+
+A thread you started that nobody has replied to yet is not in the default threads list until the first reply arrives. To get these  threads, filter `labels` by `sent`.
+
+```json Sample response
+{
+  "count": 1,
+  "threads": [
+    {
+      "organization_id": "1a2b3c4d-5e6f-4a1b-8c2d-3e4f5a6b7c8d",
+      "pod_id": "1a2b3c4d-5e6f-4a1b-8c2d-3e4f5a6b7c8d",
+      "inbox_id": "example@agentmail.to",
+      "thread_id": "7c00cf26-ab80-4e20-a8a6-0285223b385d",
+      "labels": ["received", "sent"],
+      "timestamp": "2026-08-24T14:46:47Z",
+      "received_timestamp": "2026-08-24T14:46:47Z",
+      "sent_timestamp": "2026-08-24T14:46:05Z",
+      "senders": [
+        "You <you@example.com>",
+        "Quickstart test <example@agentmail.to>"
+      ],
+      "recipients": [
+        "example@agentmail.to",
+        "You <you@example.com>",
+        "Quickstart test <example@agentmail.to>"
+      ],
+      "subject": "Weekly metrics report",
+      "preview": "Yes, all five refunds for week 35 are confirmed final.\n\nOn Mon, Aug 24, 2026 at 2:46 PM UTC example@agentmail.to wrote:\n\n> Thanks. Is the week 35 refund co",
+      "attachments": [
+        {
+          "attachment_id": "079de291-1800-4156-8f6a-3ee90fd701eb",
+          "filename": "weekly-metrics.csv",
+          "size": 38,
+          "content_type": "text/csv",
+          "content_disposition": "attachment"
+        }
+      ],
+      "last_message_id": "<010001a0343cff6a-cb637a47-c313-4245-82ac-2638d40395dc-000000@email.amazonses.com>",
+      "message_count": 3,
+      "size": 14299,
+      "created_at": "2026-08-24T14:38:14Z",
+      "updated_at": "2026-08-24T14:53:01Z"
+    }
+  ]
+}
+```
+
+Each entry summarizes the whole conversation rather than any single message:
+
+- `labels` is the union of every label on the thread's messages. `received` and `sent` together mean the conversation has traffic in both directions.
+- `senders` and `recipients` accumulate everyone who has appeared, as a bare address or `Display Name <address>` depending on what the mail carried.
+- `preview` is the beginning of the newest message, and `message_count` and `size` tell you how much conversation there is.
+- `timestamp` is the newest activity, with `received_timestamp` and `sent_timestamp` for the newest in each direction.
+
+`thread_id` is what you pass to read the whole conversation next. `last_message_id` is the newest message's id, ready to hand to a [reply call](/core/send#reply-to-a-message) without fetching anything else.
+
+<Accordion title="Troubleshooting">
+When the list looks wrong:
+
+- A `404` with "Inbox not found" means the inbox is not visible to your API key (usually, it is a typo in the `inbox_id`).
+- A conversation you expected but don't see is usually an outbound thread with no reply yet (filter `labels` by `sent`) or one hidden behind `spam`, `blocked`, `unauthenticated`, or `trash` (pass the matching include flag).
+</Accordion>
+
+## Read a whole thread
+
+With a `thread_id` from a list, a search, a send response, or a webhook, one call returns the entire conversation: the summary fields above plus every message in full. `thread_id` is the only input. The request names only the thread, so any key whose scope covers the owning inbox can use it.
+
+<CodeGroup>
+
+```bash CLI
+agentmail threads get \
+  --thread-id "<thread_id>"
+```
+
+```bash API
+curl "https://api.agentmail.to/v0/threads/<thread_id>" \
+  -H "Authorization: Bearer $AGENTMAIL_API_KEY"
+```
+
+```typescript TypeScript
+const thread = await client.threads.get("<thread_id>");
+const newest = thread.messages[thread.messages.length - 1];
+console.log(newest.extractedText ?? newest.text);
+```
+
+```python Python
+thread = client.threads.get(thread_id="<thread_id>")
+newest = thread.messages[-1]
+print(newest.extracted_text or newest.text)
+```
+
+</CodeGroup>
+
+Messages come back oldest first: the first element started the thread and the last one is the newest. To continue the conversation, reply to that newest message from the inbox that owns the thread.
+
+Each message carries its body in up to four fields, and the difference matters once replies start quoting each other:
+
+- `text` and `html` are the body as it was sent, including the quoted copy of earlier messages that most mail clients append below a reply.
+- `extracted_text` and `extracted_html` are only what that message added.
+
+Give your model the thread once for context, then read each new message's `extracted_text`, so it does not re-read the conversation replayed inside every reply.
+
+```json Sample response
+{
+  "organization_id": "1a2b3c4d-5e6f-4a1b-8c2d-3e4f5a6b7c8d",
+  "pod_id": "1a2b3c4d-5e6f-4a1b-8c2d-3e4f5a6b7c8d",
+  "inbox_id": "example@agentmail.to",
+  "thread_id": "9cedb4c5-e13c-4afd-a907-eaf09d53360c",
+  "labels": ["sent", "received", "unread"],
+  "timestamp": "2026-08-24T15:06:22Z",
+  "senders": [
+    "Quickstart test <example@agentmail.to>",
+    "You <you@example.com>"
+  ],
+  "recipients": [
+    "you@example.com",
+    "Quickstart test <example@agentmail.to>"
+  ],
+  "subject": "Quote for 40 units",
+  "preview": "Sure. 40 units lands at 1,840 dollars with shipping. Quote attached to follow.",
+  "last_message_id": "<010001a0344eed83-56a55c40-3ed6-44f6-b7c1-ce7f506ab23d-000000@email.amazonses.com>",
+  "message_count": 2,
+  "size": 7193,
+  "messages": [
+    {
+      "message_id": "<010001a0344bb1d9-1cece2a2-68c9-451c-a821-417fc8ac42ab-000000@email.amazonses.com>",
+      "labels": ["sent"],
+      "timestamp": "2026-08-24T15:02:51Z",
+      "from": "Quickstart test <example@agentmail.to>",
+      "to": ["you@example.com"],
+      "subject": "Quote for 40 units",
+      "text": "Hi, can you send over a quote for 40 units by Friday?"
+    },
+    {
+      "message_id": "<010001a0344eed83-56a55c40-3ed6-44f6-b7c1-ce7f506ab23d-000000@email.amazonses.com>",
+      "labels": ["received", "unread"],
+      "timestamp": "2026-08-24T15:06:22Z",
+      "from": "You <you@example.com>",
+      "to": ["Quickstart test <example@agentmail.to>"],
+      "subject": "Re: Quote for 40 units",
+      "in_reply_to": "<010001a0344bb1d9-1cece2a2-68c9-451c-a821-417fc8ac42ab-000000@email.amazonses.com>",
+      "text": "Sure. 40 units lands at 1,840 dollars with shipping. Quote attached to follow.\n\nOn Mon, Aug 24, 2026 at 3:02 PM UTC example@agentmail.to wrote:\n\n> Hi, can you send over a quote for 40 units by Friday?",
+      "extracted_text": "Sure. 40 units lands at 1,840 dollars with shipping. Quote attached to follow."
+    }
+  ]
+}
+```
+
+Each message's `message_id` drives the per-message calls: replying, forwarding, downloading its attachments, and the label updates further down this page.
+
+<Accordion title="Troubleshooting">
+When the call fails:
+
+- A `404` with "Thread not found" means the id does not match a thread visible to your key. Check the id, and that your key's scope covers the inbox that owns it.
+- A `400 ValidationError` naming "Invalid UUID" means the value is not a thread id at all (usually, a `message_id` was passed instead: thread ids are UUIDs, message ids look like `<...@email.amazonses.com>`).
+</Accordion>
+
+## Search threads and messages
+
+List filters match specific fields and keep everything in time order. Search takes free text, looks at who sent it, who received it, the subject, and the full message bodies, and ranks conversations by how well they match. Reach for it when your agent knows what it is looking for but not where it is.
+
+`q` is the only required input. The full parameter list is below the code.
+
+<CodeGroup>
+
+```bash CLI
+agentmail inboxes:threads search \
+  --inbox-id "example@agentmail.to" \
+  -q "refund"
+```
+
+```bash API
+curl -G "https://api.agentmail.to/v0/inboxes/example@agentmail.to/threads/search" \
+  -H "Authorization: Bearer $AGENTMAIL_API_KEY" \
+  --data-urlencode "q=refund"
+```
+
+```typescript TypeScript
+const results = await client.inboxes.threads.search("example@agentmail.to", { q: "refund" });
+for (const thread of results.threads) {
+  console.log(thread.threadId, thread.subject, thread.highlights);
+}
+```
+
+```python Python
+results = client.inboxes.threads.search(inbox_id="example@agentmail.to", q="refund")
+for thread in results.threads:
+    print(thread.thread_id, thread.subject, thread.highlights)
+```
+
+</CodeGroup>
+
+| Param | Type | What it means |
+| --- | --- | --- |
+| `q` | string | The search text. Matched against senders, recipients, and the subject as whole words and word starts, and against message bodies as full text (`refund` also finds `refunds`). |
+| `limit` | integer | Results per page, up to 100. |
+| `page_token` | string | Where to resume. Pass the `next_page_token` from the previous page. |
+| `before`, `after` | RFC 3339 timestamp | Bound the results by time. |
+
+How search behaves:
+
+- Results are ranked by relevance, not recency. When only a time window matters, bound it with `before` and `after` and let the ranking sort within it.
+- Search covers sent and received mail alike, including outbound threads the default list leaves out. Threads carrying `spam`, `trash`, `blocked`, or `unauthenticated` are always excluded.
+- New mail and label changes take a few seconds to become searchable.
+
+You get the same thread summaries as listing, each with one addition: `highlights`, showing where the query matched. A key (`from`, `recipients`, `subject`, or `text`) is present only when that field matched, and matched terms are wrapped in `**`. That tells your agent which conversation to open when several come back, and gives it the matching line to quote.
+
+```json Sample response
+{
+  "count": 1,
+  "threads": [
+    {
+      "organization_id": "1a2b3c4d-5e6f-4a1b-8c2d-3e4f5a6b7c8d",
+      "pod_id": "1a2b3c4d-5e6f-4a1b-8c2d-3e4f5a6b7c8d",
+      "inbox_id": "example@agentmail.to",
+      "thread_id": "e16bc3e9-1833-48c9-a0e6-2ac6f164e4c2",
+      "labels": ["sent", "received", "unread"],
+      "timestamp": "2026-08-24T14:46:20Z",
+      "received_timestamp": "2026-08-24T14:46:20Z",
+      "sent_timestamp": "2026-08-24T14:46:11Z",
+      "senders": [
+        "Quickstart test <example@agentmail.to>",
+        "You <you@example.com>"
+      ],
+      "recipients": [
+        "you@example.com",
+        "Quickstart test <example@agentmail.to>"
+      ],
+      "subject": "Following up",
+      "preview": "Yes, all five refunds for week 35 are confirmed final.",
+      "last_message_id": "<010001a0343c94b5-b942bb93-d775-4004-aa42-5c4f2348c567-000000@email.amazonses.com>",
+      "message_count": 2,
+      "size": 7071,
+      "created_at": "2026-08-24T14:46:11Z",
+      "updated_at": "2026-08-24T14:46:20Z",
+      "highlights": {
+        "text": ["Yes, all five **refunds** for week 35 are confirmed final."]
+      }
+    }
+  ]
+}
+```
+
+Note the query matched a thread whose subject says nothing about refunds: the term was inside a message body, and `highlights` shows the line.
+
+When you need the exact messages rather than the conversations around them, run the same search against an inbox's messages. The parameters are the same, and the hits are message summaries with the same `highlights`. Each hit's `message_id` and `thread_id` take you to the message or its conversation.
+
+<CodeGroup>
+
+```bash CLI
+agentmail inboxes:messages search \
+  --inbox-id "example@agentmail.to" \
+  -q "refund"
+```
+
+```bash API
+curl -G "https://api.agentmail.to/v0/inboxes/example@agentmail.to/messages/search" \
+  -H "Authorization: Bearer $AGENTMAIL_API_KEY" \
+  --data-urlencode "q=refund"
+```
+
+```typescript TypeScript
+const hits = await client.inboxes.messages.search("example@agentmail.to", { q: "refund" });
+for (const message of hits.messages) {
+  console.log(message.messageId, message.subject, message.highlights);
+}
+```
+
+```python Python
+hits = client.inboxes.messages.search(inbox_id="example@agentmail.to", q="refund")
+for message in hits.messages:
+    print(message.message_id, message.subject, message.highlights)
+```
+
+</CodeGroup>
+
+<Accordion title="Troubleshooting">
+A search fails with a `400 ValidationError` when a parameter is malformed. The usual causes:
+
+- a `limit` above 100 ("limit cannot exceed 100 for filtered queries")
+- a missing or empty `q`
+</Accordion>
+
+## List threads across your whole organization
+
+Drop the `inbox_id` and the same listing and search run across every inbox at once. That is the view for a supervisor agent watching a fleet, an analytics dashboard, or a router that assigns conversations to agents. How far it reaches comes from your API key:
+
+- an organization key covers every inbox in the organization
+- a pod key covers its pod's inboxes
+- an inbox key covers only its own inbox
+
+Pods also have their own paths for keeping tenants apart, covered in [Build a multi-tenant platform](/advanced/multi-tenant).
+
+The parameters are the same as the inbox versions.
+
+<CodeGroup>
+
+```bash CLI
+agentmail threads list
+
+agentmail threads search -q "refund"
+```
+
+```bash API
+curl "https://api.agentmail.to/v0/threads" \
+  -H "Authorization: Bearer $AGENTMAIL_API_KEY"
+
+curl -G "https://api.agentmail.to/v0/threads/search" \
+  -H "Authorization: Bearer $AGENTMAIL_API_KEY" \
+  --data-urlencode "q=refund"
+```
+
+```typescript TypeScript
+const all = await client.threads.list();
+const found = await client.threads.search({ q: "refund" });
+```
+
+```python Python
+all_threads = client.threads.list()
+found = client.threads.search(q="refund")
+```
+
+</CodeGroup>
+
+Every row still carries its `inbox_id`, which is how a supervisor routes a conversation back to the agent that owns it:
+
+```json Sample response
+{
+  "count": 2,
+  "limit": 2,
+  "next_page_token": "eyJ0aHJlYWRfaWQiOi...",
+  "threads": [
+    {
+      "organization_id": "1a2b3c4d-5e6f-4a1b-8c2d-3e4f5a6b7c8d",
+      "pod_id": "1a2b3c4d-5e6f-4a1b-8c2d-3e4f5a6b7c8d",
+      "inbox_id": "example@agentmail.to",
+      "thread_id": "9cedb4c5-e13c-4afd-a907-eaf09d53360c",
+      "labels": ["sent", "received", "unread"],
+      "timestamp": "2026-08-24T15:06:22Z",
+      "received_timestamp": "2026-08-24T15:06:22Z",
+      "sent_timestamp": "2026-08-24T15:02:51Z",
+      "senders": [
+        "Quickstart test <example@agentmail.to>",
+        "You <you@example.com>"
+      ],
+      "recipients": [
+        "you@example.com",
+        "Quickstart test <example@agentmail.to>"
+      ],
+      "subject": "Quote for 40 units",
+      "preview": "Sure. 40 units lands at 1,840 dollars with shipping. Quote attached to follow.",
+      "last_message_id": "<010001a0344eed83-56a55c40-3ed6-44f6-b7c1-ce7f506ab23d-000000@email.amazonses.com>",
+      "message_count": 2,
+      "size": 7193,
+      "created_at": "2026-08-24T15:02:51Z",
+      "updated_at": "2026-08-24T15:09:22Z"
+    },
+    {
+      "organization_id": "1a2b3c4d-5e6f-4a1b-8c2d-3e4f5a6b7c8d",
+      "pod_id": "1a2b3c4d-5e6f-4a1b-8c2d-3e4f5a6b7c8d",
+      "inbox_id": "support-agent27@agentmail.to",
+      "thread_id": "d4f79544-f9fd-44db-9afd-1e0a2566c1bc",
+      "labels": ["received", "unread"],
+      "timestamp": "2026-08-24T15:02:52Z",
+      "received_timestamp": "2026-08-24T15:02:52Z",
+      "senders": ["Quickstart test <example@agentmail.to>"],
+      "recipients": ["support-agent27@agentmail.to"],
+      "subject": "Quote follow-up",
+      "preview": "Following up on the quote request from earlier today.",
+      "last_message_id": "<010001a0344bb56f-c6b2f5a9-d01d-4286-88a5-005db00f4f18-000000@email.amazonses.com>",
+      "message_count": 1,
+      "size": 4674,
+      "created_at": "2026-08-24T15:02:52Z",
+      "updated_at": "2026-08-24T15:02:52Z"
+    }
+  ]
+}
+```
+
+Each inbox holds its own copy of a conversation, so mail between two of your own inboxes shows up once per inbox, with a different `thread_id` in each. If the results cover less than you expect, check the key: a pod or inbox key cannot see past its scope.
+
+## Track conversation state with labels
+
+Labels are plain string tags on messages, and a thread carries the union of every label on its messages. They are how an agent leaves state on a conversation where every other agent, and every list filter, can see it. There are two kinds:
+
+- System labels record what happened to the mail: `received`, `sent`, `bounced`, `complained`, `delayed`, `delivered`, `rejected`, `opened`, and `scheduled`. AgentMail writes them, and the API rejects edits to them.
+- Custom labels are any other string, yours to add and remove: `triaged`, `waiting-reply`, `needs-human-review`, a campaign tag.
+
+You can attach custom labels at [send time](/core/send) with the `labels` field. To change them afterward, update the message. `inbox_id` and `message_id` are required, plus `add_labels`, `remove_labels`, or both.
+
+<CodeGroup>
+
+```bash CLI
+agentmail inboxes:messages update \
+  --inbox-id "example@agentmail.to" \
+  --message-id "<message_id>" \
+  --add-labels triaged \
+  --remove-labels waiting-reply
+```
+
+```bash API
+curl -X PATCH "https://api.agentmail.to/v0/inboxes/example@agentmail.to/messages/<message_id>" \
+  -H "Authorization: Bearer $AGENTMAIL_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{ "add_labels": ["triaged"], "remove_labels": ["waiting-reply"] }'
+```
+
+```typescript TypeScript
+const updated = await client.inboxes.messages.update("example@agentmail.to", "<message_id>", {
+  addLabels: ["triaged"],
+  removeLabels: ["waiting-reply"],
+});
+```
+
+```python Python
+updated = client.inboxes.messages.update(
+    inbox_id="example@agentmail.to",
+    message_id="<message_id>",
+    add_labels=["triaged"],
+    remove_labels=["waiting-reply"],
+)
+```
+
+</CodeGroup>
+
+A `message_id` contains `<`, `>`, and `@`, so URL-encode it when you build the API path by hand. The CLI and SDKs do that for you.
+
+How the edit is applied:
+
+- Values are trimmed and lowercased on write. Each label can be up to 256 characters, and a message can carry up to 256 labels.
+- Adding a label the message already has, or removing one it does not, changes nothing, so retrying an update is safe.
+- A label in both lists ends up removed.
+
+The response is the message's full label set after the change, so you can confirm the new state without another read:
+
+```json Sample response
+{
+  "message_id": "<010001a0344bb1d9-1cece2a2-68c9-451c-a821-417fc8ac42ab-000000@email.amazonses.com>",
+  "labels": ["sent", "triaged"]
+}
+```
+
+The thread reflects the change right away: its `labels` union updates, and the label starts working as a filter. The agent lists conversations in one state, works on them, and moves them to the next:
+
+<CodeGroup>
+
+```bash CLI
+agentmail inboxes:threads list \
+  --inbox-id "example@agentmail.to" \
+  --label triaged
+```
+
+```bash API
+curl "https://api.agentmail.to/v0/inboxes/example@agentmail.to/threads?labels=triaged" \
+  -H "Authorization: Bearer $AGENTMAIL_API_KEY"
+```
+
+```typescript TypeScript
+const triaged = await client.inboxes.threads.list("example@agentmail.to", {
+  labels: ["triaged"],
+});
+```
+
+```python Python
+triaged = client.inboxes.threads.list(
+    inbox_id="example@agentmail.to",
+    labels=["triaged"],
+)
+```
+
+</CodeGroup>
+
+Three things about label filters:
+
+- Pass several labels and a thread must carry all of them, in any spread across its messages.
+- Like the default listing, a label filter only shows threads that have received mail, unless `sent` is one of the labels you pass. A campaign tag alone will miss unanswered sends. Filter by the tag plus `sent` to cover them.
+- Label filters are served by search, so a change takes a few seconds to show up in them. Reading the message or thread directly shows it immediately.
+
+When a poll returns a whole page to process, label the messages in one call instead of one at a time: the same change applied to up to 50 message ids.
+
+<CodeGroup>
+
+```bash API
+curl -X POST "https://api.agentmail.to/v0/inboxes/example@agentmail.to/messages/batch-update" \
+  -H "Authorization: Bearer $AGENTMAIL_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "message_ids": ["<message_id_1>", "<message_id_2>"],
+    "add_labels": ["processed"]
+  }'
+```
+
+```typescript TypeScript
+const result = await client.inboxes.messages.batchUpdate("example@agentmail.to", {
+  messageIds: ["<message_id_1>", "<message_id_2>"],
+  addLabels: ["processed"],
+});
+```
+
+```python Python
+result = client.inboxes.messages.batch_update(
+    inbox_id="example@agentmail.to",
+    message_ids=["<message_id_1>", "<message_id_2>"],
+    add_labels=["processed"],
+)
+```
+
+</CodeGroup>
+
+The batch is atomic: every resolved message changes or none do. An id that does not resolve (deleted, another inbox's message, or hidden from your key) is skipped silently rather than failing the batch.
+
+```json Sample response
+{
+  "updates": [
+    {
+      "message_id": "<010001a0344bb1d9-1cece2a2-68c9-451c-a821-417fc8ac42ab-000000@email.amazonses.com>",
+      "labels": ["sent", "processed"]
+    },
+    {
+      "message_id": "<010001a0344bb56f-c6b2f5a9-d01d-4286-88a5-005db00f4f18-000000@email.amazonses.com>",
+      "labels": ["sent", "processed"]
+    }
+  ],
+  "limit": 2,
+  "count": 2
+}
+```
+
+`limit` is the number of ids you sent and `count` the number updated, so `count` below `limit` means some ids were skipped. Compare `updates[].message_id` with the ids you sent to find which ones.
+
+<Accordion title="Troubleshooting">
+- **A system label in either list returns a `400 ValidationError`** ("Cannot use system label: sent").
+- **Leaving both `add_labels` and `remove_labels` empty returns a `400 ValidationError`.**
+- **A batch with more than 50 ids, or the same id twice, returns a `400 ValidationError`.**
+</Accordion>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Control who can email your agent" icon="shield-check" href="/core/inbound-control">
+    Decide which senders reach the threads you manage.
+  </Card>
+  <Card title="Read the newest reply" icon="reply" href="/core/receive#read-one-message-in-full">
+    How quoted text and `extracted_text` relate.
+  </Card>
+</CardGroup>
+
+</Visibility>
+
+<Visibility for="agents">
+
+# Manage conversations as threads
+
+A thread is the conversation around a message: the email that started it plus every reply in both directions, built automatically from reply headers. Use these endpoints to pick the next conversation to handle, read one in full, search by content across one inbox or the whole organization, and track per-conversation state with labels.
+
+## Do this
+
+Work an inbox in three calls: list its threads, read one thread in full, then label the handled message.
+
+```bash
+# 1. List threads. Default view: threads with at least one received message, newest received first.
+curl "https://api.agentmail.to/v0/inboxes/example@agentmail.to/threads?limit=10" \
+  -H "Authorization: Bearer $AGENTMAIL_API_KEY"
+
+# 2. Read a whole thread by the thread_id from step 1. Messages come back oldest first.
+curl "https://api.agentmail.to/v0/threads/<thread_id>" \
+  -H "Authorization: Bearer $AGENTMAIL_API_KEY"
+
+# 3. Track state: label the handled message. URL-encode the message_id in the path.
+curl -X PATCH "https://api.agentmail.to/v0/inboxes/example@agentmail.to/messages/<url_encoded_message_id>" \
+  -H "Authorization: Bearer $AGENTMAIL_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{ "add_labels": ["triaged"], "remove_labels": ["waiting-reply"] }'
+```
+
+Feed the model each new message's `extracted_text`, not `text`, so it does not re-read the quoted history replayed inside every reply.
+
+## SDK
+
+Install: `npm install agentmail` (TypeScript), `pip install agentmail` (Python), `npm install -g agentmail-cli` (CLI).
+
+- List inbox threads: TS `client.inboxes.threads.list("example@agentmail.to")`, Python `client.inboxes.threads.list(inbox_id="example@agentmail.to")`, CLI `agentmail inboxes:threads list --inbox-id "example@agentmail.to"`
+- Read a thread: TS `client.threads.get("<thread_id>")`, Python `client.threads.get(thread_id="<thread_id>")`, CLI `agentmail threads get --thread-id "<thread_id>"`
+- Search inbox threads: TS `client.inboxes.threads.search("example@agentmail.to", { q: "refund" })`, Python `client.inboxes.threads.search(inbox_id="example@agentmail.to", q="refund")`, CLI `agentmail inboxes:threads search --inbox-id "example@agentmail.to" -q "refund"`
+- Search inbox messages: TS `client.inboxes.messages.search("example@agentmail.to", { q: "refund" })`, Python `client.inboxes.messages.search(inbox_id="example@agentmail.to", q="refund")`, CLI `agentmail inboxes:messages search --inbox-id "example@agentmail.to" -q "refund"`
+- List threads across the organization: TS `client.threads.list()`, Python `client.threads.list()`, CLI `agentmail threads list`
+- Search threads across the organization: TS `client.threads.search({ q: "refund" })`, Python `client.threads.search(q="refund")`, CLI `agentmail threads search -q "refund"`
+- Update message labels: TS `client.inboxes.messages.update("example@agentmail.to", "<message_id>", { addLabels: [...], removeLabels: [...] })`, Python `client.inboxes.messages.update(inbox_id="example@agentmail.to", message_id="<message_id>", add_labels=[...], remove_labels=[...])`, CLI `agentmail inboxes:messages update --inbox-id "example@agentmail.to" --message-id "<message_id>" --add-labels triaged --remove-labels waiting-reply`
+- Batch update labels: TS `client.inboxes.messages.batchUpdate("example@agentmail.to", { messageIds: [...], addLabels: [...] })`, Python `client.inboxes.messages.batch_update(inbox_id="example@agentmail.to", message_ids=[...], add_labels=[...])`
+
+Full reference: `/integrations/sdks-and-cli`.
+
+## Facts
+
+- Sending an email creates its thread immediately. The send response returns the new `thread_id`, and `GET /v0/threads/{thread_id}` works right away.
+- The default `GET /v0/inboxes/{inbox_id}/threads` list holds only threads with at least one received message, ordered by the newest received message. An outbound thread nobody has answered is absent from it.
+- Filtering `GET /v0/inboxes/{inbox_id}/threads` by `labels=sent` returns every thread with sent mail, newest send first. That view covers unanswered outbound threads.
+- Thread list parameters: `limit`, `page_token`, `labels`, `before`, `after` (RFC 3339 timestamps), `ascending`, `senders`, `recipients`, `subject`, `include_spam`, `include_blocked`, `include_unauthenticated`, `include_trash`.
+- `senders`, `recipients`, and `subject` values match whole words and word starts, every passed value must match, and any of these filters routes the request through search, which caps `limit` at 100.
+- A thread summary's `labels` is the union of every label on the thread's messages. `preview` is the beginning of the newest message. `timestamp` is the newest activity, with `received_timestamp` and `sent_timestamp` per direction. `last_message_id` is the newest message's id, ready for a reply call.
+- `GET /v0/threads/{thread_id}` returns the whole conversation, messages oldest first. Any key whose scope covers the owning inbox can call it.
+- Thread ids are UUIDs. Message ids look like `<...@email.amazonses.com>` and contain `<`, `>`, and `@`, so URL-encode a `message_id` when building an API path by hand. The CLI and SDKs encode it automatically.
+- Message bodies: `text` and `html` are the body as sent, including the quoted copy of earlier messages. `extracted_text` and `extracted_html` are only what the message added.
+- Search endpoints: `GET /v0/inboxes/{inbox_id}/threads/search`, `GET /v0/inboxes/{inbox_id}/messages/search`, and `GET /v0/threads/search`. `q` is required. Optional: `limit` (up to 100), `page_token`, `before`, `after`.
+- Search matches `q` against senders, recipients, and subject as whole words and word starts, and against message bodies as full text (`refund` also finds `refunds`). Results rank by relevance, not recency.
+- Search covers sent and received mail, including outbound threads the default list leaves out. Threads carrying `spam`, `trash`, `blocked`, or `unauthenticated` are always excluded from search.
+- Search hits add `highlights`. Keys `from`, `recipients`, `subject`, and `text` appear only when that field matched, with matched terms wrapped in `**`.
+- Reach of the organization-wide `GET /v0/threads` and `GET /v0/threads/search` follows the API key: an organization key covers every inbox, a pod key covers its pod's inboxes, an inbox key covers only its own inbox. Every result row carries its `inbox_id`.
+- Each inbox holds its own copy of a conversation. Mail between two owned inboxes shows up once per inbox, with a different `thread_id` in each.
+- System labels are written by AgentMail: `received`, `sent`, `bounced`, `complained`, `delayed`, `delivered`, `rejected`, `opened`, `scheduled`. Custom labels are any other string.
+- Label update: `PATCH /v0/inboxes/{inbox_id}/messages/{message_id}` with `add_labels`, `remove_labels`, or both. The response is the message's full label set after the change.
+- Labels are trimmed and lowercased on write. A label can be up to 256 characters, and a message can carry up to 256 labels. Custom labels can also be attached at send time via the `labels` field.
+- Adding a label a message already has, or removing one it lacks, changes nothing, so retrying a label update is safe. A label in both lists ends up removed.
+- A label filter only shows threads with received mail unless `sent` is among the passed labels. Label filters are served by search, so new mail and label changes take a few seconds to show in them. Reading the message or thread directly shows changes immediately.
+- Batch label update: `POST /v0/inboxes/{inbox_id}/messages/batch-update` with `message_ids` (up to 50) plus `add_labels` and/or `remove_labels`. The batch is atomic: every resolved message changes or none do. Ids that do not resolve (deleted, another inbox's message, or hidden from the key) are skipped silently.
+- In a batch response, `limit` is the number of ids sent and `count` the number updated. `count` below `limit` means some ids were skipped. Compare `updates[].message_id` with the sent ids to find which.
+
+## Not supported
+
+- No endpoint creates, edits, or deletes a thread. AgentMail builds threads automatically from reply headers.
+- System labels cannot be added or removed. A system label in `add_labels` or `remove_labels` returns `400` `validation_error` ("Cannot use system label: sent").
+- A label update with both `add_labels` and `remove_labels` empty returns `400` `validation_error`.
+- The default thread list does not show outbound threads with no reply yet. Filter `labels` by `sent` or fetch the thread directly by `thread_id`.
+- Search has no include flags. Threads carrying `spam`, `trash`, `blocked`, or `unauthenticated` never appear in search results.
+- Search and filtered lists reject `limit` above 100.
+- Batch update rejects more than 50 `message_ids` or the same id twice, and does not report skipped ids as errors.
+- Search results and label filters do not reflect changes instantly. Read the message or thread directly for current state.
+
+## Errors
+
+| Error | Status | Cause | Fix |
+| --- | --- | --- | --- |
+| `not_found` ("Inbox not found") | 404 | The inbox is not visible to the API key, usually a typo in `inbox_id`. | Check `inbox_id` and the key's scope. |
+| `not_found` ("Thread not found") | 404 | The id matches no thread visible to the key. | Check the `thread_id` and that the key's scope covers the owning inbox. |
+| `validation_error` ("Invalid UUID") | 400 | The value is not a thread id, usually a `message_id` passed instead. | Pass the UUID `thread_id`. |
+| `validation_error` ("limit cannot exceed 100 for filtered queries") | 400 | `limit` above 100 on search or a filtered list. | Set `limit` to 100 or less. |
+| `validation_error` (missing or empty `q`) | 400 | Search called without search text. | Pass a non-empty `q`. |
+| `validation_error` ("Cannot use system label: sent") | 400 | A system label in `add_labels` or `remove_labels`. | Edit custom labels only. |
+| `validation_error` (empty label update) | 400 | Both `add_labels` and `remove_labels` empty. | Pass at least one label change. |
+| `validation_error` (batch limits) | 400 | More than 50 `message_ids`, or the same id twice. | Dedupe ids and send at most 50 per batch. |
+
+## Verify
+
+```bash
+curl -s -w "\n%{http_code}\n" "https://api.agentmail.to/v0/inboxes/example@agentmail.to/threads?limit=1" \
+  -H "Authorization: Bearer $AGENTMAIL_API_KEY"
+```
+
+A `200` with `count` and a `threads` array confirms the key and inbox. Each thread carries `thread_id`, `labels`, `message_count`, and `last_message_id`. A label update verifies itself: the `PATCH` response is the full label set after the change.
+
+## Related
+
+- `/core/inbound-control` - decide which senders reach the threads listed here
+- `/core/receive#read-one-message-in-full` - how quoted text and `extracted_text` relate
+- `/core/send` - reply to a thread's `last_message_id` and set `labels` at send time
+- `/advanced/multi-tenant` - pod paths for keeping tenants apart
+
+</Visibility>

@@ -1,0 +1,390 @@
+---
+title: Mastra
+description: Give a Mastra agent its own inbox to send, receive, and reply to email.
+icon: "/images/logos/mastra.svg"
+---
+
+<Visibility for="humans">
+
+
+<img src="/images/banners/integration-mastra.svg" alt="" noZoom />
+[Mastra](https://mastra.ai) agents get email two ways: through Mastra's MCP client, which discovers the tool catalog from AgentMail's hosted server, or through tools you define over the TypeScript SDK. This walkthrough uses the MCP path. Follow it and your agent ends up with its own `@agentmail.to` inbox, an email it sent, and a reply to one it received.
+
+## 0. Get API keys and a project
+
+- `AGENTMAIL_API_KEY` authenticates the email tools. Generate one from the [AgentMail Console](https://console.agentmail.to/dashboard/api-keys).
+- `OPENAI_API_KEY` authenticates the model calls. The agent on this page names an OpenAI model, and Mastra's model router reads this variable to call it. Generate one from the [OpenAI dashboard](https://platform.openai.com/api-keys).
+
+```bash
+export AGENTMAIL_API_KEY="<API_KEY>"
+export OPENAI_API_KEY="<OPENAI_API_KEY>"
+```
+
+An existing Mastra app works as the project, and `npm create mastra@latest` scaffolds a new one. The scripts on this page also run in a plain Node.js project.
+
+## 1. Connect the AgentMail MCP server
+
+Install Mastra's core and MCP packages. In a scaffolded Mastra project, `@mastra/core` and the `"type": "module"` setting are already in place.
+
+```bash
+npm install @mastra/core @mastra/mcp
+npm install -D tsx
+npm pkg set type=module
+```
+
+`tsx` runs the TypeScript scripts in the next steps, and `"type": "module"` lets them use top-level `await`.
+
+Point an `MCPClient` at the hosted server. It authenticates with your API key in the `x-api-key` header:
+
+```typescript mcp.ts
+import { MCPClient } from "@mastra/mcp";
+
+export const mcp = new MCPClient({
+  servers: {
+    agentmail: {
+      url: new URL("https://mcp.agentmail.to/mcp"),
+      requestInit: {
+        headers: { "x-api-key": process.env.AGENTMAIL_API_KEY! },
+      },
+    },
+  },
+});
+```
+
+Check the connection by listing the tools it discovers. Save this next to `mcp.ts` and run it with `npx tsx check.ts`:
+
+```typescript check.ts
+import { mcp } from "./mcp";
+
+console.log(Object.keys(await mcp.listTools()));
+```
+
+```text Sample output
+[
+  'agentmail_list_inboxes',
+  'agentmail_get_inbox',
+  'agentmail_create_inbox',
+  'agentmail_list_threads',
+  'agentmail_get_thread',
+  'agentmail_send_message',
+  'agentmail_reply_to_message',
+  ...
+]
+```
+
+<Frame caption="One connection to the hosted server discovers all 26 email tools.">
+  <img src="/images/integrations/mastra-check-tools.png" alt="Terminal output of npx tsx check.ts printing 26 tool names prefixed agentmail_" />
+</Frame>
+
+`listTools()` prefixes each tool with the server name from your config, so the `agentmail` key becomes the `agentmail_` prefix here. Every tool call runs as the organization that owns the API key. To limit an agent to a single inbox, give it an inbox-scoped key instead of an organization key. [MCP and Skills](/integrations/mcp-and-skills) covers the hosted server's full catalog and credential options.
+
+## 2. Test sending emails
+
+Define the agent with the MCP tools, in `agent.ts`:
+
+```typescript agent.ts
+import { Agent } from "@mastra/core/agent";
+import { mcp } from "./mcp";
+
+export const emailAgent = new Agent({
+  id: "email-agent",
+  name: "Email agent",
+  instructions:
+    "You are an email agent with your own AgentMail inbox. " +
+    "You can create inboxes, send email, and read and reply to threads.",
+  model: "openai/gpt-5.6-sol",
+  tools: await mcp.listTools(),
+});
+```
+
+Ask the agent to create an inbox and email an address you can check right now, in Gmail, Outlook, or whichever client you keep open. Save this next to `agent.ts` and run it with `npx tsx send.ts`.
+
+Once the script runs, the email turns up in that account within moments, from a fresh `@agentmail.to` address.
+
+```typescript send.ts
+import { emailAgent } from "./agent";
+
+const output = await emailAgent.generate(
+  "Create an inbox with the display name 'Support agent', then send an email " +
+    "from it to you@example.com with the subject 'Hello from my agent' and a " +
+    "one-line introduction. When you finish, include the inbox address in " +
+    "your answer.",
+);
+console.log(output.text);
+```
+
+The agent calls `agentmail_create_inbox`, then `agentmail_send_message`, and reports back:
+
+```text Sample output
+I created the inbox faircost773@agentmail.to and sent your email to
+you@example.com with the subject "Hello from my agent".
+```
+
+Save the inbox address from the output. You will email it in the next step.
+
+This prompt leaves the username to AgentMail, which generates an available one.
+
+<Accordion title="Troubleshooting">
+- **`403` for a username that is taken.** The error carries up to three available alternatives in `suggestions`.
+- **`403` at your plan's inbox limit.** Every username fails the same way. The error reads `Inbox limit exceeded`, states the limit, and links the upgrade that raises it.
+- **A failed tool call does not end the run.** Mastra records the error text, suggestions included, as that call's result, so the agent can retry with an available name in its next step.
+</Accordion>
+
+## 3. Test replying to an email
+
+From your everyday account, send an email to the inbox address from step 2. Give it a subject and a question the agent can answer.
+
+Then ask the agent to read and answer it. You should get the reply in your account, threaded under the message you sent.
+
+```typescript reply.ts
+import { emailAgent } from "./agent";
+
+const output = await emailAgent.generate(
+  "Fetch the newest thread in <inbox_id>, read it, and post a brief reply " +
+    "in that thread.",
+);
+console.log(output.text);
+```
+
+Replace `<inbox_id>` with the address from step 2. The script starts from a blank conversation, with no memory of the earlier run, so the prompt has to name the inbox itself.
+
+The agent finds the conversation with `agentmail_list_threads`, reads it with `agentmail_get_thread`, and answers with `agentmail_reply_to_message`. Expect roughly two seconds of transit in each direction.
+
+<Accordion title="Troubleshooting">
+- **The agent reports an empty inbox.** Your email may not have arrived yet, so run the script again.
+</Accordion>
+
+## Define your own tools with the SDK
+
+MCP hands the agent the whole hosted catalog. For a hand-picked tool surface, use `createTool` over the AgentMail TypeScript SDK instead. Install it with `npm install agentmail`.
+
+```typescript email-tools.ts
+import { createTool } from "@mastra/core/tools";
+import { AgentMailClient } from "agentmail";
+import { z } from "zod";
+
+const agentmail = new AgentMailClient();
+
+export const sendEmail = createTool({
+  id: "send-email",
+  description: "Send an email from an AgentMail inbox.",
+  inputSchema: z.object({
+    inboxId: z.string().describe("Address of the inbox to send from"),
+    to: z.string().describe("Recipient address"),
+    subject: z.string(),
+    text: z.string().describe("Plain-text body"),
+  }),
+  execute: async ({ inboxId, to, subject, text }) => {
+    return await agentmail.inboxes.messages.send(inboxId, { to, subject, text });
+  },
+});
+
+export const replyToEmail = createTool({
+  id: "reply-to-email",
+  description: "Reply to an email an AgentMail inbox received, in the same thread.",
+  inputSchema: z.object({
+    inboxId: z.string().describe("Address of the inbox that received the email"),
+    messageId: z.string().describe("message_id of the email to reply to"),
+    text: z.string().describe("Plain-text reply body"),
+  }),
+  execute: async ({ inboxId, messageId, text }) => {
+    return await agentmail.inboxes.messages.reply(inboxId, messageId, { text });
+  },
+});
+```
+
+`AgentMailClient()` picks up `AGENTMAIL_API_KEY` from the environment. `execute` receives the validated input as its first parameter, so the schema fields destructure directly. Both tools return the new message's `messageId` and the `threadId` it belongs to, which the agent can quote back or use to follow up in the same thread.
+
+These drop into the same `tools` map on the agent, alone or alongside the MCP tools:
+
+```typescript
+tools: { sendEmail, replyToEmail },
+```
+
+Give the agent only this map and its entire reach is sending and replying from inboxes you name.
+
+## Scope tools per user
+
+The agent in step 2 bakes one organization's tools in at construction. When each user of your product has their own AgentMail credentials, keep the agent tool-free and attach that user's tools per request: build an `MCPClient` with the user's API key and pass `toolsets` to `generate` or `stream`.
+
+```typescript tenant.ts
+import { Agent } from "@mastra/core/agent";
+import { MCPClient } from "@mastra/mcp";
+
+const tenantAgent = new Agent({
+  id: "tenant-email-agent",
+  name: "Tenant email agent",
+  instructions: "You manage the email inbox of the user you are acting for.",
+  model: "openai/gpt-5.6-sol",
+});
+
+export async function runForTenant(tenantApiKey: string, prompt: string) {
+  const mcp = new MCPClient({
+    servers: {
+      agentmail: {
+        url: new URL("https://mcp.agentmail.to/mcp"),
+        requestInit: {
+          headers: { "x-api-key": tenantApiKey },
+        },
+      },
+    },
+  });
+  try {
+    const output = await tenantAgent.generate(prompt, {
+      toolsets: await mcp.listToolsets(),
+    });
+    return output.text;
+  } finally {
+    await mcp.disconnect();
+  }
+}
+```
+
+`listToolsets()` returns the same tools grouped by server, in the shape the `toolsets` option expects. `disconnect()` releases the client when the request is done. Skipping it makes the next `MCPClient` with the same configuration throw, because Mastra treats a duplicate live client as a memory leak. [Multi-tenant platforms](/advanced/multi-tenant) covers provisioning a per-user inbox and a key scoped to it.
+
+<Accordion title="Troubleshooting">
+
+- **Missing `OPENAI_API_KEY`.** `generate` throws `Could not find API key process.env.OPENAI_API_KEY for model id openai/gpt-5.6-sol` before any email tool runs. `AGENTMAIL_API_KEY` authenticates only the email tools. The model calls go to OpenAI and need that separate key.
+- **Missing `AGENTMAIL_API_KEY`.** The connection still comes up and `listTools()` still returns the catalog, because tool discovery is open. The failure appears when a tool runs: every call errors with `Forbidden (HTTP 403)`. Set the variable in the environment the script runs in.
+- **Running the scripts as CommonJS.** Top-level `await` fails with `Top-level await is currently not supported with the "cjs" output format`. Set `"type": "module"` in `package.json`. Scaffolded Mastra projects already have it.
+- **The agent stops mid-task.** A run ends after 5 steps by default, and a longer job, like several sends across inboxes, hits that budget before it finishes. Pass `maxSteps` in the `generate` options to raise it.
+
+</Accordion>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Send email" icon="paper-plane" href="/core/send">
+    The full send and reply contract behind the tools your agent just used.
+  </Card>
+  <Card title="React to incoming email" icon="bolt" href="/advanced/webhooks">
+    Run your agent when mail arrives instead of prompting by hand.
+  </Card>
+</CardGroup>
+
+</Visibility>
+
+<Visibility for="agents">
+
+# Wire a Mastra agent to AgentMail over MCP
+
+Connect Mastra's `MCPClient` to AgentMail's hosted MCP server so a Mastra agent can create inboxes, send email, and read and reply to threads. Use this in a Mastra app or a plain Node.js project when the agent needs its own `@agentmail.to` address.
+
+## Do this
+
+Install the packages and set both keys. `AGENTMAIL_API_KEY` authenticates the email tools, `OPENAI_API_KEY` authenticates the model calls through Mastra's model router.
+
+```bash
+npm install @mastra/core @mastra/mcp
+npm install -D tsx
+npm pkg set type=module
+export AGENTMAIL_API_KEY="<API_KEY>"
+export OPENAI_API_KEY="<OPENAI_API_KEY>"
+```
+
+```typescript
+// mcp.ts
+import { MCPClient } from "@mastra/mcp";
+
+export const mcp = new MCPClient({
+  servers: {
+    agentmail: {
+      url: new URL("https://mcp.agentmail.to/mcp"),
+      requestInit: {
+        headers: { "x-api-key": process.env.AGENTMAIL_API_KEY! },
+      },
+    },
+  },
+});
+```
+
+```typescript
+// agent.ts
+import { Agent } from "@mastra/core/agent";
+import { mcp } from "./mcp";
+
+export const emailAgent = new Agent({
+  id: "email-agent",
+  name: "Email agent",
+  instructions:
+    "You are an email agent with your own AgentMail inbox. You can create inboxes, send email, and read and reply to threads.",
+  model: "openai/gpt-5.6-sol",
+  tools: await mcp.listTools(),
+});
+```
+
+```typescript
+// send.ts
+import { emailAgent } from "./agent";
+
+const output = await emailAgent.generate(
+  "Create an inbox, then send an email from it to you@example.com with the subject 'Hello from my agent'. Include the inbox address in your answer.",
+);
+console.log(output.text);
+```
+
+Run it with `npx tsx send.ts`. The agent calls `agentmail_create_inbox`, then `agentmail_send_message`, and reports the new address.
+
+## SDK
+
+MCP path, package `@mastra/mcp`:
+
+- Connect: `new MCPClient({ servers: { agentmail: { url, requestInit } } })` with URL `https://mcp.agentmail.to/mcp` and the API key in an `x-api-key` header
+- Tools for an agent's `tools` map: `await mcp.listTools()`
+- Per-request tools (multi-tenant): `await mcp.listToolsets()` passed as `toolsets` to `generate` or `stream`
+- Release a client: `await mcp.disconnect()`
+
+Direct SDK path, package `agentmail` (`npm install agentmail`):
+
+- Client: `new AgentMailClient()` picks up `AGENTMAIL_API_KEY` from the environment
+- Send: `agentmail.inboxes.messages.send(inboxId, { to, subject, text })`
+- Reply: `agentmail.inboxes.messages.reply(inboxId, messageId, { text })`
+- Wrap either call as a Mastra tool with `createTool` from `@mastra/core/tools`. The zod `inputSchema` validates the input, and `execute` receives it as its first parameter.
+
+Full SDK surface and installs: `/integrations/sdks-and-cli`.
+
+## Facts
+
+- Hosted MCP server URL: `https://mcp.agentmail.to/mcp`. Auth is the API key in the `x-api-key` header.
+- Packages: `@mastra/core`, `@mastra/mcp`, dev dependency `tsx`, TypeScript SDK `agentmail`.
+- `mcp.listTools()` prefixes each tool with the server key from the config, so the `agentmail` key yields `agentmail_list_inboxes`, `agentmail_get_inbox`, `agentmail_create_inbox`, `agentmail_list_threads`, `agentmail_get_thread`, `agentmail_send_message`, `agentmail_reply_to_message`, and more.
+- Every MCP tool call runs as the organization that owns the API key. An inbox-scoped key limits the agent to a single inbox.
+- Tool discovery is open: `mcp.listTools()` returns the catalog even when `AGENTMAIL_API_KEY` is unset. Auth failures surface at call time as `Forbidden (HTTP 403)`.
+- A failed tool call does not end a Mastra run. The error text, `suggestions` included, becomes that call's result so the agent can retry.
+- A run ends after 5 steps by default. Pass `maxSteps` in the `generate` options to raise it.
+- Each `generate` call starts from a blank conversation. A follow-up script must name the inbox in its prompt.
+- Multi-tenant: build an `MCPClient` per request with the tenant's API key, pass `toolsets: await mcp.listToolsets()` to `generate`, then `await mcp.disconnect()` when the request is done.
+- The SDK-defined tools on this page return the new message's `messageId` and the `threadId` it belongs to.
+- The scripts use top-level `await`, which requires `"type": "module"` in `package.json`.
+- Inbound email takes roughly two seconds of transit in each direction.
+
+## Not supported
+
+- Do not skip `mcp.disconnect()` in per-request code. Mastra treats a duplicate live `MCPClient` with the same configuration as a memory leak, so the next construction throws.
+- A successful `listTools()` does not prove the API key is valid, because discovery works without credentials.
+- `AGENTMAIL_API_KEY` does not authenticate model calls, and `OPENAI_API_KEY` does not authenticate email tools. Both keys are required.
+- The scripts do not run as CommonJS.
+- A job longer than 5 steps does not finish without raising `maxSteps`.
+
+## Errors
+
+| Error | HTTP status | Cause | Fix |
+| --- | --- | --- | --- |
+| `Could not find API key process.env.OPENAI_API_KEY for model id openai/gpt-5.6-sol` | none, thrown by `generate` | `OPENAI_API_KEY` unset | Set `OPENAI_API_KEY` in the script's environment |
+| `Forbidden (HTTP 403)` | 403 | `AGENTMAIL_API_KEY` unset or wrong when a tool runs | Set `AGENTMAIL_API_KEY` in the environment the script runs in |
+| 403 on `agentmail_create_inbox` with `suggestions` | 403 | Requested username is taken | Retry with one of the up to three available alternatives in `suggestions` |
+| `Inbox limit exceeded` | 403 | Plan's inbox limit reached, every username fails | Follow the upgrade link the error carries |
+| `Top-level await is currently not supported with the "cjs" output format` | none | Project runs as CommonJS | Run `npm pkg set type=module` |
+
+## Verify
+
+Create `check.ts` with `import { mcp } from "./mcp"; console.log(Object.keys(await mcp.listTools()));` and run `npx tsx check.ts`. Success prints tool names prefixed `agentmail_`. This confirms the connection only, not the key. To confirm the key, run `send.ts` and check that the email arrives from a fresh `@agentmail.to` address.
+
+## Related
+
+- `/integrations/mcp-and-skills` for the hosted server's full catalog and credential options
+- `/core/send` for the full send and reply contract behind these tools
+- `/advanced/webhooks` to run the agent when mail arrives instead of prompting by hand
+- `/advanced/multi-tenant` for provisioning a per-user inbox and a key scoped to it
+
+</Visibility>

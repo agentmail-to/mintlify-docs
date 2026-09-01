@@ -1,0 +1,234 @@
+---
+title: eve
+description: Give an eve agent its own inbox to send, receive, and reply to email.
+icon: "/images/logos/vercel.svg"
+---
+
+<Visibility for="humans">
+
+
+<img src="/images/banners/integration-eve.svg" alt="" noZoom />
+[eve](https://eve.dev) is Vercel's filesystem-first agent framework, where an agent is a directory of files. AgentMail plugs in as a single connection file in that directory. By the end of this page, your eve agent will create its own inbox, email you, and answer your reply in the same thread.
+
+## 0. Get an API key and an eve project
+
+Generate an API key from the [AgentMail Console](https://console.agentmail.to/dashboard/api-keys) and set it as an environment variable:
+
+```bash
+export AGENTMAIL_API_KEY="<API_KEY>"
+```
+
+eve needs Node.js 24 or newer and a model credential. The scaffolded agent routes model calls through the Vercel AI Gateway, so set `AI_GATEWAY_API_KEY` or link a Vercel project.
+
+Scaffold a project if you do not have one:
+
+```bash
+npx eve@latest init my-agent
+cd my-agent
+```
+
+To add eve to an app that already has a `package.json`, run `npx eve@latest init .` from its root instead.
+
+## 1. Connect AgentMail to your agent
+
+Create one file at `agent/connections/agentmail.ts`. The filename becomes the connection's name, so this file registers it as `agentmail`.
+
+```typescript agent/connections/agentmail.ts
+import { defineMcpClientConnection } from "eve/connections";
+
+export default defineMcpClientConnection({
+  url: "https://mcp.agentmail.to/mcp",
+  description:
+    "AgentMail, the agent's own email service. Create inboxes, send email, read incoming messages, and reply in the same thread.",
+  headers: { "x-api-key": process.env.AGENTMAIL_API_KEY! },
+});
+```
+
+eve connects to AgentMail's hosted MCP server and discovers its tools. The model finds them through eve's built-in `connection_search` tool and calls them by qualified name, such as `agentmail__send_message`. Write the `description` for the model, not for yourself: it is the main signal `connection_search` uses to pick this connection for email work.
+
+The URL and the key stay out of the model's context. eve itself sends the `x-api-key` header on every request, so keep the key in the environment rather than in the URL. The hosted server's full catalog and the other ways to connect to it are on [MCP and Skills](/integrations/mcp-and-skills).
+
+## 2. Test sending emails
+
+Start the development server:
+
+```bash
+npm run dev
+```
+
+This opens an interactive session with your agent in the terminal. Ask it to email you, with your real address in place of `you@example.com`:
+
+```text
+Create an inbox for yourself, then send an email from it to you@example.com introducing yourself.
+```
+
+The email reaches that account moments later, from an `@agentmail.to` address that did not exist until you asked. The agent does the work with `agentmail__create_inbox` and `agentmail__send_message`.
+
+A prompt like this one, without a username, always works: AgentMail generates an address. You can also name the inbox in your prompt, but usernames are first come, first served.
+
+<Accordion title="Troubleshooting">
+
+- **`403` when the name is taken.** `agentmail__create_inbox` fails with a `403` that includes up to three available alternatives in `suggestions`, and the error returns to the model as the tool result, so the agent can pick one and retry on its own.
+- **`Inbox limit exceeded` at your plan's inbox limit.** The call fails with this error instead, before any name check.
+
+</Accordion>
+
+## 3. Test reading and replying
+
+Reply to the agent's email from your own mail client. Then ask the agent, in the same session:
+
+```text
+Check your inbox and reply to the newest message.
+```
+
+You should find the answer in your mail client, in the same thread as the first email. The agent reads mail with tools like `agentmail__list_threads` and `agentmail__get_thread`, and answers with `agentmail__reply_to_message`, which replies to one specific received message so the answer stays in its thread.
+
+The agent checks mail when you ask it to. To act the moment an email arrives, deliver inbound events to an endpoint you control with [webhooks](/advanced/webhooks).
+
+## 4. Gate email actions behind approval
+
+The connection hands the model tools that send email on your behalf. Before this agent runs anywhere real, add an `approval` policy to the connection:
+
+```typescript agent/connections/agentmail.ts
+import { defineMcpClientConnection } from "eve/connections";
+import { once } from "eve/tools/approval";
+
+export default defineMcpClientConnection({
+  url: "https://mcp.agentmail.to/mcp",
+  description:
+    "AgentMail, the agent's own email service. Create inboxes, send email, read incoming messages, and reply in the same thread.",
+  headers: { "x-api-key": process.env.AGENTMAIL_API_KEY! },
+  approval: once(),
+});
+```
+
+The helpers come from `eve/tools/approval`:
+
+- `once()` asks the first time each tool runs in a session, then allows it for the rest of the session.
+- `always()` asks before every call.
+
+A gated call pauses the session on an approval prompt. Approve and the run resumes from that exact step. Deny and eve skips the tool and tells the model why.
+
+<Frame caption="The dev session pauses on the approval prompt before an AgentMail tool call runs.">
+  <img src="/images/integrations/eve-approval.png" alt="eve dev session paused on an approval prompt for the agentmail__list_inboxes tool call" />
+</Frame>
+
+An `approval` policy covers every tool the connection serves. To shrink what the model can discover in the first place, set `tools: { allow: [...] }` on the connection with the tool names you allow, or write your own typed tools in `agent/tools/` with the [AgentMail SDKs](/integrations/sdks-and-cli).
+
+<Accordion title="Troubleshooting">
+
+- **Running eve on Node.js 23 or older.** Every eve command stops with `eve requires Node.js >=24`. Upgrade Node, then retry.
+- **Missing `AGENTMAIL_API_KEY`.** eve validates the connection at startup, so `npm run dev` and `eve build` exit with `The "headers.x-api-key" value must be a string, Promise, or function`. That error means the header value is empty (usually, the variable is not set in the environment eve runs in). A shell `export` covers local runs. A deployed agent needs the key in the project's environment settings.
+- **Missing model credential.** The dev session opens with a `model provider not linked` setup warning. Set `AI_GATEWAY_API_KEY`, link a Vercel project, or configure a direct provider.
+
+</Accordion>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Send and reply" icon="paper-plane" href="/core/send">
+    The full contract for sending: recipients, threading, attachments, idempotency.
+  </Card>
+  <Card title="MCP and Skills" icon="plug" href="/integrations/mcp-and-skills">
+    Everything the hosted MCP server exposes, plus the other ways to connect to it.
+  </Card>
+</CardGroup>
+
+</Visibility>
+
+<Visibility for="agents">
+
+# Wire an eve agent to AgentMail with one connection file
+
+Register AgentMail's hosted MCP server as an eve connection so the agent can create inboxes, send email, and reply in the same thread. eve is Vercel's filesystem-first agent framework, and AgentMail plugs in as a single file in the agent directory.
+
+## Do this
+
+Set the API key and scaffold a project if you do not have one. To add eve to an app that already has a `package.json`, run `npx eve@latest init .` from its root instead.
+
+```bash
+export AGENTMAIL_API_KEY="<API_KEY>"
+npx eve@latest init my-agent
+cd my-agent
+```
+
+Create `agent/connections/agentmail.ts`. The filename registers the connection as `agentmail`. Write the `description` for the model, because `connection_search` uses it to pick this connection for email work.
+
+```typescript
+import { defineMcpClientConnection } from "eve/connections";
+
+export default defineMcpClientConnection({
+  url: "https://mcp.agentmail.to/mcp",
+  description:
+    "AgentMail, the agent's own email service. Create inboxes, send email, read incoming messages, and reply in the same thread.",
+  headers: { "x-api-key": process.env.AGENTMAIL_API_KEY! },
+});
+```
+
+Start the interactive dev session and prompt the agent:
+
+```bash
+npm run dev
+```
+
+```text
+Create an inbox for yourself, then send an email from it to you@example.com introducing yourself.
+```
+
+## SDK
+
+The integration surface is eve's connection and approval API, not an AgentMail package.
+
+- Register the MCP connection: `defineMcpClientConnection({ url, description, headers })` from `eve/connections`, default-exported from a file in `agent/connections/`
+- Gate tools behind a person: `approval: once()` or `approval: always()` on the connection, helpers imported from `eve/tools/approval`
+- Shrink what the model can discover: `tools: { allow: [...] }` on the connection with the tool names you allow
+- The model finds the connection through eve's built-in `connection_search` tool and calls tools by qualified name, such as `agentmail__send_message`
+- For a hand-picked typed surface instead, write your own tools in `agent/tools/` over the AgentMail SDKs
+
+AgentMail SDK installs: `/integrations/sdks-and-cli`.
+
+## Facts
+
+- eve requires Node.js 24 or newer.
+- Hosted MCP server URL: `https://mcp.agentmail.to/mcp`. eve itself sends the `x-api-key` header on every request.
+- Env vars: `AGENTMAIL_API_KEY` for the email tools, plus a model credential, either `AI_GATEWAY_API_KEY` for the Vercel AI Gateway, a linked Vercel project, or a direct provider.
+- Connection file path: `agent/connections/agentmail.ts`. The filename becomes the connection's name.
+- Tool names carry the connection name as an `agentmail__` prefix: `agentmail__create_inbox`, `agentmail__send_message`, `agentmail__list_threads`, `agentmail__get_thread`, `agentmail__reply_to_message`.
+- The connection URL and the API key stay out of the model's context.
+- eve validates the connection at startup, so `npm run dev` and `eve build` fail fast on an empty header value.
+- `once()` asks the first time each tool runs in a session, then allows it for the rest of the session. `always()` asks before every call.
+- A gated call pauses the session on an approval prompt. Approve and the run resumes from that exact step. Deny and eve skips the tool and tells the model why.
+- A prompt without a username always works, because AgentMail generates an available address. Named usernames are first come, first served.
+- On a taken username, `agentmail__create_inbox` fails with a 403 that includes up to three available alternatives in `suggestions`, and the error returns to the model as the tool result, so the agent can pick one and retry on its own.
+- `agentmail__reply_to_message` replies to one specific received message, so the answer stays in its thread.
+
+## Not supported
+
+- eve does not run on Node.js 23 or older.
+- The connection does not push inbound email to the agent. The agent checks mail only when prompted. To act the moment an email arrives, deliver inbound events to an endpoint you control with webhooks.
+- An `approval` policy cannot target a subset of tools. It covers every tool the connection serves. Narrow the surface with `tools: { allow: [...] }` or custom typed tools instead.
+- Do not put the API key in the connection URL. Keep it in the environment and pass it as a header.
+- At the plan's inbox limit, `agentmail__create_inbox` fails before any name check.
+
+## Errors
+
+| Error | HTTP status | Cause | Fix |
+| --- | --- | --- | --- |
+| `eve requires Node.js >=24` | none, every eve command | Node.js 23 or older | Upgrade Node, then retry |
+| `The "headers.x-api-key" value must be a string, Promise, or function` | none, at startup validation | The header value is empty, usually `AGENTMAIL_API_KEY` unset in the environment eve runs in | `export` it for local runs, or set it in the deployed project's environment settings |
+| `model provider not linked` | none, dev session setup warning | No model credential | Set `AI_GATEWAY_API_KEY`, link a Vercel project, or configure a direct provider |
+| 403 on `agentmail__create_inbox` with `suggestions` | 403 | Requested username is taken | The agent retries with a suggested name, or prompt without a username |
+| `Inbox limit exceeded` | 403 | Plan at its inbox limit | Raise the plan's inbox limit |
+
+## Verify
+
+`npm run dev` starting without the `headers.x-api-key` error confirms eve accepted the connection. End to end: prompt the agent to create an inbox and email your address, then check that account for mail from an `@agentmail.to` address.
+
+## Related
+
+- `/core/send` for the full send contract: recipients, threading, attachments, idempotency
+- `/integrations/mcp-and-skills` for everything the hosted MCP server exposes and the other ways to connect to it
+- `/advanced/webhooks` to act on inbound email the moment it arrives
+- `/integrations/sdks-and-cli` for writing typed tools over the AgentMail SDKs
+
+</Visibility>

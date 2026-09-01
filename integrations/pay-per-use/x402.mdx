@@ -1,0 +1,368 @@
+---
+title: x402
+description: Pay for AgentMail per request from a crypto wallet, with no account or API key.
+---
+
+<Visibility for="humans">
+
+
+<img src="/images/banners/integration-x402.svg" alt="" noZoom />
+Your agent can pay for AgentMail per request over [x402](https://www.x402.org/), an open protocol for HTTP payments. The wallet is the credential: a signed USDC payment authenticates each request, so the agent needs no account, no signup, and no API key.
+
+Paid requests use the regular AgentMail API paths, starting with `/v0`, on dedicated hosts:
+
+| Transport | Host |
+| --- | --- |
+| API | `https://x402.api.agentmail.to` |
+| WebSocket | `wss://x402.ws.agentmail.to` |
+
+Pick this path when your agent already holds a funded wallet. If your application has an AgentMail API key, follow the [Quickstart](/quickstart) and pay through a plan instead. If your agent's wallet is on Tempo, pay over [MPP](/integrations/pay-per-use/mpp).
+
+## 0. Fund a wallet
+
+You need Node.js 18 or later, a wallet private key, and USDC on one of the supported networks:
+
+- Base, Polygon, Avalanche C-Chain, or X Layer with an EVM wallet
+- Solana with a Solana wallet
+
+This walkthrough makes one paid request: creating an inbox costs $2.00 in USDC. Every other call on this page is free.
+
+Put the private key in an environment variable so it stays out of your code:
+
+<CodeGroup>
+
+```bash EVM
+export EVM_PRIVATE_KEY="0x..."
+```
+
+```bash Solana
+export SOLANA_PRIVATE_KEY="<base58-encoded private key>"
+```
+
+</CodeGroup>
+
+## 1. Create a paying client
+
+Install the AgentMail SDK and the x402 client packages for your chain:
+
+<CodeGroup>
+
+```bash EVM
+npm install agentmail @x402/fetch @x402/evm viem
+```
+
+```bash Solana
+npm install agentmail @x402/fetch @x402/svm @solana/kit @scure/base
+```
+
+</CodeGroup>
+
+Create an x402 client, register the payment scheme for your chain, and pass it to `AgentMailClient`. The client selects the x402 hosts automatically. Then make a free call to check that everything works: list your inboxes.
+
+You should get back the list of inboxes this wallet owns. On a first run it is empty.
+
+<CodeGroup>
+
+```typescript EVM
+import { privateKeyToAccount } from "viem/accounts";
+import { x402Client } from "@x402/fetch";
+import { ExactEvmScheme } from "@x402/evm/exact/client";
+import { AgentMailClient } from "agentmail";
+
+const signer = privateKeyToAccount(process.env.EVM_PRIVATE_KEY as `0x${string}`);
+
+const x402 = new x402Client();
+x402.register("eip155:*", new ExactEvmScheme(signer));
+
+const client = new AgentMailClient({ x402 });
+
+const inboxes = await client.inboxes.list();
+console.log(inboxes);
+```
+
+```typescript Solana
+import { createKeyPairSignerFromBytes } from "@solana/kit";
+import { base58 } from "@scure/base";
+import { x402Client } from "@x402/fetch";
+import { toClientSvmSigner } from "@x402/svm";
+import { ExactSvmScheme } from "@x402/svm/exact/client";
+import { AgentMailClient } from "agentmail";
+
+const keypair = await createKeyPairSignerFromBytes(
+  base58.decode(process.env.SOLANA_PRIVATE_KEY as string),
+);
+
+const x402 = new x402Client();
+x402.register("solana:*", new ExactSvmScheme(toClientSvmSigner(keypair)));
+
+const client = new AgentMailClient({ x402 });
+
+const inboxes = await client.inboxes.list();
+console.log(inboxes);
+```
+
+</CodeGroup>
+
+```json Sample response
+{
+  "count": 0,
+  "inboxes": []
+}
+```
+
+Listing is free, but the response still proves the whole payment loop ran: the host answered with a `402 Payment Required` challenge quoting a zero-amount payment, and the client signed it and retried. That signature is how AgentMail knows which wallet is calling, which is why the list contains only inboxes your wallet created.
+
+<Accordion title="Troubleshooting">
+- **An unfunded Solana wallet fails with `transaction_simulation_failed`.** On Solana the payment transaction is simulated on chain even when the amount is zero, so the wallet's USDC account must exist before the first call. An EVM wallet can make free calls before it is funded.
+</Accordion>
+
+## 2. Test creating an inbox with a paid request
+
+The price is $2.00 in USDC today, and [step 4](#4-check-a-price-before-you-pay) shows how to read the current price of any endpoint before you pay it.
+
+By default the x402 client refuses to sign any payment above $1. Raise its per-payment cap to cover the price, then create the inbox. Pick your own `username`, or omit it and AgentMail generates one.
+
+You should get back the new address. That means the wallet paid and the inbox exists.
+
+```typescript
+x402.setSpendControls({ maxAmountPerPayment: "$2" });
+
+const inbox = await client.inboxes.create({
+  username: "wallet-agent",
+});
+console.log(inbox.inboxId);
+```
+
+This is the same loop as step 1 at a real price: the host answered the create with a `402` challenge, the client signed a $2.00 USDC payment from your wallet, and the request was retried with the payment attached. The payment is verified before AgentMail processes the request.
+
+```json Sample response
+{
+  "organization_id": "7c9e4d2a-1f3b-4e5c-9a8d-6b7f2c1e0d4a",
+  "pod_id": "7c9e4d2a-1f3b-4e5c-9a8d-6b7f2c1e0d4a",
+  "inbox_id": "wallet-agent@agentmail.to",
+  "email": "wallet-agent@agentmail.to",
+  "created_at": "2026-08-25T10:31:47Z",
+  "updated_at": "2026-08-25T10:31:47Z"
+}
+```
+
+Save the `inbox_id`. You will subscribe to it in the next step. The wallet that paid for the create owns the inbox, so every later request that acts on it must be signed by the same key.
+
+Usernames are first come, first served, and omitting `username` always works.
+
+<Accordion title="Troubleshooting">
+- **`403` with `resource_taken` or `already_exists` on the create.** The `username` is unavailable: `resource_taken` means it is owned by a different organization than yours, `already_exists` means it is already owned by your own organization. Both errors list up to three currently available variants of the name in `suggestions`, so your agent can pick one and retry.
+</Accordion>
+
+## 3. Test receiving events over the WebSocket
+
+Subscribe to the inbox you created, then send it an email from your personal account.
+
+You should see a `subscribed` event naming your inbox first, then a `message.received` event carrying the email you sent.
+
+```typescript
+const socket = await client.websockets.connect();
+
+socket.on("message", (event) => {
+  if (event.type === "subscribed") {
+    console.log("Subscribed to", event.inboxIds);
+  }
+  if (event.type === "event" && event.eventType === "message.received") {
+    console.log("From:", event.message.from);
+    console.log("Subject:", event.message.subject);
+  }
+});
+
+socket.sendSubscribe({
+  type: "subscribe",
+  inboxIds: [inbox.inboxId],
+});
+```
+
+Connecting is free. `connect()` fetches a zero-amount challenge from the WebSocket host, signs it with the same wallet, and attaches the credentials to the connection. Keep the process running while you wait. The email normally arrives within a couple of seconds of sending.
+
+## 4. Check a price before you pay
+
+Every endpoint quotes its own price. Send a request with no payment attached and decode the `payment-required` header on the `402` response, which is base64-encoded JSON:
+
+```bash
+curl -s -o /dev/null -D - -X POST https://x402.api.agentmail.to/v0/inboxes \
+  | grep -i "^payment-required:" \
+  | cut -d " " -f 2 \
+  | tr -d "\r" \
+  | base64 -d
+```
+
+The challenge lists one entry per supported network under `accepts`, each quoting the same price:
+
+```json Decoded challenge (trimmed to one network)
+{
+  "x402Version": 2,
+  "error": "Payment required",
+  "accepts": [
+    {
+      "scheme": "exact",
+      "network": "eip155:8453",
+      "amount": "2000000",
+      "asset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+      "payTo": "0x6e3184C204e596dED89E8A5693B602097F4Ab687",
+      "maxTimeoutSeconds": 300
+    }
+  ]
+}
+```
+
+`amount` is the price in USDC atomic units with six decimals, so `2000000` is $2.00. The challenge is the authoritative price: what it quotes at request time is what the client pays. Use it to decide the spend cap you set in step 2.
+
+Free endpoints answer the same way with an `amount` of `"0"`. Probe `GET /v0/inboxes` with the same pipeline to see one.
+
+<Accordion title="Troubleshooting">
+
+- **Paying from an unfunded wallet.** A `402` error after the client signed the payment means the payment failed verification (usually, the wallet holds no USDC on the selected network, which reads `invalid_exact_evm_insufficient_balance`). Fund the wallet and retry. The request was not processed.
+- **Signing with a different wallet than the one that created the inbox.** A request that names an inbox owned by another wallet returns a `403` with the message `This wallet does not own the requested resource.` Ownership follows the wallet, so use the same private key across a workflow.
+- **Overriding the base URL.** With `{ x402 }` the client picks the x402 hosts automatically, so leave `baseUrl` and `environment` unset. The regular `api.agentmail.to` host authenticates with API keys and answers wallet-paid requests with `401` instead of a payment challenge.
+
+</Accordion>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Send email" icon="paper-plane" href="/core/send">
+    Start sending from the inbox your wallet just paid for.
+  </Card>
+  <Card title="WebSockets" icon="bolt" href="/advanced/websockets">
+    Every event type the socket can stream, and how to subscribe to more scopes.
+  </Card>
+</CardGroup>
+
+</Visibility>
+
+<Visibility for="agents">
+
+# Pay for AgentMail per request over x402
+
+x402 is an open protocol for HTTP payments. An agent with a funded wallet pays for each AgentMail API call with a signed USDC payment, so it needs no account, no signup, and no API key. Use this when the agent holds USDC on Base, Polygon, Avalanche C-Chain, X Layer, or Solana.
+
+## Do this
+
+Requires Node.js 18 or later and a wallet holding USDC on a supported network. The inbox create below is the one paid request, at $2.00 in USDC. Every other call here is free.
+
+```bash
+npm install agentmail @x402/fetch @x402/evm viem
+export EVM_PRIVATE_KEY="0x..."
+```
+
+```typescript
+import { privateKeyToAccount } from "viem/accounts";
+import { x402Client } from "@x402/fetch";
+import { ExactEvmScheme } from "@x402/evm/exact/client";
+import { AgentMailClient } from "agentmail";
+
+const signer = privateKeyToAccount(process.env.EVM_PRIVATE_KEY as `0x${string}`);
+
+const x402 = new x402Client();
+x402.register("eip155:*", new ExactEvmScheme(signer));
+
+// Selects the x402 hosts automatically. Leave baseUrl and environment unset.
+const client = new AgentMailClient({ x402 });
+
+// Free call. Proves the whole loop: 402 challenge, signed, retried.
+const inboxes = await client.inboxes.list();
+console.log(inboxes); // { count: 0, inboxes: [] } on a first run
+
+// Paid call, $2.00 USDC. The default cap refuses payments above $1, raise it first.
+x402.setSpendControls({ maxAmountPerPayment: "$2" });
+const inbox = await client.inboxes.create({ username: "wallet-agent" });
+console.log(inbox.inboxId);
+
+// Free connection, signed by the same wallet.
+const socket = await client.websockets.connect();
+socket.on("message", (event) => {
+  if (event.type === "subscribed") console.log("Subscribed to", event.inboxIds);
+  if (event.type === "event" && event.eventType === "message.received") {
+    console.log("From:", event.message.from, "Subject:", event.message.subject);
+  }
+});
+socket.sendSubscribe({ type: "subscribe", inboxIds: [inbox.inboxId] });
+```
+
+Read any endpoint's price before paying. Send a request with no payment and decode the base64 `payment-required` header on the `402` response:
+
+```bash
+curl -s -o /dev/null -D - -X POST https://x402.api.agentmail.to/v0/inboxes \
+  | grep -i "^payment-required:" \
+  | cut -d " " -f 2 \
+  | tr -d "\r" \
+  | base64 -d
+```
+
+## SDK
+
+TypeScript only. Install for the wallet's chain:
+
+```bash
+npm install agentmail @x402/fetch @x402/evm viem                      # EVM
+npm install agentmail @x402/fetch @x402/svm @solana/kit @scure/base   # Solana
+```
+
+- Register an EVM signer: `x402.register("eip155:*", new ExactEvmScheme(signer))` with a signer from `privateKeyToAccount` in `viem/accounts`.
+- Register a Solana signer: `x402.register("solana:*", new ExactSvmScheme(toClientSvmSigner(keypair)))` with a keypair from `createKeyPairSignerFromBytes(base58.decode(...))`.
+- Pay per request: `new AgentMailClient({ x402 })`.
+- Raise the payment cap: `x402.setSpendControls({ maxAmountPerPayment: "$2" })`.
+- List inboxes, free: `client.inboxes.list()`.
+- Create an inbox, $2.00: `client.inboxes.create({ username: "wallet-agent" })`.
+- Receive events, free: `client.websockets.connect()`, then `socket.sendSubscribe({ type: "subscribe", inboxIds: [...] })`.
+
+More SDK surface: `/integrations/sdks-and-cli`.
+
+## Facts
+
+- API host `https://x402.api.agentmail.to`, WebSocket host `wss://x402.ws.agentmail.to`. Paths are the regular AgentMail API paths starting with `/v0`.
+- The wallet is the credential. Every request, free ones included, carries a wallet signature, and the signature determines which inboxes the caller sees and owns.
+- Supported networks: Base, Polygon, Avalanche C-Chain, and X Layer with an EVM wallet, Solana with a Solana wallet. All payments are in USDC.
+- Creating an inbox costs $2.00 in USDC. Listing inboxes, WebSocket connections, and unpaid price probes are free.
+- The x402 client refuses to sign any payment above $1 by default. `x402.setSpendControls({ maxAmountPerPayment: "$2" })` must run before a $2.00 inbox create can succeed.
+- A request with no payment attached returns `402` with a base64-encoded JSON `payment-required` header. `accepts` lists one entry per supported network, all quoting the same price.
+- `amount` in a challenge is USDC atomic units with 6 decimals, so `2000000` is $2.00. Free endpoints quote `"0"`. The challenge at request time is the authoritative price.
+- Challenge values on Base (`eip155:8453`): `x402Version` `2`, `scheme` `"exact"`, `asset` `0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913`, `payTo` `0x6e3184C204e596dED89E8A5693B602097F4Ab687`, `maxTimeoutSeconds` `300`.
+- The wallet that pays `POST /v0/inboxes` owns the inbox. Every later request on that inbox must be signed by the same private key. `GET /v0/inboxes` lists only inboxes the calling wallet created.
+- Payment is verified before AgentMail processes the request. A request whose payment fails verification is never processed.
+- On Solana the payment transaction is simulated on chain even at zero amount, so the wallet's USDC account must exist before the first call. An EVM wallet can make free calls before it is funded.
+- `username` on `POST /v0/inboxes` is optional and first come, first served. Omitting `username` always works, AgentMail generates one.
+
+## Not supported
+
+- No API keys and no accounts on the x402 hosts. The regular `api.agentmail.to` host authenticates with API keys and answers wallet-paid requests with `401` instead of a payment challenge.
+- Do not set `baseUrl` or `environment` when passing `{ x402 }` to `AgentMailClient`. The client picks the x402 hosts itself.
+- Tempo wallets cannot pay over x402. Pay over MPP instead: `/integrations/pay-per-use/mpp`.
+- The direction is agent pays AgentMail. This page defines no flow where AgentMail or an inbox pays the agent's wallet.
+- The paying client is TypeScript on Node.js 18 or later. The page shows no client in any other language.
+
+## Errors
+
+| Error | Status | Cause | Fix |
+| --- | --- | --- | --- |
+| `invalid_exact_evm_insufficient_balance` | 402 | Payment failed verification, the wallet holds no USDC on the selected network. The request was not processed. | Fund the wallet, then retry. |
+| `transaction_simulation_failed` | - | The Solana wallet's USDC account does not exist yet. | Create and fund the wallet's USDC account before the first call. |
+| `resource_taken` | 403 | The `username` is owned by a different organization. | Pick one of the up to 3 names in `suggestions`, or omit `username`. |
+| `already_exists` | 403 | The `username` is already owned by the calling wallet's own organization. | Pick one of the up to 3 names in `suggestions`, or omit `username`. |
+| `This wallet does not own the requested resource.` | 403 | The request names an inbox owned by another wallet. | Sign with the private key that created the inbox. |
+
+## Verify
+
+Run the free list call with the paying client:
+
+```typescript
+console.log(await client.inboxes.list());
+```
+
+Expect `{ "count": 0, "inboxes": [] }` on a first run. Any successful response proves the loop: the host answered with a zero-amount `402` challenge and the client signed it and retried.
+
+## Related
+
+- `/integrations/pay-per-use/mpp` - pay per request from a Tempo wallet instead.
+- `/core/send` - send from the inbox the wallet paid for.
+- `/advanced/websockets` - every event type the socket can stream and how to subscribe to more scopes.
+- `/quickstart` - authenticate with an API key and pay through a plan instead.
+
+</Visibility>

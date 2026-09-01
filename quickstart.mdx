@@ -1,36 +1,75 @@
 ---
 title: Quickstart
-description: Create an inbox, send a message to it, then reply on the same thread.
+description: Create an inbox, start sending, receiving, and replying to emails.
 ---
 
 <Visibility for="humans">
 
-Create an inbox, send a test message to it, read the message, and reply on its thread.
 
-All API requests use `https://api.agentmail.to/v0` and `Authorization: Bearer <API_KEY>`.
+<img src="/images/banners/start-quickstart.svg" alt="" noZoom />
+By the end of this page, your agent will have its own `@agentmail.to` email inbox to send and receive emails.
 
-## Before you begin
+## 0. Get an API Key
 
-You need an account and API key. Get one from the [Introduction](./introduction#create-an-account-and-api-key), then set these variables.
+Generate an API Key from the [AgentMail Console](https://console.agentmail.to/dashboard/api-keys):
+
+![Creating an API key in the AgentMail Console](/images/api-key-creation.png)
+
+Set it as an environment variable:
 
 ```bash
 export AGENTMAIL_API_KEY="<API_KEY>"
-export AGENTMAIL_BASE_URL="https://api.agentmail.to/v0"
+export AGENTMAIL_BASE_URL="https://api.agentmail.to"
 ```
 
-## Install and authenticate
+### Or sign up from the CLI
+Put your own email address in and you'll get a 6-digit code to verify.
 
-Use the CLI for this walkthrough. `curl`, TypeScript, and Python use the same API.
+Until you verify, the inbox can only send to that one address, so an agent signing itself up should start by emailing its human to ask for the code.
+
+```bash
+npm install -g agentmail-cli
+
+agentmail agent sign-up \
+  --human-email "you@example.com" \
+  --username "my-agent"
+
+export AGENTMAIL_API_KEY="<api_key from the response>"
+agentmail agent verify --otp-code "<6-digit code>"
+```
+
+Sign-up returns your credentials and an `instructions` field written for the agent doing the setup. The `api_key` is not shown again, so store it before anything else (values below abridged):
+
+```json Sample response
+{
+  "api_key": "am_us_1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b",
+  "inbox_id": "my-agent@agentmail.to",
+  "email": "my-agent@agentmail.to",
+  "organization_id": "1a2b3c4d-5e6f-4a1b-8c2d-3e4f5a6b7c8d",
+  "instructions": "Store the api_key now; it is not shown again. Until you verify, this inbox can send only to you@example.com. Email your human there for the 6-digit code, then run: agentmail agent verify --otp-code <code> ..."
+}
+```
+
+<Accordion title="Troubleshooting">
+
+- **The code expired.** The 6-digit code is valid for 24 hours. Once it expires, run `agentmail agent sign-up` again for a fresh one.
+- **Too many wrong attempts.** Verification locks after 10 wrong codes. Sign up again to restart.
+
+</Accordion>
+
+## 1. Install and authenticate
+
+You can use AgentMail with the CLI, the API, or the TypeScript and Python SDKs. Install one and make a first call to check that your key works.
 
 <CodeGroup>
 
 ```bash CLI
 npm install -g agentmail-cli
-agentmail auth me
+agentmail inboxes list
 ```
 
-```bash curl
-curl "$AGENTMAIL_BASE_URL/auth/me" \
+```bash API
+curl "$AGENTMAIL_BASE_URL/v0/auth/me" \
   -H "Authorization: Bearer $AGENTMAIL_API_KEY"
 ```
 
@@ -38,59 +77,60 @@ curl "$AGENTMAIL_BASE_URL/auth/me" \
 // npm install agentmail
 import { AgentMailClient } from "agentmail";
 
-const client = new AgentMailClient({ apiKey: process.env.AGENTMAIL_API_KEY });
+const client = new AgentMailClient(); // reads AGENTMAIL_API_KEY
 console.log(await client.auth.me());
 ```
 
 ```python Python
 # pip install agentmail
-import os
 from agentmail import AgentMail
 
-client = AgentMail(api_key=os.environ["AGENTMAIL_API_KEY"])
+client = AgentMail()  # reads AGENTMAIL_API_KEY
 print(client.auth.me())
 ```
 
 </CodeGroup>
 
-A successful organization-scoped key returns this shape. `scope_id` is the id of the key's scope.
+<Accordion title="Troubleshooting">
 
-```json Sample response
-{
-  "scope_type": "organization",
-  "scope_id": "<organization_id>",
-  "organization_id": "<organization_id>",
-  "api_key_id": "<api_key_id>"
-}
-```
+- **`401 Unauthorized`.** The API key is missing or invalid. Export a valid key and send it as `Authorization: Bearer $AGENTMAIL_API_KEY`.
+- **`404 Not Found`.** The request URL is incorrect, usually a doubled `/v0`: the CLI and SDKs add the prefix themselves, so `AGENTMAIL_BASE_URL` must be the bare host `https://api.agentmail.to`.
 
-`401` means the key is missing or invalid. `404` usually means the base URL is missing `/v0`.
+</Accordion>
 
-## Create an inbox
+## 2. Create an inbox
 
-An **inbox** has an address-like `inbox_id`. The request body is optional; `display_name` helps identify this inbox later.
+An inbox is an email address your agent owns. It can receive mail sent to that address and send mail from it. One inbox is all you need for this walkthrough.
+
+You can set these fields when creating an inbox:
+
+| Field | Required | What it does |
+| --- | --- | --- |
+| `username` | Optional | The local part of the address (`<username>@agentmail.to`). Omit it and AgentMail generates one. |
+| `display_name` | Optional | A human-readable label shown on the inbox and as the "from" name on messages it sends. |
 
 <CodeGroup>
 
 ```bash CLI
-agentmail inboxes create \
-  --display-name "Quickstart inbox"
+agentmail inboxes create --display-name "Support agent"
 ```
 
-```bash curl
-curl -X POST "$AGENTMAIL_BASE_URL/inboxes" \
+```bash API
+curl -X POST "$AGENTMAIL_BASE_URL/v0/inboxes" \
   -H "Authorization: Bearer $AGENTMAIL_API_KEY" \
   -H "Content-Type: application/json" \
-  -d '{ "display_name": "Quickstart inbox" }'
+  -d '{ "display_name": "Support agent" }'
 ```
 
 ```typescript TypeScript
-const inbox = await client.inboxes.create({ displayName: "Quickstart inbox" });
+const inbox = await client.inboxes.create({ displayName: "Support agent" });
 console.log(inbox.inboxId);
 ```
 
 ```python Python
-inbox = client.inboxes.create(display_name="Quickstart inbox")
+from agentmail.inboxes import CreateInboxRequest
+
+inbox = client.inboxes.create(request=CreateInboxRequest(display_name="Support agent"))
 print(inbox.inbox_id)
 ```
 
@@ -100,47 +140,75 @@ Without a `username`, AgentMail generates one on the `agentmail.to` domain:
 
 ```json Sample response
 {
-  "pod_id": "<pod_id>",
-  "inbox_id": "<generated-username>@agentmail.to",
-  "email": "<generated-username>@agentmail.to",
-  "display_name": "Quickstart inbox",
-  "created_at": "2026-07-13T09:15:04Z",
-  "updated_at": "2026-07-13T09:15:04Z"
+  "organization_id": "1a2b3c4d-5e6f-4a1b-8c2d-3e4f5a6b7c8d",
+  "pod_id": "1a2b3c4d-5e6f-4a1b-8c2d-3e4f5a6b7c8d",
+  "inbox_id": "faircost773@agentmail.to",
+  "email": "faircost773@agentmail.to",
+  "display_name": "Support agent",
+  "created_at": "2026-08-23T09:26:01Z",
+  "updated_at": "2026-08-23T09:26:01Z"
 }
 ```
 
-Save `inbox_id`. It is the inbox email address and is used in the remaining requests.
+Save two fields from the response:
 
-## Send a test message
+- **`inbox_id`** is what you pass to API calls. You will send from it in the next step and reply from it later.
+- **`email`** is the inbox's address. It is where you will send a test email in step 4.
 
-Send a **message** to the inbox you created. Use `text`, not `body`. The endpoint is `POST /v0/inboxes/{inbox_id}/messages/send`.
+<Accordion title="Troubleshooting">
+
+Usernames are first come, first served. If the `username` is unavailable, this call returns a `403` with either of these codes:
+
+- `resource_taken` if the username is owned by a different organization than yours
+- `already_exists` if it is already owned by your own organization
+
+Both errors list up to three currently available variants of the name you asked for in `suggestions`, so your agent can pick one and retry:
+
+```json 403 Sample response
+{
+  "name": "IsTakenError",
+  "code": "resource_taken",
+  "message": "Inbox is taken",
+  "fix": "The requested inbox is already in use. Retry with a different value — these usernames are currently available: support-agent27, support-agent-harbor, support-agent803.",
+  "suggestions": ["support-agent27", "support-agent-harbor", "support-agent803"],
+  "docs": "https://docs.agentmail.to/errors#resource_taken"
+}
+```
+
+</Accordion>
+
+## 3. Test sending emails
+
+Send an email from your new inbox to the email account you use every day (Gmail, Outlook, or any client). Give it a subject and a line of text.
+
+You should find this email in that account moments later, sent from your agent's address.
 
 <CodeGroup>
 
 ```bash CLI
 agentmail inboxes:messages send \
   --inbox-id "<inbox_id>" \
-  --to "<inbox_id>" \
-  --subject "Hello from the quickstart" \
-  --text "This is a test message."
+  --to "you@example.com" \
+  --subject "Hello from my agent" \
+  --text "First email from my agent."
 ```
 
-```bash curl
-curl -X POST "$AGENTMAIL_BASE_URL/inboxes/<inbox_id>/messages/send" \
+```bash API
+curl -X POST "$AGENTMAIL_BASE_URL/v0/inboxes/<inbox_id>/messages/send" \
   -H "Authorization: Bearer $AGENTMAIL_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
-    "to": "<inbox_id>",
-    "subject": "Hello from the quickstart",
-    "text": "This is a test message."
+    "to": "you@example.com",
+    "subject": "Hello from my agent",
+    "text": "First email from my agent."
   }'
 ```
 
 ```typescript TypeScript
 const sent = await client.inboxes.messages.send("<inbox_id>", {
-  to: "<inbox_id>",
-  subject: "Hello from the quickstart",
-  text: "This is a test message.",
+  to: "you@example.com",
+  subject: "Hello from my agent",
+  text: "First email from my agent.",
 });
 console.log(sent.messageId, sent.threadId);
 ```
@@ -148,25 +216,41 @@ console.log(sent.messageId, sent.threadId);
 ```python Python
 sent = client.inboxes.messages.send(
     inbox_id="<inbox_id>",
-    to="<inbox_id>",
-    subject="Hello from the quickstart",
-    text="This is a test message.",
+    to="you@example.com",
+    subject="Hello from my agent",
+    text="First email from my agent.",
 )
 print(sent.message_id, sent.thread_id)
 ```
 
 </CodeGroup>
 
+The send returns the new message's `message_id` and the `thread_id` of the conversation it starts. You'll use this to reply or follow-up in the same email thread.
+
 ```json Sample response
 {
-  "message_id": "<message_id>",
-  "thread_id": "<thread_id>"
+  "message_id": "<010001a02e069a11-3c52b1de-91f7-4d02-b1cd-6a2e40c3f7aa-000000@email.amazonses.com>",
+  "thread_id": "7d54a1cf-20b8-4e19-9d63-52c40a8e2b91"
 }
 ```
 
-## Find the received message
+In your agent's inbox, the message you sent carries the `sent` label when you list messages.
 
-List the inbox messages. Delivery can take a moment.
+<Note>
+Mail from an `@agentmail.to` address carries a short "Sent via AgentMail" footer on the Free and Agent plans, so you'll see one on this email. A [custom domain](/advanced/custom-domains) or a paid plan sends without it.
+</Note>
+
+<Accordion title="Troubleshooting">
+
+- **Using `body` instead of `text`.** The send and reply endpoints accept `text` and/or `html`. Replace `body` with `text`.
+
+</Accordion>
+
+## 4. Test receiving emails
+
+Open your normal email account (Gmail, Outlook, or any client) and send an email to the address in your new inbox's `email` field, for example `faircost773@agentmail.to`. Give it a subject and a line of text.
+
+You should find this email up top when you list all messages in your inbox.
 
 <CodeGroup>
 
@@ -175,8 +259,8 @@ agentmail inboxes:messages list \
   --inbox-id "<inbox_id>"
 ```
 
-```bash curl
-curl "$AGENTMAIL_BASE_URL/inboxes/<inbox_id>/messages" \
+```bash API
+curl "$AGENTMAIL_BASE_URL/v0/inboxes/<inbox_id>/messages" \
   -H "Authorization: Bearer $AGENTMAIL_API_KEY"
 ```
 
@@ -195,35 +279,119 @@ for message in messages.messages:
 
 </CodeGroup>
 
-Messages are returned newest first. Unset optional fields are absent; `next_page_token` appears only when another page exists.
+Delivery usually completes within about two seconds, so listing right after you send normally shows the message.
+
+Messages come back newest first. The email you sent carries the `received` label, and its `from` is your own address:
 
 ```json Sample response
 {
   "count": 1,
   "messages": [
     {
-      "inbox_id": "<inbox_id>",
-      "thread_id": "<thread_id>",
-      "message_id": "<message_id>",
-      "labels": ["received"],
-      "timestamp": "2026-07-13T09:16:11Z",
-      "from": "<inbox_id>",
-      "to": ["<inbox_id>"],
-      "subject": "Hello from the quickstart",
-      "preview": "This is a test message.",
-      "size": 1024,
-      "created_at": "2026-07-13T09:16:11Z",
-      "updated_at": "2026-07-13T09:16:11Z"
+      "inbox_id": "faircost773@agentmail.to",
+      "thread_id": "3368f82c-77e7-4cb1-8071-bbf3597c8af2",
+      "message_id": "<010001a02e0497eb-fa6483d8-4007-4a83-b2e9-f2f363e1e07e-000000@email.amazonses.com>",
+      "labels": ["received", "unread"],
+      "timestamp": "2026-08-23T09:47:28Z",
+      "from": "You <you@example.com>",
+      "to": ["faircost773@agentmail.to"],
+      "subject": "Hello AgentMail",
+      "preview": "Testing my new agent inbox.",
+      "size": 4619,
+      "created_at": "2026-08-23T09:47:28Z",
+      "updated_at": "2026-08-23T09:47:28Z"
     }
   ]
 }
 ```
 
-Use the returned `message_id` for the reply. `thread_id` identifies the conversation containing both messages.
+The list returns a preview of each message. To read the full body, get the message by its `message_id`:
 
-## Reply on the thread
+<CodeGroup>
 
-A reply targets `message_id`, not `thread_id`: `POST /v0/inboxes/{inbox_id}/messages/{message_id}/reply`.
+```bash CLI
+agentmail inboxes:messages get \
+  --inbox-id "<inbox_id>" \
+  --message-id "<message_id>"
+```
+
+```bash API
+curl "$AGENTMAIL_BASE_URL/v0/inboxes/<inbox_id>/messages/<message_id>" \
+  -H "Authorization: Bearer $AGENTMAIL_API_KEY"
+```
+
+```typescript TypeScript
+const message = await client.inboxes.messages.get("<inbox_id>", "<message_id>");
+console.log(message.text);
+```
+
+```python Python
+message = client.inboxes.messages.get(inbox_id="<inbox_id>", message_id="<message_id>")
+print(message.text)
+```
+
+</CodeGroup>
+
+```json Sample response
+{
+  "inbox_id": "faircost773@agentmail.to",
+  "thread_id": "3368f82c-77e7-4cb1-8071-bbf3597c8af2",
+  "message_id": "<010001a02e0497eb-fa6483d8-4007-4a83-b2e9-f2f363e1e07e-000000@email.amazonses.com>",
+  "labels": ["received", "unread"],
+  "from": "You <you@example.com>",
+  "to": ["faircost773@agentmail.to"],
+  "subject": "Hello AgentMail",
+  "text": "Testing my new agent inbox.",
+  "timestamp": "2026-08-23T09:47:28Z"
+}
+```
+
+<Accordion title="Troubleshooting">
+
+- **The email is not in the list.** Delivery usually completes within about two seconds. Wait a second and list again.
+- **You emailed the inbox from itself.** An inbox cannot mail its own address. Send from a different account, such as your personal email, so the message arrives as a received message.
+- **The get by `message_id` fails.** A `message_id` contains `<`, `>`, and `@`. When you put it in an API URL by hand, URL-encode it. The SDKs and CLI handle this for you.
+
+</Accordion>
+
+## 5. Test replying to an email
+
+You will need the received email's `message_id`.
+
+This is different from its `thread_id`:
+
+- **`message_id`** identifies one individual message: the one that arrived, or the reply. Every message has its own.
+- **`thread_id`** identifies the conversation that groups those messages together. The received message and your reply share the same `thread_id`.
+
+Fetching the [whole thread](/core/conversations) by its `thread_id` gives your agent the full conversation context in one call, instead of getting messages one by one. Messages come back oldest first, so the last element is the newest:
+
+<CodeGroup>
+
+```bash CLI
+agentmail threads get \
+  --thread-id "<thread_id>"
+```
+
+```bash API
+curl "$AGENTMAIL_BASE_URL/v0/threads/<thread_id>" \
+  -H "Authorization: Bearer $AGENTMAIL_API_KEY"
+```
+
+```typescript TypeScript
+const thread = await client.threads.get("<thread_id>");
+const newest = thread.messages[thread.messages.length - 1];
+console.log(newest.extractedText ?? newest.text);
+```
+
+```python Python
+thread = client.threads.get(thread_id="<thread_id>")
+newest = thread.messages[-1]
+print(newest.extracted_text or newest.text)
+```
+
+</CodeGroup>
+
+Now send the reply. It only needs the `message_id` of the message you are answering:
 
 <CodeGroup>
 
@@ -231,21 +399,21 @@ A reply targets `message_id`, not `thread_id`: `POST /v0/inboxes/{inbox_id}/mess
 agentmail inboxes:messages reply \
   --inbox-id "<inbox_id>" \
   --message-id "<message_id>" \
-  --text "Got it, replying from the quickstart."
+  --text "Thanks, got your message."
 ```
 
-```bash curl
-curl -X POST "$AGENTMAIL_BASE_URL/inboxes/<inbox_id>/messages/<message_id>/reply" \
+```bash API
+curl -X POST "$AGENTMAIL_BASE_URL/v0/inboxes/<inbox_id>/messages/<message_id>/reply" \
   -H "Authorization: Bearer $AGENTMAIL_API_KEY" \
   -H "Content-Type: application/json" \
-  -d '{ "text": "Got it, replying from the quickstart." }'
+  -d '{ "text": "Thanks, got your message." }'
 ```
 
 ```typescript TypeScript
 const reply = await client.inboxes.messages.reply(
   "<inbox_id>",
   "<message_id>",
-  { text: "Got it, replying from the quickstart." },
+  { text: "Thanks, got your message." },
 );
 console.log(reply.messageId, reply.threadId);
 ```
@@ -254,276 +422,185 @@ console.log(reply.messageId, reply.threadId);
 reply = client.inboxes.messages.reply(
     inbox_id="<inbox_id>",
     message_id="<message_id>",
-    text="Got it, replying from the quickstart.",
+    text="Thanks, got your message.",
 )
 print(reply.message_id, reply.thread_id)
 ```
 
 </CodeGroup>
 
-The reply returns a new `message_id` and the original `thread_id`, using the same response shape as send. List the inbox again. Two messages with one `thread_id` confirm the loop worked.
+The reply returns a new `message_id` and the same `thread_id` as the message it answered:
 
-## Common mistakes
+```json Sample response
+{
+  "message_id": "<010001a02e05056f-80067f0e-aa54-4e6a-a490-18a590095f40-000000@email.amazonses.com>",
+  "thread_id": "3368f82c-77e7-4cb1-8071-bbf3597c8af2"
+}
+```
 
-**Missing `/v0` in the base URL.** Requests return `404 Not Found`. Set `AGENTMAIL_BASE_URL` to exactly `https://api.agentmail.to/v0`.
+<Accordion title="Troubleshooting">
 
-**Using `body` instead of `text`.** The send and reply APIs accept `text` and/or `html`. Replace `body` with `text`.
+- **Replying from a different inbox.** Reply from the same `inbox_id` that received the email.
+- **The raw `message_id` in the URL.** The reply path contains the received message's `message_id`. URL-encode it here too when calling the API by hand.
+
+</Accordion>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Receive email" icon="inbox" href="/core/receive">
+    Everything your agent can do with incoming mail: list, read, filter, attachments.
+  </Card>
+  <Card title="Use a custom domain" icon="globe" href="/advanced/custom-domains">
+    Send from your own domain instead of `@agentmail.to`.
+  </Card>
+</CardGroup>
 
 </Visibility>
 
 <Visibility for="agents">
 
-# Create an AgentMail account when needed, then create an inbox and verify a send, receive, and reply loop
+# Send, receive, and reply to email with an AgentMail inbox
 
-Use the CLI for this walkthrough. `curl`, TypeScript, and Python call the same API. Standard API requests use `https://api.agentmail.to/v0` and `Authorization: Bearer <API_KEY>`.
+Provision an API key, create an `@agentmail.to` inbox, send mail from it, receive mail into it, and reply on the same thread. Run this walkthrough first to prove the full email loop before building anything else on AgentMail.
 
-## Obtain an API key when you do not have one
+## Do this
 
-Create an organization, inbox, and API key with the unauthenticated agent signup endpoint. This endpoint has **no `/v0` prefix**.
+1. Create an API key in the AgentMail Console at `https://console.agentmail.to/dashboard/api-keys`, then export it:
 
-<CodeGroup>
+   ```bash
+   export AGENTMAIL_API_KEY="<API_KEY>"
+   export AGENTMAIL_BASE_URL="https://api.agentmail.to"
+   ```
 
-```bash CLI
-agentmail agent sign-up \
-  --human-email "<owner@example.com>" \
-  --username "my-agent"
-```
+2. Confirm the key works:
 
-```bash curl
-curl -X POST "https://api.agentmail.to/agent/sign-up" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "human_email": "<owner@example.com>",
-    "username": "my-agent"
-  }'
-```
+   ```bash
+   curl "$AGENTMAIL_BASE_URL/v0/auth/me" \
+     -H "Authorization: Bearer $AGENTMAIL_API_KEY"
+   ```
 
-</CodeGroup>
+3. Create an inbox. From the response, save `inbox_id` (passed to every call below) and `email` (the address the inbox receives at):
 
-Store `api_key` immediately. It cannot be retrieved again. `inbox_id` is the new inbox address.
+   ```bash
+   curl -X POST "$AGENTMAIL_BASE_URL/v0/inboxes" \
+     -H "Authorization: Bearer $AGENTMAIL_API_KEY" \
+     -H "Content-Type: application/json" \
+     -d '{ "display_name": "Support agent" }'
+   ```
 
-```json Sample response
-{
-  "organization_id": "<organization_id>",
-  "inbox_id": "my-agent@agentmail.to",
-  "api_key": "<api_key>"
-}
-```
+4. Send a test email from the inbox to an external address you can read. The response returns the new `message_id` and the `thread_id` of the conversation it starts:
 
-A six-digit OTP is sent to `human_email`. Obtain the code from the human, then verify the organization. This endpoint also has no `/v0` prefix.
+   ```bash
+   curl -X POST "$AGENTMAIL_BASE_URL/v0/inboxes/<inbox_id>/messages/send" \
+     -H "Authorization: Bearer $AGENTMAIL_API_KEY" \
+     -H "Content-Type: application/json" \
+     -d '{
+       "to": "you@example.com",
+       "subject": "Hello from my agent",
+       "text": "First email from my agent."
+     }'
+   ```
 
-<CodeGroup>
+5. From that external account, send an email to the inbox address in `email`. Then list messages, newest first. The incoming email carries the `received` label. Save its `message_id`:
 
-```bash CLI
-agentmail agent verify \
-  --otp-code "<6-digit code>"
-```
+   ```bash
+   curl "$AGENTMAIL_BASE_URL/v0/inboxes/<inbox_id>/messages" \
+     -H "Authorization: Bearer $AGENTMAIL_API_KEY"
+   ```
 
-```bash curl
-curl -X POST "https://api.agentmail.to/agent/verify" \
-  -H "Content-Type: application/json" \
-  -d '{ "otp_code": "<6-digit code>" }'
-```
+6. The list holds previews only. Read the full body with a get by `message_id`. URL-encode the `message_id`, the raw value contains `<`, `>`, and `@`:
 
-</CodeGroup>
+   ```bash
+   curl "$AGENTMAIL_BASE_URL/v0/inboxes/<inbox_id>/messages/<message_id>" \
+     -H "Authorization: Bearer $AGENTMAIL_API_KEY"
+   ```
 
-```json Sample response
-{ "verified": true }
-```
+7. For full conversation context in one call, fetch the whole thread by the `thread_id` from any message, send response, or webhook. Messages come back oldest first:
 
-Re-running signup is safe only before verification: it rotates the API key and resends the OTP. Once verified, signup returns HTTP `403` because the organization already exists. Sign in, then reuse or rotate an existing API key.
+   ```bash
+   curl "$AGENTMAIL_BASE_URL/v0/threads/<thread_id>" \
+     -H "Authorization: Bearer $AGENTMAIL_API_KEY"
+   ```
 
-## Authenticate
+8. Reply from the same `inbox_id` that received the email. The response returns a new `message_id` and the same `thread_id` as the message it answered:
 
-Set the key returned by signup, or an existing key:
+   ```bash
+   curl -X POST "$AGENTMAIL_BASE_URL/v0/inboxes/<inbox_id>/messages/<message_id>/reply" \
+     -H "Authorization: Bearer $AGENTMAIL_API_KEY" \
+     -H "Content-Type: application/json" \
+     -d '{ "text": "Thanks, got your message." }'
+   ```
+
+## SDK
+
+Install: `npm install -g agentmail-cli` (CLI), `npm install agentmail` (TypeScript), `pip install agentmail` (Python).
+
+| Operation | CLI | TypeScript | Python |
+| --- | --- | --- | --- |
+| Client | reads `AGENTMAIL_API_KEY` | `new AgentMailClient()` | `AgentMail()` |
+| Auth check | `agentmail inboxes list` | `client.auth.me()` | `client.auth.me()` |
+| Create inbox | `agentmail inboxes create --display-name` | `client.inboxes.create({ displayName })` | `client.inboxes.create(request=CreateInboxRequest(display_name=...))` |
+| Send | `agentmail inboxes:messages send --inbox-id --to --subject --text` | `client.inboxes.messages.send(inboxId, { to, subject, text })` | `client.inboxes.messages.send(inbox_id=..., to=..., subject=..., text=...)` |
+| List messages | `agentmail inboxes:messages list --inbox-id` | `client.inboxes.messages.list(inboxId)` | `client.inboxes.messages.list(inbox_id=...)` |
+| Get message | `agentmail inboxes:messages get --inbox-id --message-id` | `client.inboxes.messages.get(inboxId, messageId)` | `client.inboxes.messages.get(inbox_id=..., message_id=...)` |
+| Get thread | `agentmail threads get --thread-id` | `client.threads.get(threadId)` | `client.threads.get(thread_id=...)` |
+| Reply | `agentmail inboxes:messages reply --inbox-id --message-id --text` | `client.inboxes.messages.reply(inboxId, messageId, { text })` | `client.inboxes.messages.reply(inbox_id=..., message_id=..., text=...)` |
+
+Imports: `import { AgentMailClient } from "agentmail"` in TypeScript. `from agentmail import AgentMail` and `from agentmail.inboxes import CreateInboxRequest` in Python. Both clients read `AGENTMAIL_API_KEY` when constructed with no arguments.
+
+CLI-only self sign-up: `agentmail agent sign-up --human-email "you@example.com" --username "my-agent"`, then `agentmail agent verify --otp-code "<6-digit code>"`.
+
+Full mapping for every operation: `/integrations/sdks-and-cli`.
+
+## Facts
+
+- The API base URL is `https://api.agentmail.to`. `AGENTMAIL_BASE_URL` must be the bare host because the CLI and SDKs prepend `/v0` themselves.
+- `POST /v0/inboxes` takes two optional fields. `username` sets the local part of `<username>@agentmail.to` and is generated when omitted. `display_name` labels the inbox and appears as the "from" name on mail the inbox sends.
+- Inbox usernames are first come, first served.
+- `POST /v0/inboxes/<inbox_id>/messages/send` and `POST /v0/inboxes/<inbox_id>/messages/<message_id>/reply` accept `text` and/or `html`, and both respond with `message_id` and `thread_id`.
+- A reply gets a new `message_id` and keeps the `thread_id` of the message it answers.
+- A `message_id` identifies one individual message. A `thread_id` identifies the conversation grouping the messages. Fetching a thread by `thread_id` returns the full conversation context in one call.
+- `GET /v0/inboxes/<inbox_id>/messages` returns messages newest first with `preview` text. Full bodies come from `GET /v0/inboxes/<inbox_id>/messages/<message_id>`.
+- Messages the inbox sent carry the `sent` label. Messages the inbox received carry the `received` label.
+- Delivery usually completes within about two seconds. List again after a short wait if a fresh message is missing.
+- Mail from an `@agentmail.to` address carries a "Sent via AgentMail" footer on the Free and Agent plans. A custom domain or a paid plan sends without the footer.
+- `agentmail agent sign-up` returns `api_key`, `inbox_id`, `email`, `organization_id`, and an `instructions` field written for the agent. The `api_key` is not shown again, store it immediately.
+- Until `agentmail agent verify` succeeds, an inbox from CLI sign-up can send only to the `--human-email` address. The 6-digit code expires in 24 hours and locks after 10 wrong attempts. An expired code requires a fresh sign-up.
+
+## Not supported
+
+- An inbox cannot mail its own address. Send the test email from a different account.
+- There is no `body` field on send or reply. Use `text` and/or `html`.
+- An `AGENTMAIL_BASE_URL` that already contains `/v0` does not work. CLI and SDK requests then hit `/v0/v0/...` and return `404 Not Found`.
+- The message list does not include full bodies, only previews.
+- A raw `message_id` does not work unencoded in a hand-built URL. URL-encode the `<`, `>`, and `@` characters. The SDKs and CLI encode automatically.
+- The "Sent via AgentMail" footer cannot be removed on the Free and Agent plans while sending from an `@agentmail.to` address.
+
+## Errors
+
+| Error | HTTP status | Cause | Fix |
+| --- | --- | --- | --- |
+| `401` | 401 | `AGENTMAIL_API_KEY` is missing or invalid. | Export a valid key and send `Authorization: Bearer $AGENTMAIL_API_KEY`. |
+| `404` | 404 | The request URL is incorrect, usually a doubled `/v0`. | Set `AGENTMAIL_BASE_URL` to the bare host `https://api.agentmail.to`. |
+| `resource_taken` | 403 | The requested inbox `username` is owned by a different organization. Response `name` is `IsTakenError`. | Retry inbox creation with one of the up to 3 available names in `suggestions`. |
+| `already_exists` | 403 | The requested inbox `username` is already owned by your own organization. | Reuse the existing inbox, or retry with a name from `suggestions`. |
+| `message_rejected` | 403 | AgentMail refused to send the message. The most common early cause: an unverified CLI sign-up inbox sending to any address other than its `--human-email`. | Verify with `agentmail agent verify --otp-code`, or read the response's `fix` field. Every case: [/advanced/errors#message_rejected](/advanced/errors#message_rejected). |
+
+## Verify
 
 ```bash
-export AGENTMAIL_API_KEY="<API_KEY>"
-export AGENTMAIL_BASE_URL="https://api.agentmail.to/v0"
-```
-
-<CodeGroup>
-
-```bash CLI
-npm install -g agentmail-cli
-agentmail auth me
-```
-
-```bash curl
-curl "$AGENTMAIL_BASE_URL/auth/me" \
+curl "$AGENTMAIL_BASE_URL/v0/auth/me" \
   -H "Authorization: Bearer $AGENTMAIL_API_KEY"
 ```
 
-```typescript TypeScript
-// npm install agentmail
-import { AgentMailClient } from "agentmail";
+A success response confirms the key and the base URL. A `401` means the key is wrong, a `404` means the URL is wrong. For the full loop, the reply response repeating the received message's `thread_id` alongside a new `message_id` confirms send, receive, and reply all worked.
 
-const client = new AgentMailClient({ apiKey: process.env.AGENTMAIL_API_KEY });
-console.log(await client.auth.me());
-```
+## Related
 
-```python Python
-# pip install agentmail
-import os
-from agentmail import AgentMail
-
-client = AgentMail(api_key=os.environ["AGENTMAIL_API_KEY"])
-print(client.auth.me())
-```
-
-</CodeGroup>
-
-```json Sample response
-{
-  "scope_type": "organization",
-  "scope_id": "<organization_id>",
-  "organization_id": "<organization_id>",
-  "api_key_id": "<api_key_id>"
-}
-```
-
-## Create an inbox
-
-Create an inbox, then retain its `inbox_id` for the next requests.
-
-<CodeGroup>
-
-```bash CLI
-agentmail inboxes create \
-  --display-name "Quickstart inbox"
-```
-
-```bash curl
-curl -X POST "$AGENTMAIL_BASE_URL/inboxes" \
-  -H "Authorization: Bearer $AGENTMAIL_API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{ "display_name": "Quickstart inbox" }'
-```
-
-```typescript TypeScript
-const inbox = await client.inboxes.create({ displayName: "Quickstart inbox" });
-console.log(inbox.inboxId);
-```
-
-```python Python
-inbox = client.inboxes.create(display_name="Quickstart inbox")
-print(inbox.inbox_id)
-```
-
-</CodeGroup>
-
-```json Sample response
-{
-  "pod_id": "<pod_id>",
-  "inbox_id": "<generated-username>@agentmail.to",
-  "email": "<generated-username>@agentmail.to",
-  "display_name": "Quickstart inbox",
-  "created_at": "2026-07-13T09:15:04Z",
-  "updated_at": "2026-07-13T09:15:04Z"
-}
-```
-
-## Send, receive, and reply
-
-Send a message to the new inbox. Use `text`, not `body`.
-
-<CodeGroup>
-
-```bash CLI
-agentmail inboxes:messages send \
-  --inbox-id "<inbox_id>" \
-  --to "<inbox_id>" \
-  --subject "Hello from the quickstart" \
-  --text "This is a test message."
-```
-
-```bash curl
-curl -X POST "$AGENTMAIL_BASE_URL/inboxes/<inbox_id>/messages/send" \
-  -H "Authorization: Bearer $AGENTMAIL_API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "to": "<inbox_id>",
-    "subject": "Hello from the quickstart",
-    "text": "This is a test message."
-  }'
-```
-
-```typescript TypeScript
-const sent = await client.inboxes.messages.send("<inbox_id>", {
-  to: "<inbox_id>",
-  subject: "Hello from the quickstart",
-  text: "This is a test message.",
-});
-console.log(sent.messageId, sent.threadId);
-```
-
-```python Python
-sent = client.inboxes.messages.send(
-    inbox_id="<inbox_id>",
-    to="<inbox_id>",
-    subject="Hello from the quickstart",
-    text="This is a test message.",
-)
-print(sent.message_id, sent.thread_id)
-```
-
-</CodeGroup>
-
-```json Sample response
-{
-  "message_id": "<message_id>",
-  "thread_id": "<thread_id>"
-}
-```
-
-List the inbox until the message arrives, then reply using its `message_id`.
-
-<CodeGroup>
-
-```bash CLI
-agentmail inboxes:messages list \
-  --inbox-id "<inbox_id>"
-
-agentmail inboxes:messages reply \
-  --inbox-id "<inbox_id>" \
-  --message-id "<message_id>" \
-  --text "Got it, replying from the quickstart."
-```
-
-```bash curl
-curl "$AGENTMAIL_BASE_URL/inboxes/<inbox_id>/messages" \
-  -H "Authorization: Bearer $AGENTMAIL_API_KEY"
-
-curl -X POST "$AGENTMAIL_BASE_URL/inboxes/<inbox_id>/messages/<message_id>/reply" \
-  -H "Authorization: Bearer $AGENTMAIL_API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{ "text": "Got it, replying from the quickstart." }'
-```
-
-```typescript TypeScript
-const messages = await client.inboxes.messages.list("<inbox_id>");
-const messageId = messages.messages[0].messageId;
-const reply = await client.inboxes.messages.reply(
-  "<inbox_id>",
-  messageId,
-  { text: "Got it, replying from the quickstart." },
-);
-console.log(reply.messageId, reply.threadId);
-```
-
-```python Python
-messages = client.inboxes.messages.list(inbox_id="<inbox_id>")
-message_id = messages.messages[0].message_id
-reply = client.inboxes.messages.reply(
-    inbox_id="<inbox_id>",
-    message_id=message_id,
-    text="Got it, replying from the quickstart.",
-)
-print(reply.message_id, reply.thread_id)
-```
-
-</CodeGroup>
-
-The list response contains `messages[]`, newest first. Each message has `message_id` and `thread_id`; the reply response uses the send response shape. List again and confirm the original message and reply have the same `thread_id`.
+- `/core/receive` - list, read, filter incoming mail and handle attachments.
+- `/advanced/custom-domains` - send from your own domain and drop the "Sent via AgentMail" footer.
+- `/core/conversations` - fetch a whole thread by `thread_id` for full conversation context.
+- `/integrations/sdks-and-cli` - installs plus every operation mapped across CLI, TypeScript, and Python.
 
 </Visibility>

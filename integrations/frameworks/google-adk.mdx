@@ -1,0 +1,357 @@
+---
+title: Google ADK
+description: Give a Google ADK agent its own inbox to send, receive, and reply to email.
+icon: "/images/logos/google.svg"
+---
+
+<Visibility for="humans">
+
+
+<img src="/images/banners/integration-google-adk.svg" alt="" noZoom />
+[Google ADK](https://adk.dev/) agents connect to AgentMail through ADK's built-in MCP client. Point the toolset at the hosted AgentMail MCP server and the agent discovers its email tools when it connects. On this page you will watch the agent create its own `@agentmail.to` inbox, send an email, and reply to one it receives.
+
+## 0. Get API keys
+
+- `AGENTMAIL_API_KEY` authenticates the email tools. Generate one from the [AgentMail Console](https://console.agentmail.to/dashboard/api-keys), or follow the [Quickstart](/quickstart) if this is your first AgentMail project.
+- A Gemini API key authenticates the model calls. Generate one from [Google AI Studio](https://aistudio.google.com/apikey).
+
+Keep both values at hand. Step 2 puts them in a `.env` file that the `adk` command loads when the agent starts.
+
+## 1. Install ADK with MCP support
+
+The Python package needs Python 3.10 or newer.
+
+<CodeGroup>
+
+```bash Python
+pip install "google-adk[mcp]"
+```
+
+```bash TypeScript
+npm install @google/adk @modelcontextprotocol/sdk
+npm install -D @google/adk-devtools
+```
+
+</CodeGroup>
+
+The `mcp` extra and the `@modelcontextprotocol/sdk` package install the MCP client the toolset connects through, at a version ADK works with. `@google/adk-devtools` provides the `adk` command you will run the agent with.
+
+## 2. Define the agent
+
+One file defines the agent. The toolset points ADK's MCP client at the hosted AgentMail server with your API key in the `x-api-key` header, and the agent picks up the server's current email tools each time it connects. The full tool catalog and the server's other connection options are on [MCP and Skills](/integrations/mcp-and-skills).
+
+<CodeGroup>
+
+```python Python
+# email_agent/agent.py
+import os
+
+from google.adk.agents import Agent
+from google.adk.tools.mcp_tool import McpToolset
+from google.adk.tools.mcp_tool.mcp_session_manager import StreamableHTTPConnectionParams
+
+root_agent = Agent(
+    model="gemini-flash-latest",
+    name="email_agent",
+    instruction=(
+        "You are an email agent with your own AgentMail inbox. "
+        "You can create inboxes, send email, and read and reply to threads."
+    ),
+    tools=[
+        McpToolset(
+            connection_params=StreamableHTTPConnectionParams(
+                url="https://mcp.agentmail.to/mcp",
+                headers={"x-api-key": os.environ["AGENTMAIL_API_KEY"]},
+            ),
+        )
+    ],
+)
+```
+
+```typescript TypeScript
+// agent.ts
+import { LlmAgent, MCPToolset } from "@google/adk";
+
+export const rootAgent = new LlmAgent({
+  model: "gemini-flash-latest",
+  name: "email_agent",
+  instruction:
+    "You are an email agent with your own AgentMail inbox. " +
+    "You can create inboxes, send email, and read and reply to threads.",
+  tools: [
+    new MCPToolset({
+      type: "StreamableHTTPConnectionParams",
+      url: "https://mcp.agentmail.to/mcp",
+      transportOptions: {
+        requestInit: {
+          headers: { "x-api-key": process.env.AGENTMAIL_API_KEY! },
+        },
+      },
+    }),
+  ],
+});
+```
+
+</CodeGroup>
+
+The `adk` command finds the agent by convention:
+
+- **Python**: save `agent.py` in a folder named `email_agent`, next to an empty `__init__.py`. ADK loads the folder as a package and uses the `root_agent` it defines.
+- **TypeScript**: save `agent.ts` in your project folder. ADK uses the `rootAgent` it exports.
+
+Put both keys in a `.env` file in the same folder as the agent file. `adk run` and `adk web` load it before the agent starts.
+
+<CodeGroup>
+
+```bash Python
+# email_agent/.env
+GOOGLE_API_KEY="<GOOGLE_API_KEY>"
+AGENTMAIL_API_KEY="<API_KEY>"
+```
+
+```bash TypeScript
+# .env
+GEMINI_API_KEY="<GEMINI_API_KEY>"
+AGENTMAIL_API_KEY="<API_KEY>"
+```
+
+</CodeGroup>
+
+## 3. Test sending emails
+
+Start the agent from a terminal:
+
+<CodeGroup>
+
+```bash Python
+# from the folder that contains email_agent/
+adk run email_agent
+```
+
+```bash TypeScript
+# from the folder that contains agent.ts
+npx adk run agent.ts
+```
+
+</CodeGroup>
+
+<Frame caption="A live adk run session where the agent answers from the AgentMail tools it discovered.">
+  <img src="/images/integrations/google-adk-run.png" alt="Terminal showing adk run email_agent, where the agent lists three AgentMail inboxes" />
+</Frame>
+
+At the `[user]:` prompt, ask the agent to create an inbox and email an account you already check, whether that is Gmail, Outlook, or another client:
+
+```text Prompt
+Create an inbox with the display name "Support agent", then send an email from it
+to you@example.com with the subject "Hello from my agent" and a one-line
+introduction. Report the inbox address back to me once the email is sent.
+```
+
+Moments later the email shows up in that account, sent from a brand-new `@agentmail.to` address. The agent calls the `create_inbox` tool, then `send_message`, and reports back:
+
+```text Sample output
+[email_agent]: I created the inbox faircost773@agentmail.to and sent your email
+to you@example.com with the subject "Hello from my agent".
+```
+
+Save the inbox address from the reply. You will email it in the next step.
+
+This prompt leaves the username to AgentMail, which generates an available one.
+
+To watch each tool call instead of reading terminal output, run `adk web` (Python) or `npx adk web` (TypeScript) from the same folder and open `http://localhost:8000`.
+
+<Accordion title="Troubleshooting">
+
+- **`403` when your prompt asks for a taken username.** The create call returns a `403` listing up to three available alternatives in `suggestions`. ADK hands the failed call's error text back to the model, so the agent can pick one and retry within the same run.
+- **`403` at your plan's inbox limit.** An organization already at its limit gets a `403` too, with the limit and an upgrade link in the message. That error reaches the model the same way, so the agent can fall back to an inbox you already have and finish the send in the same run.
+
+</Accordion>
+
+## 4. Test receiving and replying
+
+From your everyday account, send an email to the inbox address from step 3. Give it a subject and a question the agent can answer.
+
+Back at the `[user]:` prompt, ask the agent to handle it. You should get the reply in your account, threaded under the message you sent.
+
+```text Prompt
+Look for new mail in <inbox address>, open the most recent thread, and post a
+brief reply in that thread.
+```
+
+Replace `<inbox address>` with the address from step 3. A new `adk run` has no memory of the last one, which is why the prompt spells out the inbox address instead of trusting the agent to remember it.
+
+The agent finds the conversation with `list_threads`, reads it with `get_thread`, and answers with `reply_to_message`. Mail takes about two seconds in each direction, so an agent that reports an empty inbox has probably checked before your email arrived. Ask it to check again.
+
+## Scope the agent's tools
+
+The toolset exposes every tool the server publishes. For an agent that should only answer incoming mail, list exactly what the job needs:
+
+<CodeGroup>
+
+```python Python
+McpToolset(
+    connection_params=StreamableHTTPConnectionParams(
+        url="https://mcp.agentmail.to/mcp",
+        headers={"x-api-key": os.environ["AGENTMAIL_API_KEY"]},
+    ),
+    tool_filter=["list_threads", "get_thread", "reply_to_message"],
+)
+```
+
+```typescript TypeScript
+new MCPToolset(
+  {
+    type: "StreamableHTTPConnectionParams",
+    url: "https://mcp.agentmail.to/mcp",
+    transportOptions: {
+      requestInit: {
+        headers: { "x-api-key": process.env.AGENTMAIL_API_KEY! },
+      },
+    },
+  },
+  ["list_threads", "get_thread", "reply_to_message"],
+);
+```
+
+</CodeGroup>
+
+With this filter in place, the agent can read and answer mail in inboxes that already exist, and nothing else.
+
+<Accordion title="Troubleshooting">
+
+- **Installing `google-adk` without the `mcp` extra.** `from google.adk.tools.mcp_tool import McpToolset` then fails with `ImportError: cannot import name 'McpToolset'`. Install with `pip install "google-adk[mcp]"`, which adds the MCP client at a version ADK works with.
+- **An invalid Gemini key.** The run stops at your first message with a `400 INVALID_ARGUMENT` error saying `API key not valid`, before any email tool runs. `AGENTMAIL_API_KEY` covers only the email tools. The Gemini calls read their own variable, `GOOGLE_API_KEY` in Python and `GEMINI_API_KEY` in TypeScript.
+- **An invalid `AGENTMAIL_API_KEY`.** Every email tool call fails with `Forbidden (HTTP 403)` when the server rejects the key (usually it is missing from `.env` or mistyped). The agent still starts and discovers the tools either way, so a clean startup does not prove the key works.
+- **A free-tier Gemini key running dry mid-flow.** One agent turn spends a model call per tool step, so a small daily quota goes fast. The run then fails with `429 RESOURCE_EXHAUSTED` naming the exhausted limit and a retry delay, and a busy free-tier pool can answer `503 UNAVAILABLE` even before the quota runs out. Wait out the delay in the error, or point the agent at a model your key still has quota for.
+- **Running `adk run` from the wrong folder.** The agent argument is a path resolved from your current folder, so `adk run email_agent` fails with `Directory 'email_agent' does not exist` anywhere but the parent folder. Run it there, or pass the full path to the agent.
+
+</Accordion>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="MCP and Skills" icon="plug" href="/integrations/mcp-and-skills">
+    The full hosted tool catalog and every other way to connect to it.
+  </Card>
+  <Card title="React to incoming email" icon="bolt" href="/advanced/webhooks">
+    Start a run when mail arrives instead of prompting by hand.
+  </Card>
+</CardGroup>
+
+</Visibility>
+
+<Visibility for="agents">
+
+# Connect a Google ADK agent to AgentMail over MCP
+
+Google ADK agents get their email tools from the hosted AgentMail MCP server through ADK's built-in MCP client, so there is no separate integration package. Use this to let an ADK agent, Python or TypeScript, create its own `@agentmail.to` inbox, send email, and read and reply to threads.
+
+## Do this
+
+Python 3.10 or newer.
+
+```bash
+pip install "google-adk[mcp]"
+mkdir email_agent
+touch email_agent/__init__.py
+```
+
+Save as `email_agent/agent.py`:
+
+```python
+import os
+
+from google.adk.agents import Agent
+from google.adk.tools.mcp_tool import McpToolset
+from google.adk.tools.mcp_tool.mcp_session_manager import StreamableHTTPConnectionParams
+
+root_agent = Agent(
+    model="gemini-flash-latest",
+    name="email_agent",
+    instruction=(
+        "You are an email agent with your own AgentMail inbox. "
+        "You can create inboxes, send email, and read and reply to threads."
+    ),
+    tools=[
+        McpToolset(
+            connection_params=StreamableHTTPConnectionParams(
+                url="https://mcp.agentmail.to/mcp",
+                headers={"x-api-key": os.environ["AGENTMAIL_API_KEY"]},
+            ),
+        )
+    ],
+)
+```
+
+Save as `email_agent/.env`:
+
+```bash
+GOOGLE_API_KEY="<GOOGLE_API_KEY>"
+AGENTMAIL_API_KEY="<API_KEY>"
+```
+
+Run from the folder that contains `email_agent/`, then prompt the agent at `[user]:`:
+
+```bash
+adk run email_agent
+```
+
+## SDK
+
+The integration surface is ADK's MCP toolset, in both ADK languages.
+
+Python, `pip install "google-adk[mcp]"`:
+
+- Connect: `McpToolset(connection_params=StreamableHTTPConnectionParams(url="https://mcp.agentmail.to/mcp", headers={"x-api-key": ...}))`.
+- Scope tools: add `tool_filter=["list_threads", "get_thread", "reply_to_message"]` to the `McpToolset` call.
+- Define: `Agent(model=..., name=..., instruction=..., tools=[...])` as module-level `root_agent` in `email_agent/agent.py`, next to an empty `__init__.py`.
+
+TypeScript, `npm install @google/adk @modelcontextprotocol/sdk` plus `npm install -D @google/adk-devtools` for the `adk` command:
+
+- Connect: `new MCPToolset({ type: "StreamableHTTPConnectionParams", url: "https://mcp.agentmail.to/mcp", transportOptions: { requestInit: { headers: { "x-api-key": ... } } } })`.
+- Scope tools: pass `["list_threads", "get_thread", "reply_to_message"]` as the second `MCPToolset` constructor argument.
+- Define: `new LlmAgent({...})` exported as `rootAgent` from `agent.ts`. Run with `npx adk run agent.ts` from the folder that contains it.
+
+Core SDK and CLI installs: /integrations/sdks-and-cli
+
+## Facts
+
+- Hosted MCP server URL: `https://mcp.agentmail.to/mcp`. Authentication: the `x-api-key` header carrying the AgentMail API key.
+- The agent discovers the server's current email tools each time it connects. Full tool catalog: /integrations/mcp-and-skills.
+- Model credentials use a different variable per language: `GOOGLE_API_KEY` in Python, `GEMINI_API_KEY` in TypeScript. `AGENTMAIL_API_KEY` covers only the email tools.
+- `adk run` and `adk web` load a `.env` file from the folder that holds the agent file before the agent starts.
+- `adk web` (Python) or `npx adk web` (TypeScript) serves a view of each tool call at `http://localhost:8000`.
+- Tools the page exercises: `create_inbox`, `send_message`, `list_threads`, `get_thread`, `reply_to_message`.
+- ADK hands a failed tool call's error text back to the model, so the agent can retry within the same run. A `403` from a taken username lists up to 3 available alternatives in `suggestions`. A `403` from the plan's inbox limit names the limit and an upgrade link.
+- One agent turn spends a model call per tool step, which drains a small free-tier Gemini quota fast.
+- A new `adk run` has no memory of the previous one. Each prompt must name the inbox address to operate on.
+- Mail takes about two seconds in each direction. An agent that reports an empty inbox probably checked before the email arrived. Ask it to check again.
+
+## Not supported
+
+- `pip install google-adk` without the `[mcp]` extra does not install the MCP client, so the `McpToolset` import fails.
+- A clean startup does not prove `AGENTMAIL_API_KEY` works. The agent starts and discovers the tools even with an invalid key. Every tool call then fails with `Forbidden (HTTP 403)`.
+- `adk run email_agent` does not resolve the agent from anywhere. The argument is a path resolved from the current folder.
+
+## Errors
+
+| Error | Status | Cause | Fix |
+| --- | --- | --- | --- |
+| `ImportError: cannot import name 'McpToolset'` | none, Python exception | `google-adk` installed without the `mcp` extra | `pip install "google-adk[mcp]"` |
+| `API key not valid` | `400 INVALID_ARGUMENT` | Invalid Gemini key. Stops at the first message, before any email tool runs | Set `GOOGLE_API_KEY` (Python) or `GEMINI_API_KEY` (TypeScript) in `.env` |
+| `Forbidden (HTTP 403)` on every email tool call | 403 | `AGENTMAIL_API_KEY` missing from `.env` or mistyped | Fix the key in `.env` |
+| `429 RESOURCE_EXHAUSTED` | 429 | Free-tier Gemini quota exhausted mid-flow | Wait out the retry delay named in the error, or use a model the key still has quota for |
+| `503 UNAVAILABLE` | 503 | Busy free-tier Gemini pool | Retry later |
+| `Directory 'email_agent' does not exist` | none, CLI error | `adk run` executed outside the parent folder of `email_agent/` | Run from that folder, or pass the full path to the agent |
+
+## Verify
+
+Start `adk run email_agent` and prompt the agent to create an inbox and send an email to an address you already check. Success: the email arrives moments later from a new `@agentmail.to` address and the agent reports that address. Startup alone verifies nothing about `AGENTMAIL_API_KEY`.
+
+## Related
+
+- /integrations/mcp-and-skills - full hosted tool catalog and every other way to connect to the server
+- /advanced/webhooks - start a run when mail arrives instead of prompting by hand
+- /quickstart - get an AgentMail API key for a first project
+
+</Visibility>

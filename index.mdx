@@ -10,6 +10,8 @@ import { LandingUseCases } from "/snippets/landing/usecases.jsx";
 import { LandingCta } from "/snippets/landing/cta.jsx";
 import { LandingWordmark } from "/snippets/landing/wordmark.jsx";
 
+<Visibility for="humans">
+
 <div className="aml">
 <div className="aml-rails">
 <div className="aml-rails-inner">
@@ -30,8 +32,8 @@ import { LandingWordmark } from "/snippets/landing/wordmark.jsx";
         <span>Quickstart</span>
         <span className="arrow" aria-hidden="true">→</span>
       </a>
-      <a className="aml-btn aml-btn--ghost" href="/quickstart">
-        <span>Give it to your agent</span>
+      <a className="aml-btn aml-btn--ghost" href="/api-reference/inboxes/list-inboxes">
+        <span>API Reference</span>
       </a>
     </div>
   </div>
@@ -76,3 +78,23 @@ import { LandingWordmark } from "/snippets/landing/wordmark.jsx";
 </div>
 </div>
 </div>
+
+</Visibility>
+
+<Visibility for="agents">
+
+# Give your agent its own email inbox
+
+AgentMail provides email inboxes for AI agents: a real address an agent can hand out, watch, and act on. Create inboxes, receive mail, trigger workflows, and reply through one API.
+
+## Related
+
+- [/quickstart](/quickstart) - get an API key, create an inbox, and run the full send, receive, and reply loop.
+- [/introduction](/introduction) - what AgentMail is and why an agent needs an inbox of its own.
+- [/architecture](/architecture) - the organization, pod, and inbox hierarchy, and how a key's scope shapes request paths.
+- [/core/send](/core/send) - send email and reply into the same thread.
+- [/core/receive](/core/receive) - list what an inbox holds and read messages in full.
+- [/core/conversations](/core/conversations) - fetch a whole thread for conversation context.
+- [/api-reference](/api-reference/inboxes/list-inboxes) - the full endpoint-by-endpoint HTTP API reference.
+
+</Visibility>

@@ -1,0 +1,667 @@
+---
+title: "Plans and Usage Tracking"
+description: "Compare the limits of every plan, work within the Free plan's ramp, buy add-on capacity, and measure email activity and resource usage over time."
+---
+
+<Visibility for="humans">
+
+
+<img src="/images/banners/advanced-plans-and-usage.svg" alt="" noZoom />
+
+## Compare limits across plans
+
+Receiving email is free. Inboxes receive, store, and index mail without a billable event, so an inbound workflow costs nothing. Plans meter outbound sends and cap how many inboxes, domains, and members an organization can hold. Once an allowance is exhausted, creation is blocked.
+
+| Limit | Free | Developer | Startup |
+| --- | ---: | ---: | ---: |
+| Monthly price | $0 | $20 | $200 |
+| Annual price (20 percent off, billed yearly) | Not offered | $192 | $1,920 |
+| Inboxes | 3 | 10 | 150 |
+| Domains | 0 | 10 | 150 |
+| Members | 1 | 2 | 10 |
+| Sends per 5 minutes | No published cap | 100 | 1,500 |
+| Sends per day | 100 | 1,000 | 15,000 |
+| Sends per month | No monthly cap | 10,000 | 150,000 |
+| Mail storage | 3 GB | 10 GB | Not published |
+| [New-sender recipient ramp](#send-within-the-recipient-ramp) | 5 recipients in day one, 10 in week one | None | None |
+
+Beyond the limits, Developer includes email support and Startup includes access to AgentMail's SOC 2 report.
+
+### Read the live plan catalog
+
+The canonical catalog, add-ons included, is published at an unauthenticated endpoint, the same source the Console and pricing page render from:
+
+```bash API
+curl "https://api.agentmail.to/billing/catalog"
+```
+
+No `Authorization` header is needed, and the path works with or without the `/v0` prefix. The response lists every self-serve plan with its price and entitlements, where `null` means the plan has no cap on that field, plus the add-ons with unit prices in cents. An add-on is purchasable when its `sellable` flag is true. Responses are cached for about five minutes.
+
+```json Sample response (one plan and one add-on shown)
+{
+  "version": 1,
+  "plans": [
+    {
+      "id": "developer",
+      "name": "Developer",
+      "description": "For developers making small scale applications",
+      "monthly_price_usd": 20,
+      "entitlements": {
+        "max_inboxes": 10,
+        "max_domains": 10,
+        "max_memberships": 2,
+        "max_five_minute_sends": 100,
+        "max_daily_sends": 1000,
+        "max_monthly_sends": 10000,
+        "max_first_day_recipients": null,
+        "max_first_week_recipients": null,
+        "max_tracking_domains": 0
+      },
+      "available": true,
+      "yearly": {
+        "lookup_key": "developer_yearly",
+        "price_usd": 192,
+        "discount_percent": 20,
+        "available": true
+      }
+    }
+  ],
+  "addons": [
+    {
+      "lookup_key": "addon_sends",
+      "label": "Monthly sends",
+      "unit": "block",
+      "grants_per_unit": 1000,
+      "sellable": true,
+      "monthly": { "unit_amount": 200, "currency": "usd", "available": true },
+      "yearly": {
+        "lookup_key": "addon_sends_yearly",
+        "unit_amount": 1920,
+        "currency": "usd",
+        "available": true
+      }
+    }
+  ]
+}
+```
+
+Read this endpoint instead of hardcoding plan numbers into your own tooling, so a price or limit change reaches you without a redeploy.
+
+### Check your organization's effective limits
+
+The limits live on the organization record, so read them from the API instead of assuming the catalog numbers. Use this before provisioning to catch resource exhaustion early, and alert when a count approaches its limit.
+
+<CodeGroup>
+
+```bash CLI
+agentmail organizations get
+```
+
+```bash API
+curl "https://api.agentmail.to/v0/organizations" \
+  -H "Authorization: Bearer $AGENTMAIL_API_KEY"
+```
+
+```typescript TypeScript
+const org = await client.organizations.get();
+console.log(org.inboxCount, org.inboxLimit, org.domainCount, org.domainLimit);
+```
+
+```python Python
+org = client.organizations.get()
+print(org.inbox_count, org.inbox_limit, org.domain_count, org.domain_limit)
+```
+
+</CodeGroup>
+
+The response pairs each resource count with its limit and tells you which plan the enforcement comes from:
+
+- `inbox_count` against `inbox_limit` and `domain_count` against `domain_limit` are the provisioning headroom. Compare them before a batch of creates.
+- `billing_plan_id` is the plan behind the numbers.
+- `five_minute_send_limit` and `daily_send_limit` are the send windows enforced for this organization.
+- A limit field that is absent means the organization has no cap on that resource.
+
+These are the effective values enforcement uses, not copies of the catalog. Add-ons, support grants, and account state all adjust them, so an organization's numbers can differ from the plan table above.
+
+```json Sample response
+{
+  "organization_id": "1a2b3c4d-5e6f-4a1b-8c2d-3e4f5a6b7c8d",
+  "authentication_type": "clerk",
+  "authentication_id": "org_1a2b3c4d5e6f7a8b9c0d",
+  "billing_plan_id": "free",
+  "inbox_limit": 3,
+  "domain_limit": 0,
+  "five_minute_send_limit": 1000,
+  "daily_send_limit": 100,
+  "inbox_count": 2,
+  "domain_count": 0,
+  "tracking_allowed": false,
+  "name": "Example organization",
+  "clerk_organization_id": "org_1a2b3c4d5e6f7a8b9c0d",
+  "created_at": "2026-08-10T09:15:24.312Z",
+  "updated_at": "2026-08-24T18:02:41.559Z"
+}
+```
+
+<Accordion title="Troubleshooting">
+
+When a create call does hit a resource cap, it returns a `403` with the code `limit_exceeded`. The body names the resource and cap, the `fix` names the cheapest plan that raises it, and the `x-agentmail-resource`, `x-agentmail-limit`, and `x-agentmail-remaining` headers carry the same facts for callers that only read headers:
+
+```json 403 Sample response
+{
+  "name": "LimitExceededError",
+  "code": "limit_exceeded",
+  "message": "Inbox limit exceeded",
+  "fix": "Your plan's inbox limit is 3. Delete an existing inbox, or upgrade at https://console.agentmail.to/dashboard/upgrade — Developer raises it to 10 for $20.00/month.",
+  "resource": "inbox",
+  "limit": 3,
+  "upgrade_url": "https://console.agentmail.to/dashboard/upgrade",
+  "docs": "https://docs.agentmail.to/errors#limit_exceeded"
+}
+```
+
+</Accordion>
+
+## Start on the Free plan
+
+Your sign-up path decides the plan you start on:
+
+- Signing up through the Console starts your organization on Free. Free needs no credit card.
+- Signing up through the [CLI agent flow](/quickstart#0-get-an-api-key) starts it on the Agent plan: 1 inbox, 0 domains, 1 member, and 10 sends per day, with no five-minute or monthly cap and no recipient ramp. These are pre-verification limits, not a tier you stay on. Verifying with the 6-digit code emailed at sign-up moves the organization to Free at no cost, and limit errors on the Agent plan carry a `fix` that points at that verification call.
+
+Free's enforced send quota is the daily one. Over a month it works out to about 3,000 emails, the number the pricing page advertises.
+
+### Send within the recipient ramp
+
+Organizations on the Free plan start with a cap on how many different people they can cold-email, separate from the send quotas:
+
+- at most 5 distinct recipients in the organization's first 24 hours
+- at most 10 distinct recipients, cumulative, in its first week
+
+After 7 days the ramp lifts entirely. Paid plans have no ramp, and upgrading removes the cap immediately rather than at the window boundary. The Agent plan is also exempt, since its 10-per-day send cap is the control there.
+
+The cap counts people, not addresses or messages:
+
+- Addresses that have emailed one of your inboxes first never count. Your agent can always answer its inbound mail.
+- Variants of one mailbox count once: plus-tag forms like `you+test@example.com` and Gmail dot variants all occupy a single slot.
+- Recipients are counted when the send is attempted, so a send that fails later still used its slots.
+
+If your first week involves emailing more than a handful of new contacts, upgrade before the launch instead of engineering around the ramp.
+
+<Accordion title="Troubleshooting">
+
+A send that would exceed the active cap returns a `429` with the code `rate_limit_exceeded`. The message names the cap that bound and the exact time the limit next changes, and `Retry-After` carries the seconds until that boundary.
+
+```json 429 Sample response
+{
+  "name": "RateLimitError",
+  "code": "rate_limit_exceeded",
+  "message": "New account recipient limit exceeded: this organization may email at most 5 distinct recipients in its first 24 hours (10 in its first week). The limit rises to 10 at 2026-08-26T10:00:00.000Z and lifts at 2026-09-01T10:00:00.000Z.",
+  "fix": "Replies to addresses that have emailed this organization are always allowed and do not count against the limit. To email more new recipients now, upgrade to a paid plan — the new-account limit does not apply to paid plans — or wait for the lift time in the message (the Retry-After header carries the seconds remaining).",
+  "docs": "https://docs.agentmail.to/errors#rate_limit_exceeded"
+}
+```
+
+</Accordion>
+
+## Handle rate limits and buy add-ons
+
+Two kinds of limit apply to every outbound send:
+
+- A period quota caps the total sends accepted in a window (daily and monthly).
+- A rate limit protects a short burst window (five minutes).
+
+Both apply at once, so meeting a monthly forecast does not guarantee that a burst will be accepted. Estimate against your busiest window, not just your monthly total.
+
+How sends are counted:
+
+- Quotas are counted per organization, across all of its inboxes.
+- Each recipient counts as one send. A message with three addresses across `to`, `cc`, and `bcc` consumes three sends.
+- Replies are outbound sends. Include them in your estimate.
+
+The windows are fixed rather than rolling. The daily window resets at midnight UTC, and the monthly quota uses a fixed 30-day window, not the calendar month. When your organization crosses 80 percent of its monthly send allowance, AgentMail emails you a one-time usage warning for that window.
+
+When a send is rejected for a quota or rate limit, the API returns HTTP `429` with the error code `rate_limit_exceeded`. The body names the window that bound, its cap, and the upgrade that raises it, and the response carries three headers: `Retry-After` (seconds until the window resets), `ratelimit-limit` (the cap), and `ratelimit-reset` (same seconds as `Retry-After`).
+
+```json 429 Sample response
+{
+  "name": "RateLimitError",
+  "code": "rate_limit_exceeded",
+  "message": "Daily send limit exceeded",
+  "fix": "Your plan's daily send limit is 100, and resets in 28800s (also returned in the Retry-After header). Wait for the window to reset, or upgrade at https://console.agentmail.to/dashboard/upgrade — Developer raises it to 1000 for $20.00/month.",
+  "resource": "send",
+  "window": "daily",
+  "limit": 100,
+  "upgrade_url": "https://console.agentmail.to/dashboard/upgrade",
+  "docs": "https://docs.agentmail.to/errors#rate_limit_exceeded"
+}
+```
+
+Handle a `429` by honoring `Retry-After` and backing off exponentially (the [SDKs retry these for you](/integrations/sdks-and-cli#client-configuration)). Branch on `window` before you let a retry loop run: a five-minute rejection clears in minutes, while retrying before a daily or monthly quota resets will not create additional capacity, so treat those as terminal for the window and alert instead.
+
+Habits that keep high-volume agents inside the limits:
+
+- Distribute sends across inboxes. Your organization's quota does not change, but mailbox providers throttle per address, so 10 emails each from 100 inboxes lands better than 1,000 from one.
+- Make retries safe. Pass `client_id` on create operations so a retry cannot duplicate a resource, covered in [errors and idempotency](/advanced/errors). For sends, track the `message_id` of what you already sent, or stage the message as a draft and send the draft, so a retry cannot email the same person twice.
+- Watch usage before launches. The [Console](https://console.agentmail.to) and the [usage metrics](#measure-your-usage) both show send volume against your window.
+
+Developer and Startup customers can buy extra capacity on top of their plan, one unit at a time, instead of jumping tiers:
+
+- +1 inbox for $2 per month
+- +1 custom domain for $2 per month
+- +1,000 monthly sends for $2 per month
+
+Buy as many units of each as you need. A Developer organization that wants 15 inboxes and one extra domain pays $20 + $10 + $2 = $32 per month. Add-ons are available on the paid plans, so a Free organization that needs a custom domain upgrades to Developer first.
+
+The flow is self-serve in the Console, under Billing: drag the slider for the resource you are adding, review the prorated amount for the rest of the billing period, and pay. Increases are charged pro rata and take effect instantly, enforced on the very next API call. Decreases are scheduled for the end of the billing period, and you can cancel a pending decrease any time before it takes effect. Annual subscriptions buy annual add-on units at the same 20 percent discount, which works out to $1.60 per month per unit billed yearly.
+
+Send add-ons raise more than the monthly number. The daily and five-minute limits are recomputed from the new effective monthly allowance, at one tenth per day and one hundredth per five minutes, and never drop below the plan's base values. Five send blocks on Developer, for example, make the allowance 15,000 per month, 1,500 per day, and 150 per five minutes.
+
+Add-on limits are enforced at the same three points as plan limits: inbox creation, domain creation, and send.
+
+When add-ons are not enough, choose the upgrade path based on what is about to run out:
+
+- If your forecast fits the next listed allowance, move to that plan.
+- If you need more members, move to the plan whose member allowance covers your team, or arrange an enterprise agreement.
+- If Startup's allowances do not cover the required burst, daily volume, monthly volume, or resource count, arrange an enterprise usage-based agreement with negotiated rates and limits.
+
+The usage-based model is for hand-negotiated enterprise workloads, not a self-serve selection. Its standard entitlement model has no fixed inbox, domain, member, five-minute, daily, or monthly cap, though a negotiated agreement can still set limits for deliverability or operational reasons. Enterprise agreements also unlock everything in Startup plus unlimited inboxes, bulk discounts, a white-label platform, EU region cloud, bring-your-own-cloud deployment, dedicated IPs, OIDC and SAML SSO, an SLA, and a dedicated Slack support channel. Contact [support@agentmail.cc](mailto:support@agentmail.cc) for enterprise pricing and limits. Add-ons are not a substitute for a negotiated delivery policy when your required sending pattern exceeds the Startup plan's limits.
+
+## Measure your usage
+
+AgentMail keeps two read-only series about your account, and each answers a different kind of question:
+
+- Event counts tell you what happened during a time window: how many emails were sent, delivered, bounced, or received, grouped by event type and time bucket. Reach for them to investigate whether activity changed during a period.
+- Usage totals tell you what a scope holds over time: running totals of storage, messages, threads, inboxes, domains, and pods. A point is the total at that time, not the change since the previous point.
+
+| Question | Query | Result |
+| --- | --- | --- |
+| How many delivery or mailbox events happened during a window? | [Event counts](#count-email-events-over-a-window) | Event types mapped to `{ timestamp, count }` buckets |
+| How much of a resource exists over time? | [Usage totals](#track-what-a-scope-holds-over-time) | Usage types mapped to `{ timestamp, value }` points |
+
+Both queries share the same time controls. They default to the last 24 hours, and history goes back 90 days: a `start` older than that is rejected, and a future `end` is clamped to the current time.
+
+Every metrics query requires the `metrics_read` permission:
+
+- A key created without a `permissions` object holds every permission, `metrics_read` included.
+- A key created with a `permissions` object holds only what the object sets to `true`, so include `"metrics_read": true`. A permission omitted from the object or set to `false` is denied.
+- The key's resource scope still applies. `metrics_read` lets a key read metrics within its own organization, pod, or inbox scope, not beyond it.
+
+<Accordion title="Troubleshooting">
+
+If a metrics call is rejected instead of returning data:
+
+- A `401` means the API key is missing or invalid.
+- A `403` with the code `missing_permission` means the key lacks `metrics_read`, and the error's `fix` says what kind of key would succeed.
+
+</Accordion>
+
+### Count email events over a window
+
+Results come back grouped by event type and time bucket. This example counts sent and bounced mail in one-hour buckets over the last 24 hours.
+
+Every parameter is optional, and all of them go in the query string:
+
+<CodeGroup>
+
+```bash API
+curl "https://api.agentmail.to/v0/metrics/events?event_types=message.sent,message.bounced&period=3600" \
+  -H "Authorization: Bearer $AGENTMAIL_API_KEY"
+```
+
+```typescript TypeScript
+const events = await client.metrics.queryEvents({
+  eventTypes: ["message.sent", "message.bounced"],
+  period: 3600,
+});
+```
+
+```python Python
+events = client.metrics.query_events(
+    event_types=["message.sent", "message.bounced"],
+    period=3600,
+)
+```
+
+</CodeGroup>
+
+| Param | Type | What it means |
+| --- | --- | --- |
+| `event_types` | string[] | The event types to count, comma separated in the URL. Omit it to count every type. |
+| `start` | RFC 3339 timestamp | Beginning of the window. Defaults to 24 hours ago, and must be within the last 90 days. |
+| `end` | RFC 3339 timestamp | End of the window. Defaults to now. A future value is clamped to now. |
+| `period` | integer | Bucket size as a whole number of seconds, 1 through 86400. Omit it for a single total per event type across the window. |
+| `limit` | integer | The most buckets returned per event type, 1 through 1000. Defaults to 1000. |
+| `descending` | boolean | Newest buckets first. Defaults to `false`, oldest first. |
+
+`event_types` accepts these values:
+
+- `message.received` and its flagged variants `message.received.spam`, `message.received.blocked`, and `message.received.unauthenticated` for inbound mail
+- `message.sent`, `message.delivered`, `message.bounced`, `message.complained`, and `message.rejected` for the stages of outbound mail
+- `message.opened` for the first open of a tracked message
+- `domain.verified` for a custom domain completing verification
+
+These are the same events webhooks deliver, and the [event table](/advanced/webhooks#events-reference) describes when each one fires.
+
+The response has one key per queried event type, each holding `{ timestamp, count }` buckets. How to read them:
+
+- A bucket's timestamp is the end of its window, so the `10:00:00Z` bucket below counts events between 09:00 and 10:00.
+- The newest bucket closes at the query time instead of on the grid. That bucket is still filling, which is why its timestamp is not a round number.
+- Buckets where nothing happened are skipped, so quiet hours show up as gaps rather than zeros, and a type with no matching events at all comes back as an empty list.
+- Without `period`, each type gets a single bucket holding its total for the whole window.
+
+```json Sample response
+{
+  "message.sent": [
+    { "timestamp": "2026-08-25T09:00:00Z", "count": 36 },
+    { "timestamp": "2026-08-25T10:00:00Z", "count": 18 },
+    { "timestamp": "2026-08-25T10:41:12.583Z", "count": 3 }
+  ],
+  "message.bounced": []
+}
+```
+
+Compare the `message.sent`, `message.delivered`, and `message.bounced` buckets for the same window to watch delivery health. Sends that stop turning into deliveries, or a growing bounce count, are an early sign of a [deliverability problem](/advanced/deliverability).
+
+Requests that push past the limits behave like this:
+
+- With a `period` set, a window that spans more than 1000 buckets is still served, but only for the 1000 buckets nearest the oldest edge (nearest the newest edge with `descending=true`). Use a larger `period`, or shift `start` and `end` to page through the rest.
+
+`GET /v0/metrics` without the `/events` suffix is a deprecated alias for this query, at every scope. Existing calls keep working, but point new code at `/v0/metrics/events` and the `queryEvents` and `query_events` methods.
+
+<Accordion title="Troubleshooting">
+
+A `400` with the code `validation_error` means a parameter is out of range, and the `errors` array names which one:
+
+- `start` more than 90 days ago, or in the future
+- `end` before `start`, or a window that is entirely in the future
+- `period` or `limit` outside its range, or not a whole number
+- an `event_types` value outside the list above (the error repeats the valid values)
+
+</Accordion>
+
+### Track what a scope holds over time
+
+The usage query returns running totals. Use it when the question is about amounts rather than activity: how much storage the mail takes up, or how many messages, threads, inboxes, domains, or pods exist. This example reads daily storage and message totals.
+
+<CodeGroup>
+
+```bash API
+curl "https://api.agentmail.to/v0/metrics/usage?usage_types=storage_bytes,message_count&period=86400" \
+  -H "Authorization: Bearer $AGENTMAIL_API_KEY"
+```
+
+```typescript TypeScript
+const usage = await client.metrics.queryUsage({
+  usageTypes: ["storage_bytes", "message_count"],
+  period: 86400,
+});
+```
+
+```python Python
+usage = client.metrics.query_usage(
+    usage_types=["storage_bytes", "message_count"],
+    period=86400,
+)
+```
+
+</CodeGroup>
+
+`usage_types` takes the place of `event_types`. The other parameters keep the names, types, and defaults of the event query, with one difference: `period` here defaults to 600, so a call with no parameters returns the last 24 hours at 10-minute resolution.
+
+Which usage types carry data depends on the scope you query:
+
+| Queried scope | Usage types |
+| --- | --- |
+| Inbox | `storage_bytes`, `message_count`, `thread_count` |
+| Pod | The inbox types plus `inbox_count` and `domain_count` |
+| Organization | The pod types plus `pod_count` |
+
+Omit `usage_types` to get every type valid for the queried scope. A requested type that does not apply to the scope is dropped from the response without an error, so asking an inbox for `pod_count` returns no such key.
+
+The response has one key per usage type, each holding `{ timestamp, value }` points where `value` is the cumulative total at that moment. Between changes the series holds flat rather than skipping buckets, so any point reads as the total at that time. The newest point is stamped at the query time and carries the current total, which makes `descending=true` with `limit=1` the quickest way to read usage right now. A type the scope holds nothing of comes back as an empty list.
+
+```json Sample response
+{
+  "storage_bytes": [
+    { "timestamp": "2026-08-25T00:00:00Z", "value": 453786 },
+    { "timestamp": "2026-08-25T10:41:14.207Z", "value": 560307 }
+  ],
+  "message_count": [
+    { "timestamp": "2026-08-25T00:00:00Z", "value": 134 },
+    { "timestamp": "2026-08-25T10:41:14.207Z", "value": 168 }
+  ]
+}
+```
+
+To judge `inbox_count` or `domain_count` against the caps your plan enforces, read them next to [your organization's effective limits](#check-your-organizations-effective-limits).
+
+<Accordion title="Troubleshooting">
+
+Unlike the event query, a window that spans more than 1000 buckets is rejected here. With the default `period` of 600 the cap is just under seven days, so a query without `period` over a longer window fails with this `400`:
+
+```json 400 Sample response
+{
+  "name": "ValidationError",
+  "code": "validation_error",
+  "message": "Request validation failed",
+  "errors": [
+    {
+      "code": "custom",
+      "path": ["period"],
+      "message": "Range divided by period exceeds 1000 buckets; increase period or narrow the range"
+    }
+  ],
+  "fix": "One or more request fields are invalid. Inspect the 'errors' array — each entry has a 'path' and 'message' — correct the offending fields and resend.",
+  "docs": "https://docs.agentmail.to/errors#validation_error"
+}
+```
+
+Do what the message says: raise `period` or narrow the window. The other `400` checks match the event query's list above.
+
+</Accordion>
+
+### Query one pod or inbox
+
+The paths above read at your key's scope. An organization key gets numbers for the whole organization, while a key scoped to a pod or inbox automatically gets its own pod or inbox. To pin a query to one pod or inbox explicitly, put its id in the path:
+
+- `GET /v0/pods/{pod_id}/metrics/events` and `GET /v0/pods/{pod_id}/metrics/usage` read one pod
+- `GET /v0/inboxes/{inbox_id}/metrics/events` and `GET /v0/inboxes/{inbox_id}/metrics/usage` read one inbox
+
+The parameters, permission, and response shapes are the same at every scope, and the SDK methods keep their names under `client.inboxes.metrics` and `client.pods.metrics`:
+
+<CodeGroup>
+
+```bash API
+# events for one inbox
+curl "https://api.agentmail.to/v0/inboxes/example@agentmail.to/metrics/events?event_types=message.received&period=3600" \
+  -H "Authorization: Bearer $AGENTMAIL_API_KEY"
+
+# usage for one pod
+curl "https://api.agentmail.to/v0/pods/<pod_id>/metrics/usage?usage_types=inbox_count&period=86400" \
+  -H "Authorization: Bearer $AGENTMAIL_API_KEY"
+```
+
+```typescript TypeScript
+// events for one inbox
+const inboxEvents = await client.inboxes.metrics.queryEvents("example@agentmail.to", {
+  eventTypes: ["message.received"],
+  period: 3600,
+});
+
+// usage for one pod
+const podUsage = await client.pods.metrics.queryUsage("<pod_id>", {
+  usageTypes: ["inbox_count"],
+  period: 86400,
+});
+```
+
+```python Python
+# events for one inbox
+inbox_events = client.inboxes.metrics.query_events(
+    inbox_id="example@agentmail.to",
+    event_types=["message.received"],
+    period=3600,
+)
+
+# usage for one pod
+pod_usage = client.pods.metrics.query_usage(
+    pod_id="<pod_id>",
+    usage_types=["inbox_count"],
+    period=86400,
+)
+```
+
+</CodeGroup>
+
+A `pod_id` comes from creating or listing pods, covered in [multi-tenant email](/advanced/multi-tenant).
+
+```json Sample response
+{
+  "inbox_count": [
+    { "timestamp": "2026-08-25T00:00:00Z", "value": 3 },
+    { "timestamp": "2026-08-25T10:41:16.331Z", "value": 3 }
+  ]
+}
+```
+
+To match the query to the check:
+
+- For capacity monitoring, query usage on the scope where the limit or resource decision applies, then compare consecutive points to see whether the totals are growing.
+- For an investigation into event volume, request the relevant event types with a `period` that matches the incident window instead of deriving activity from usage totals.
+- Use the inbox path to investigate a single inbox and the pod path to check a whole tenant, so the result covers that pod's inboxes without mixing in another pod's.
+
+<Accordion title="Troubleshooting">
+
+- **The call returns a `404` with "Inbox not found" or "Pod not found".** The id in the path is not visible to your key (usually, it is a typo, or the key is scoped to a different pod or inbox).
+
+</Accordion>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Errors and Idempotency" icon="triangle-exclamation" href="/advanced/errors">
+    Recover from every error code and make retried creates and sends safe.
+  </Card>
+  <Card title="Webhooks" icon="bell" href="/advanced/webhooks">
+    React to these events the moment they happen instead of polling for counts.
+  </Card>
+</CardGroup>
+
+</Visibility>
+
+<Visibility for="agents">
+
+# Track plan limits and usage
+
+AgentMail plans meter outbound sends and cap how many inboxes, domains, and members an organization holds, while receiving email carries no billable event. Read the live catalog and your organization's effective limits before provisioning, then query the metrics endpoints to count email events and track running resource totals.
+
+## Do this
+
+```bash
+# 1. Read the live plan and add-on catalog. No auth header needed.
+#    null on an entitlement means the plan has no cap on that field.
+curl "https://api.agentmail.to/billing/catalog"
+
+# 2. Read the limits actually enforced for your organization.
+curl "https://api.agentmail.to/v0/organizations" \
+  -H "Authorization: Bearer $AGENTMAIL_API_KEY"
+# -> billing_plan_id, inbox_count and inbox_limit, domain_count and domain_limit,
+#    five_minute_send_limit, daily_send_limit. An absent limit field means no cap.
+
+# 3. Count email events over a window: sent and bounced, 1-hour buckets, last 24 hours.
+curl "https://api.agentmail.to/v0/metrics/events?event_types=message.sent,message.bounced&period=3600" \
+  -H "Authorization: Bearer $AGENTMAIL_API_KEY"
+
+# 4. Read current resource totals. The newest usage point carries the total right now.
+curl "https://api.agentmail.to/v0/metrics/usage?descending=true&limit=1" \
+  -H "Authorization: Bearer $AGENTMAIL_API_KEY"
+```
+
+## SDK
+
+Install: `npm install -g agentmail-cli` (CLI), `npm install agentmail` (TypeScript), `pip install agentmail` (Python).
+
+- Effective limits: CLI `agentmail organizations get`, TypeScript `client.organizations.get()`, Python `client.organizations.get()`
+- Event counts: TypeScript `client.metrics.queryEvents({ eventTypes, period })`, Python `client.metrics.query_events(event_types=[...], period=...)`
+- Usage totals: TypeScript `client.metrics.queryUsage({ usageTypes, period })`, Python `client.metrics.query_usage(usage_types=[...], period=...)`
+- One inbox: TypeScript `client.inboxes.metrics.queryEvents("example@agentmail.to", { eventTypes })` and `queryUsage`, Python `client.inboxes.metrics.query_events(inbox_id=..., event_types=[...])` and `query_usage`
+- One pod: TypeScript `client.pods.metrics.queryUsage("<pod_id>", { usageTypes })` and `queryEvents`, Python `client.pods.metrics.query_usage(pod_id=..., usage_types=[...])` and `query_events`
+
+Client setup and the full surface reference: /integrations/sdks-and-cli
+
+## Facts
+
+- Receiving email is free. Inboxes receive, store, and index mail without a billable event. Plans meter outbound sends and cap inboxes, domains, and members, and creation is blocked once an allowance is exhausted.
+- Free plan: $0 per month, 3 inboxes, 0 domains, 1 member, 100 sends per day, no published five-minute cap, no monthly send cap, 3 GB mail storage, no annual option. The 100-per-day quota works out to about 3,000 emails per month.
+- Developer plan: $20 per month or $192 per year (20 percent off, billed yearly), 10 inboxes, 10 domains, 2 members, 100 sends per 5 minutes, 1,000 sends per day, 10,000 sends per month, 10 GB mail storage, email support, no recipient ramp.
+- Startup plan: $200 per month or $1,920 per year (20 percent off, billed yearly), 150 inboxes, 150 domains, 10 members, 1,500 sends per 5 minutes, 15,000 sends per day, 150,000 sends per month, mail storage not published, SOC 2 report access, no recipient ramp.
+- Console sign-up starts an organization on Free with no credit card. CLI agent-flow sign-up starts it on the Agent plan: 1 inbox, 0 domains, 1 member, 10 sends per day, no five-minute or monthly cap, no recipient ramp.
+- Agent plan numbers are pre-verification limits, not a tier to stay on. Verifying with the 6-digit code emailed at sign-up moves the organization to Free at no cost, and Agent-plan limit errors carry a `fix` pointing at that verification call.
+- Free plan recipient ramp: at most 5 distinct recipients in the organization's first 24 hours and at most 10 cumulative in its first week. The ramp lifts entirely after 7 days. Upgrading to a paid plan removes it immediately, not at the window boundary.
+- The ramp counts people, not addresses or messages. Addresses that emailed one of your inboxes first never count. Plus-tag forms and Gmail dot variants of one mailbox occupy a single slot. Recipients are counted when the send is attempted, even if the send fails later.
+- Send quotas are counted per organization, across all inboxes. Each recipient counts as one send: a message with three addresses across `to`, `cc`, and `bcc` consumes three sends. Replies are outbound sends.
+- Windows are fixed, not rolling. The daily window resets at midnight UTC. The monthly quota uses a fixed 30-day window, not the calendar month.
+- Crossing 80 percent of the monthly send allowance triggers a one-time usage warning email for that window.
+- Distributing sends across inboxes does not change the organization quota, but mailbox providers throttle per address, so 10 emails each from 100 inboxes lands better than 1,000 from one inbox.
+- Safe retries: pass `client_id` on create operations so a retry cannot duplicate a resource. For sends, track the `message_id` already sent, or stage the message as a draft and send the draft.
+- Add-ons, paid plans only, bought self-serve in the Console under Billing: +1 inbox for $2 per month, +1 custom domain for $2 per month, +1,000 monthly sends for $2 per month. Annual units cost $1.60 per month per unit billed yearly, the same 20 percent discount.
+- Add-on increases are charged pro rata and take effect on the very next API call. Decreases take effect at the end of the billing period, and a pending decrease can be cancelled before then.
+- Send add-ons recompute the daily limit as one tenth and the five-minute limit as one hundredth of the new effective monthly allowance, never below the plan's base values. Five send blocks on Developer yield 15,000 per month, 1,500 per day, and 150 per five minutes.
+- Example add-on bill: a Developer organization with 15 inboxes and one extra domain pays $20 + $10 + $2 = $32 per month.
+- Plan and add-on limits are enforced at three points: inbox creation, domain creation, and send.
+- Enterprise usage-based agreements are hand-negotiated (contact `support@agentmail.cc`). The standard entitlement model has no fixed inbox, domain, member, five-minute, daily, or monthly cap, and agreements unlock everything in Startup plus unlimited inboxes, bulk discounts, a white-label platform, EU region cloud, bring-your-own-cloud deployment, dedicated IPs, OIDC and SAML SSO, an SLA, and a dedicated Slack support channel.
+- `GET https://api.agentmail.to/billing/catalog` is unauthenticated (the path works with or without the `/v0` prefix), lists every self-serve plan and add-on, uses `null` for a field with no cap, prices add-on units in cents, marks purchasable add-ons with `sellable: true`, and is cached for about five minutes.
+- `GET /v0/organizations` returns the effective enforced values, adjusted by add-ons, support grants, and account state: `billing_plan_id`, `inbox_count` with `inbox_limit`, `domain_count` with `domain_limit`, `five_minute_send_limit`, `daily_send_limit`. An absent limit field means no cap on that resource.
+- Metrics queries require the `metrics_read` permission. A key created without a `permissions` object holds every permission. A key created with one holds only the operations set to `true`, and the key's resource scope still applies.
+- Metrics windows default to the last 24 hours. History goes back 90 days. A future `end` is clamped to the current time.
+- `GET /v0/metrics/events` params, all optional and in the query string: `event_types` (comma separated, omit to count every type), `start` and `end` (RFC 3339), `period` (whole seconds, 1 through 86400, omit for one total per type), `limit` (buckets per type, 1 through 1000, default 1000), `descending` (default `false`, oldest first).
+- Valid `event_types`: `message.received`, `message.received.spam`, `message.received.blocked`, `message.received.unauthenticated`, `message.sent`, `message.delivered`, `message.bounced`, `message.complained`, `message.rejected`, `message.opened`, `domain.verified`. These are the same events webhooks deliver.
+- Event responses map each queried type to `{ timestamp, count }` buckets. A bucket's timestamp is the end of its window, the newest bucket closes at the query time, and a type with no matching events returns an empty list.
+- An event window spanning more than 1000 buckets is still served, truncated to the 1000 buckets nearest the oldest edge (nearest the newest edge with `descending=true`).
+- `GET /v0/metrics/usage` takes `usage_types` in place of `event_types`. The other params keep the event query's names, types, and defaults, except `period` defaults to 600, so a bare call returns the last 24 hours at 10-minute resolution.
+- Usage types by scope: inbox has `storage_bytes`, `message_count`, `thread_count`. Pod adds `inbox_count` and `domain_count`. Organization adds `pod_count`. Omit `usage_types` to get every type valid for the scope.
+- Usage responses map each type to `{ timestamp, value }` points where `value` is the cumulative total at that moment. The series holds flat between changes. The newest point is stamped at the query time with the current total, so `descending=true` with `limit=1` reads usage right now.
+- Scoped paths: `GET /v0/pods/{pod_id}/metrics/events`, `GET /v0/pods/{pod_id}/metrics/usage`, `GET /v0/inboxes/{inbox_id}/metrics/events`, `GET /v0/inboxes/{inbox_id}/metrics/usage`. Params, permission, and response shapes are identical at every scope. A pod- or inbox-scoped key on the unscoped paths automatically reads its own pod or inbox.
+- A `401` on a metrics call means the API key is missing or invalid.
+
+## Not supported
+
+- The Free plan cannot buy add-ons. A Free organization that needs a custom domain upgrades to Developer first.
+- The enterprise usage-based model is not a self-serve selection.
+- Retrying before a daily or monthly quota resets does not create additional capacity. Treat those windows as terminal and alert. A five-minute rejection clears in minutes.
+- Meeting a monthly forecast does not guarantee a burst is accepted. The five-minute rate limit applies at the same time as the period quotas.
+- Event responses do not emit zero-count buckets. Quiet periods appear as gaps, not zeros.
+- Requesting a usage type the queried scope does not carry returns no error. The key is simply absent from the response.
+- The usage query does not truncate oversized windows the way the event query does. A window over 1000 buckets is rejected with `validation_error`. With the default `period` of 600 the cap is just under seven days.
+- `GET /v0/metrics` without the `/events` suffix is a deprecated alias at every scope. Existing calls keep working, but point new code at `/v0/metrics/events` (`queryEvents`, `query_events`).
+- Add-ons are not a substitute for a negotiated delivery policy when the required sending pattern exceeds the Startup plan's limits.
+
+## Errors
+
+| Error | HTTP | Cause | Fix |
+| --- | --- | --- | --- |
+| `limit_exceeded` | 403 | An inbox or domain create hit the plan's resource cap | Delete a resource, buy an add-on, or upgrade. The body's `fix` names the cheapest plan that raises the cap, and the `x-agentmail-resource`, `x-agentmail-limit`, and `x-agentmail-remaining` headers carry the same facts |
+| `rate_limit_exceeded` | 429 | A send exceeded the five-minute, daily, or monthly window, or the Free plan recipient ramp | Honor `Retry-After` (seconds until reset, mirrored in `ratelimit-reset`, cap in `ratelimit-limit`). Branch on `window`: five-minute clears in minutes, daily and monthly are terminal for the window. For ramp rejections, replies to inbound mail are always allowed, or upgrade, or wait for the lift time named in the message |
+| `missing_permission` | 403 | The key's permissions whitelist lacks `metrics_read` | Use a key created without a `permissions` object, or one that sets `"metrics_read": true` |
+| `validation_error` | 400 | A metrics param is out of range: `start` over 90 days old or in the future, `end` before `start`, `period` or `limit` outside range or fractional, an unknown `event_types` value, or a usage window over 1000 buckets | The `errors` array names the field. Correct it, or raise `period` or narrow the window |
+
+## Verify
+
+```bash
+curl "https://api.agentmail.to/v0/organizations" \
+  -H "Authorization: Bearer $AGENTMAIL_API_KEY"
+```
+
+`200` with `billing_plan_id` and paired counts and limits confirms the key works and shows provisioning headroom. Compare `inbox_count` with `inbox_limit` before a batch of creates.
+
+## Related
+
+- /advanced/errors - the error code reference and idempotent retries with `client_id`
+- /advanced/webhooks - react to the same events on delivery instead of polling counts
+- /advanced/multi-tenant - where a `pod_id` comes from and per-tenant usage metering
+- /advanced/deliverability - what a rising bounce count points to
+- /integrations/sdks-and-cli - client setup and the SDKs' built-in `429` retries
+- /quickstart - get an API key, including the CLI agent sign-up flow
+
+</Visibility>

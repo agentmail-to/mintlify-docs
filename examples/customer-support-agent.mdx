@@ -1,0 +1,432 @@
+---
+title: "Customer Support AI Agent"
+description: "Build a support agent on Vercel Eve and AgentMail: answer from your docs and past threads, reply in-thread, and escalate to a human as an editable draft."
+---
+
+<Visibility for="humans">
+
+Give an agent your support inbox. It answers every email from your docs and past conversations within minutes, in the same thread. When it is not sure, it writes the reply as a draft and leaves it for a person to approve.
+
+This cookbook builds it as a [Vercel Eve](https://eve.dev) agent with AgentMail as the email layer.
+
+### What a Customer Support AI Agent needs to do
+
+1. Receive every message sent to your support address, on your own domain
+2. Answer from your docs and past conversations, in the same thread
+3. Save the reply as a draft for human approval when it is not sure
+
+
+<Prompt description="Copy this prompt into Claude Code, Cursor, or another coding agent to build it." actions={["copy", "cursor"]}>
+Build a customer support agent as a Vercel Eve agent (eve.dev) with AgentMail
+(agentmail.to) as its email layer.
+
+What it does:
+- Owns a support inbox on the company's domain (AgentMail inboxes API; if the
+  main domain's mail lives in Google Workspace, the agent runs on a subdomain
+  like help.example.com so nothing about existing mail changes).
+- Receives message.received events on an AgentMail webhook (Svix-signed),
+  dedupes by message id, and maps each email thread to one durable agent
+  session.
+- Reads only what the customer wrote (AgentMail extracted_text strips quoted
+  history) plus text AgentMail extracts from their attachments.
+- Answers from two sources: a folder of help-center markdown docs, and past
+  conversations found with AgentMail thread search. Every answer must come
+  from one of the two. Confident answers go out as in-thread replies with an
+  Idempotency-Key header.
+- When the sources do not clearly answer, or the request involves billing,
+  refunds, account changes, or an upset customer: it does not reply. It
+  writes the proposed answer as an AgentMail reply draft (in_reply_to, not
+  sent), labels the thread needs-human-review, and forwards the customer's
+  message to the operator's own email address so a person knows right away.
+  The team reviews every pending draft across all inboxes with one org-wide
+  drafts list call, edits, and sends. A thread labeled needs-human-review
+  belongs to a person until the label is removed.
+- Inbound is screened before the agent sees it: AgentMail hides spam,
+  unauthenticated, and blocked mail from listings by default, and receive
+  block lists reject known bad senders. The agent never replies to a message
+  with an Auto-Submitted header and never sends more than two replies in a
+  thread without a human involved.
+</Prompt>
+
+## Before you start
+
+- Node.js 24 or newer, and an [AI Gateway](https://vercel.com/docs/ai-gateway) key (or any model provider key) for Eve.
+- An AgentMail API key. The Developer plan if the support address should live on your own domain.
+- Your help docs as a folder of markdown files. An export of your help center works.
+
+Scaffold the agent and add the two SDKs:
+
+```bash
+npx eve@latest init support-agent --model anthropic/claude-sonnet-5
+cd support-agent
+npm install agentmail svix
+export AGENTMAIL_API_KEY="..."
+```
+
+Add two shared files for the tools to import:
+
+```typescript agent/lib/agentmail.ts
+import { AgentMailClient } from "agentmail";
+
+export const agentmail = new AgentMailClient(); // reads AGENTMAIL_API_KEY
+export const INBOX = process.env.SUPPORT_INBOX!;      // e.g. support@help.example.com
+export const OPERATOR = process.env.OPERATOR_EMAIL!;  // operator address, e.g. you@example.com
+```
+
+```typescript agent/lib/store.ts
+import { DatabaseSync } from "node:sqlite";
+
+const db = new DatabaseSync("support.db");
+db.exec("CREATE TABLE IF NOT EXISTS processed (message_id TEXT PRIMARY KEY)");
+
+export function claim(messageId: string): boolean {
+  try {
+    db.prepare("INSERT INTO processed VALUES (?)").run(messageId);
+    return true;
+  } catch {
+    return false; // already processed: webhook deliveries repeat
+  }
+}
+```
+
+## 1. Set up the support address
+
+Create the inbox on your own domain. If you have not added the domain yet, read our [custom domains guide](/advanced/custom-domains) to set it up: add the domain, publish the DNS records it returns, and verify. Then:
+
+```typescript
+const inbox = await agentmail.inboxes.create({
+  username: "support",
+  domain: "help.example.com",
+  displayName: "Acme Support",
+});
+```
+
+If your company's mail already lives in Google Workspace or another provider, do not touch the main domain. Put the agent on a subdomain: the root's MX records keep pointing at Gmail, and `help.example.com` points at AgentMail. Neither side sees the other's mail. Read the [custom domains guide](/advanced/custom-domains#register-a-subdomain) to set this up.
+
+Inbound mail is screened before the agent sees any of it. Messages that fail the virus scan or an enforced DMARC policy are rejected outright. Spam, unverified senders, and block-list matches are stored but labeled (`spam`, `unauthenticated`, `blocked`) and hidden from listings by default, so those messages do not appear in the agent's default view. To block a known bad sender:
+
+```typescript
+await agentmail.inboxes.lists.create(INBOX, "receive", "block", { entry: "spammy.example" });
+```
+
+## 2. Give the agent your knowledge
+
+The agent answers from two places: your docs folder and past conversations. We will set both of these up as tools. Your docs and help-center content stay as local markdown files in a `docs/` folder next to the agent:
+
+```typescript agent/tools/search_docs.ts
+import { defineTool } from "eve/tools";
+import { z } from "zod";
+import { readdir, readFile } from "node:fs/promises";
+
+export default defineTool({
+  description:
+    "Search the help-center docs. Returns the most relevant passages. " +
+    "Only answers backed by a returned passage may go to a customer.",
+  inputSchema: z.object({ query: z.string() }),
+  async execute({ query }) {
+    const words = query.toLowerCase().split(/\s+/);
+    const results = [];
+    for (const file of await readdir("./docs")) {
+      const text = await readFile(`./docs/${file}`, "utf8");
+      const score = words.filter((w) => text.toLowerCase().includes(w)).length;
+      if (score > 0) results.push({ file, score, text: text.slice(0, 3000) });
+    }
+    return results.sort((a, b) => b.score - a.score).slice(0, 3);
+  },
+});
+```
+
+For a simple example, keyword search is enough. To improve the agent's ability to find the right information, look into other retrieval techniques: semantic search with embeddings, chunking the docs into sections before indexing, or reranking the results with a small model. The tool's interface stays the same, so you can swap the internals later without touching the rest of the agent.
+
+Past conversations are already in the inbox, and thread search can find them:
+
+```typescript agent/tools/search_past_threads.ts
+import { defineTool } from "eve/tools";
+import { z } from "zod";
+import { agentmail, INBOX } from "../lib/agentmail";
+
+export default defineTool({
+  description: "Search past support conversations for how a question was answered before.",
+  inputSchema: z.object({ query: z.string() }),
+  async execute({ query }) {
+    const results = await agentmail.inboxes.threads.search(INBOX, { q: query });
+    return results.threads.map((t) => ({
+      threadId: t.threadId,
+      subject: t.subject,
+      preview: t.preview,
+    }));
+  },
+});
+```
+
+Add a `get_thread` tool that wraps `agentmail.threads.get(threadId)` so the agent can read a full past conversation when a search result looks relevant. Every ticket the team resolves becomes searchable for the next one.
+
+## 3. Answer over email
+
+You will need a webhook so the agent is triggered the moment an email arrives at the support inbox. Register it once:
+
+```typescript
+const webhook = await agentmail.webhooks.create({
+  url: "https://support-agent.example.com/webhooks/agentmail",
+  eventTypes: ["message.received"],
+  inboxIds: [INBOX],
+  clientId: "support-agent-v1",
+});
+// Save webhook.secret as AGENTMAIL_WEBHOOK_SECRET. It is shown once.
+```
+
+The receiving end is an Eve channel. It verifies the Svix signature, dedupes (delivery is at least once), and turns each message into an agent turn. `from(threadId)` maps every ticket thread to its own durable session, so the agent remembers the conversation when the customer writes back:
+
+```typescript agent/channels/agentmail.ts
+import { defineChannel, POST } from "eve/channels";
+import { Webhook } from "svix";
+import { claim } from "../lib/store";
+
+const verifier = new Webhook(process.env.AGENTMAIL_WEBHOOK_SECRET!);
+
+export default defineChannel({
+  turnPolicy: "queue",
+  routes: [
+    POST("/webhooks/agentmail", async (request, { from }) => {
+      const payload = await request.text();
+      let event: any;
+      try {
+        event = verifier.verify(payload, {
+          "svix-id": request.headers.get("svix-id") ?? "",
+          "svix-timestamp": request.headers.get("svix-timestamp") ?? "",
+          "svix-signature": request.headers.get("svix-signature") ?? "",
+        });
+      } catch {
+        return new Response(null, { status: 400 });
+      }
+
+      const message = event.message;
+      if (!claim(message.message_id)) return new Response(null, { status: 200 });
+
+      await from(message.thread_id).send(
+        `New support message from ${message.from} in thread ${message.thread_id}. ` +
+          `Handle it per the playbook.`,
+        { auth: null },
+      );
+      return new Response(null, { status: 200 });
+    }),
+  ],
+});
+```
+
+### Customer Support Agent System Prompt
+
+Here is an example:
+
+```markdown
+You are Acme's support agent. When a message arrives: fetch it and read its
+extracted_text (what the customer wrote, without quoted history). Then
+search_docs and search_past_threads for the answer.
+
+If a returned passage or past thread clearly answers the question: reply
+in-thread with reply_to_customer. Keep it short, answer first, then link the
+doc you used. Do not say more than the sources support.
+
+Escalate instead of replying when any of these is true: the sources do not
+clearly answer it, the customer is upset, or the request involves billing,
+refunds, or account changes.
+
+Never reply to a message with an Auto-Submitted header. Never reply in a
+thread labeled needs-human-review. Never send more than two replies in one
+thread without a human involved.
+```
+
+`reply_to_customer` calls the reply endpoint with an idempotency key:
+
+```typescript agent/tools/reply_to_customer.ts
+import { defineTool } from "eve/tools";
+import { z } from "zod";
+import { agentmail, INBOX } from "../lib/agentmail";
+
+export default defineTool({
+  description: "Reply to the customer in their thread.",
+  inputSchema: z.object({ messageId: z.string(), text: z.string() }),
+  async execute({ messageId, text }) {
+    const reply = await agentmail.inboxes.messages.reply(
+      INBOX,
+      messageId,
+      { text },
+      { headers: { "Idempotency-Key": `reply-${messageId}` } },
+    );
+    return { messageId: reply.messageId, threadId: reply.threadId };
+  },
+});
+```
+
+Run `npm run dev`, email the support address from your own account, and watch the agent search your docs and answer in the thread.
+
+## 4. Escalate when it is not sure
+
+The agent does three things: it writes the reply it would have sent as an unsent draft in the thread, labels the thread, and forwards the customer's message to your own email address so you know right away. You get a notification in your inbox and an editable proposed answer instead of a blank compose box:
+
+```typescript agent/tools/escalate.ts
+import { defineTool } from "eve/tools";
+import { z } from "zod";
+import { agentmail, INBOX, OPERATOR } from "../lib/agentmail";
+
+export default defineTool({
+  description:
+    "Escalate a thread to a person. Saves the proposed reply as an unsent draft, " +
+    "labels the thread needs-human-review, and notifies the operator by email.",
+  inputSchema: z.object({
+    messageId: z.string(),
+    threadId: z.string(),
+    proposedReply: z.string(),
+    reason: z.string(),
+  }),
+  async execute({ messageId, threadId, proposedReply, reason }) {
+    await agentmail.inboxes.drafts.create(INBOX, {
+      inReplyTo: messageId,
+      text: proposedReply,
+    });
+    await agentmail.threads.update(threadId, { addLabels: ["needs-human-review"] });
+    await agentmail.inboxes.messages.forward(
+      INBOX,
+      messageId,
+      {
+        to: [OPERATOR],
+        text:
+          `Escalated: ${reason}\n\n` +
+          `A proposed reply is saved as a draft in this thread. ` +
+          `Open it in the Console, edit if needed, and send.`,
+      },
+      { headers: { "Idempotency-Key": `escalate-${messageId}` } },
+    );
+    return { escalated: true, reason };
+  },
+});
+```
+
+List the review queue with one call. Without an inbox id, the drafts listing spans every inbox in the organization, including agents you add later such as `billing@` and `sales@`:
+
+```typescript
+const pending = await agentmail.drafts.list(); // every unsent draft, newest first
+```
+
+You open the draft in the [Console](https://console.agentmail.to), edit it if needed, and send it. The draft appears under the customer's message because it was created with `inReplyTo`. Remove the `needs-human-review` label so the agent can resume replying. If your team uses Slack, add a webhook post next to the forward.
+
+The label also prevents the agent from replying. The playbook says it never replies in a labeled thread, so a person and the agent cannot answer the same customer in two voices.
+
+## Extend the pipeline
+
+Common next steps:
+
+- An embeddings index behind `search_docs`
+- Attachment handling: AgentMail serves extracted text for incoming files, so screenshots and PDFs become searchable input
+- WebSockets instead of the webhook during local development
+- Weekly volume and label counts from the metrics API
+- More addresses (`billing@`, `sales@`) sharing the same org-wide review queue
+
+</Visibility>
+
+<Visibility for="agents">
+
+# Build a customer support agent on Vercel Eve and AgentMail
+
+Builds an agent that owns the support inbox, answers every email from help docs and past conversations in the same thread, and saves the reply as an editable draft for a person when it is not sure. Use it to put an agent on a support address on the company's own domain without touching existing mail.
+
+## Do this
+
+Feed this prompt verbatim to a coding agent (Claude Code, Cursor, or similar) to build the whole agent:
+
+```
+Build a customer support agent as a Vercel Eve agent (eve.dev) with AgentMail
+(agentmail.to) as its email layer.
+
+What it does:
+- Owns a support inbox on the company's domain (AgentMail inboxes API; if the
+  main domain's mail lives in Google Workspace, the agent runs on a subdomain
+  like help.example.com so nothing about existing mail changes).
+- Receives message.received events on an AgentMail webhook (Svix-signed),
+  dedupes by message id, and maps each email thread to one durable agent
+  session.
+- Reads only what the customer wrote (AgentMail extracted_text strips quoted
+  history) plus text AgentMail extracts from their attachments.
+- Answers from two sources: a folder of help-center markdown docs, and past
+  conversations found with AgentMail thread search. Every answer must come
+  from one of the two. Confident answers go out as in-thread replies with an
+  Idempotency-Key header.
+- When the sources do not clearly answer, or the request involves billing,
+  refunds, account changes, or an upset customer: it does not reply. It
+  writes the proposed answer as an AgentMail reply draft (in_reply_to, not
+  sent), labels the thread needs-human-review, and forwards the customer's
+  message to the operator's own email address so a person knows right away.
+  The team reviews every pending draft across all inboxes with one org-wide
+  drafts list call, edits, and sends. A thread labeled needs-human-review
+  belongs to a person until the label is removed.
+- Inbound is screened before the agent sees it: AgentMail hides spam,
+  unauthenticated, and blocked mail from listings by default, and receive
+  block lists reject known bad senders. The agent never replies to a message
+  with an Auto-Submitted header and never sends more than two replies in a
+  thread without a human involved.
+```
+
+Scaffold and dependencies:
+
+```bash
+npx eve@latest init support-agent --model anthropic/claude-sonnet-5
+cd support-agent
+npm install agentmail svix
+export AGENTMAIL_API_KEY="..."
+```
+
+Keep help docs as markdown files in a `docs/` folder next to the agent. `npm run dev` opens an interactive session.
+
+## SDK
+
+`npm install agentmail`. The page's client is TypeScript: `new AgentMailClient()` reads `AGENTMAIL_API_KEY`.
+
+- Create the support inbox: `agentmail.inboxes.create({ username: "support", domain: "help.example.com", displayName: "Acme Support" })`.
+- Block a known bad sender: `agentmail.inboxes.lists.create(INBOX, "receive", "block", { entry: "spammy.example" })`.
+- Search past conversations: `agentmail.inboxes.threads.search(INBOX, { q: query })`. Results carry `threadId`, `subject`, `preview`.
+- Read a full past thread: `agentmail.threads.get(threadId)`.
+- Register the webhook: `agentmail.webhooks.create({ url, eventTypes: ["message.received"], inboxIds: [INBOX], clientId: "support-agent-v1" })`.
+- Reply in the customer's thread: `agentmail.inboxes.messages.reply(INBOX, messageId, { text }, { headers: { "Idempotency-Key": ... } })`.
+- Save an escalation draft: `agentmail.inboxes.drafts.create(INBOX, { inReplyTo: messageId, text: proposedReply })`.
+- Label a thread for review: `agentmail.threads.update(threadId, { addLabels: ["needs-human-review"] })`.
+- Notify the operator: `agentmail.inboxes.messages.forward(INBOX, messageId, { to: [OPERATOR], text }, { headers: { "Idempotency-Key": ... } })`.
+- List the review queue: `agentmail.drafts.list()`.
+
+Full SDK surface: [/integrations/sdks-and-cli](/integrations/sdks-and-cli).
+
+## Facts
+
+- Requires Node.js 24 or newer and an AI Gateway key (or any model provider key) for Eve. The Developer plan when the support address lives on the company's own domain.
+- Env vars: `AGENTMAIL_API_KEY`, `SUPPORT_INBOX` (for example `support@help.example.com`), `OPERATOR_EMAIL`, `AGENTMAIL_WEBHOOK_SECRET` (the Svix secret, shown once at webhook creation).
+- If company mail already lives in Google Workspace or another provider, put the agent on a subdomain like `help.example.com`. The root's MX records keep pointing at the existing provider, and neither side sees the other's mail.
+- Inbound is screened before the agent sees it. Messages that fail the virus scan or an enforced DMARC policy are rejected outright. Spam, unverified senders, and block-list matches are stored but labeled (`spam`, `unauthenticated`, `blocked`) and hidden from listings by default.
+- `extracted_text` is what the customer wrote with quoted history stripped. AgentMail also extracts text from their attachments.
+- Answers come from exactly two sources, the docs folder and past threads found with thread search. Only answers backed by one of the two go to a customer.
+- Webhook deliveries are Svix-signed and at least once. Dedupe by message id. Each email thread maps to one durable agent session.
+- Escalation triggers: the sources do not clearly answer, the customer is upset, or the request involves billing, refunds, or account changes.
+- Escalation does three things and does not reply: saves the proposed answer as an unsent draft with `inReplyTo`, labels the thread `needs-human-review`, and forwards the customer's message to the operator's address.
+- A draft created with `inReplyTo` appears under the customer's message in the thread.
+- `agentmail.drafts.list()` without an inbox id spans every unsent draft in the organization, newest first, including inboxes added later such as `billing@` and `sales@`.
+- A thread labeled `needs-human-review` belongs to a person until the label is removed. The agent never replies in it, so a person and the agent cannot answer the same customer in two voices.
+- Hard rules: never reply to a message with an `Auto-Submitted` header, never send more than two replies in one thread without a human involved.
+
+## Not supported
+
+- Escalation does not send the proposed reply. The draft stays unsent until a person edits and sends it from the Console.
+- Spam, unauthenticated, and blocked messages are hidden from default listings, not deleted.
+- Requests about billing, refunds, or account changes never get an automatic reply. They always escalate.
+
+## Verify
+
+Run `npm run dev`, email the support address from your own account, and watch the agent search the docs and answer in the thread.
+
+## Related
+
+- [/examples/outbound-gtm-sdr-agent](/examples/outbound-gtm-sdr-agent) - the outbound counterpart, same webhook and channel pattern.
+- [/examples/ai-employee-with-its-own-inbox](/examples/ai-employee-with-its-own-inbox) - an agent teammates email directly.
+- [/advanced/custom-domains](/advanced/custom-domains) - domain setup and the Google Workspace subdomain split.
+- [/core/inbound-control](/core/inbound-control) - screening labels and receive block lists.
+- [/core/receive#read-one-message-in-full](/core/receive#read-one-message-in-full) - how `extracted_text` strips quoted history.
+- [/advanced/webhooks](/advanced/webhooks) - event payloads and Svix signature verification.
+
+</Visibility>

@@ -1,0 +1,408 @@
+---
+title: LangChain
+description: Give a LangChain or LangGraph agent its own inbox to send, search, and reply to email.
+icon: "/images/logos/langchain.svg"
+---
+
+<Visibility for="humans">
+
+
+<img src="/images/banners/integration-langchain.svg" alt="" noZoom />
+The `langchain-agentmail` package connects AgentMail to LangChain. The inbox becomes a set of standard tools, a document loader, a retriever, and typed webhook events. By the end of this page, your agent will send email from its own `@agentmail.to` address, run semantic search over its inbox, and answer mail as it arrives.
+
+This one page covers LangChain and LangGraph. `create_agent` compiles to a LangGraph graph, and every tool below is a standard `langchain-core` tool, so the same setup drops into a larger LangGraph app.
+
+## 0. Get API keys
+
+- `AGENTMAIL_API_KEY` authenticates the email tools. Generate one from the [AgentMail Console](https://console.agentmail.to/dashboard/api-keys), or follow the [Quickstart](/quickstart) if this is your first AgentMail project.
+- `OPENAI_API_KEY` authenticates the model calls in the samples. Any LangChain chat model works in its place.
+
+```bash
+export AGENTMAIL_API_KEY="<API_KEY>"
+export OPENAI_API_KEY="<OPENAI_API_KEY>"
+```
+
+## 1. Install and load the toolkit
+
+Install the integration from GitHub, along with LangChain, a model provider, and NumPy, which backs the in-memory vector search in step 3. Everything on this page needs Python 3.10 or newer.
+
+```bash
+pip install "git+https://github.com/agentmail-to/langchain-agentmail.git" langchain langchain-openai numpy
+```
+
+Load the toolkit and print what your agent gets:
+
+```python
+from langchain_agentmail import AgentMailToolkit
+
+toolkit = AgentMailToolkit.from_api_key()  # reads AGENTMAIL_API_KEY
+for tool in toolkit.get_tools():
+    print(tool.name)
+```
+
+```text Sample output
+agentmail_list_inboxes
+agentmail_create_inbox
+agentmail_list_threads
+agentmail_get_thread
+agentmail_list_messages
+agentmail_get_message
+agentmail_send_message
+agentmail_reply_to_message
+agentmail_update_message_labels
+agentmail_create_draft
+agentmail_update_draft
+agentmail_send_draft
+agentmail_delete_draft
+agentmail_get_attachment
+```
+
+<Frame caption="One toolkit call gives the agent all fourteen email tools.">
+  <img src="/images/integrations/langchain-toolkit.png" alt="Terminal output of python list_tools.py printing the fourteen agentmail tool names" />
+</Frame>
+
+Each tool wraps one AgentMail operation:
+
+| Tool | What it does |
+| --- | --- |
+| `agentmail_list_inboxes` | List the inboxes the agent owns, with each `inbox_id`. |
+| `agentmail_create_inbox` | Create an inbox with a chosen or generated username. |
+| `agentmail_list_threads` | List conversations across the agent's inboxes, with label and time filters. |
+| `agentmail_get_thread` | Read every message in one conversation. |
+| `agentmail_list_messages` | List one inbox's messages with previews. |
+| `agentmail_get_message` | Read one message's full plain-text body. |
+| `agentmail_send_message` | Send a new email, with optional attachments. |
+| `agentmail_reply_to_message` | Reply inside the same thread, with optional reply-all. |
+| `agentmail_update_message_labels` | Add or remove labels on a message. |
+| `agentmail_create_draft` | Stage a message, with optional scheduled delivery via `send_at`. |
+| `agentmail_update_draft` | Revise fields on a staged draft. |
+| `agentmail_send_draft` | Send a staged draft. |
+| `agentmail_delete_draft` | Discard a staged draft. |
+| `agentmail_get_attachment` | Get an expiring download URL for an attachment. |
+
+Tools return their results as JSON strings, with HTML stripped and long bodies truncated, so a single thread does not fill the model's context window.
+
+Every tool also works on its own. When a chain needs exactly one operation, construct that tool directly instead of the whole toolkit:
+
+```python
+from langchain_agentmail import AgentMailClient, AgentMailSendTool
+
+send = AgentMailSendTool(client=AgentMailClient())
+send.invoke({
+    "inbox_id": "<inbox_id>",
+    "to": "you@example.com",
+    "subject": "Ping",
+    "text": "Hello from my agent.",
+})
+```
+
+To connect through AgentMail's hosted MCP server instead of this package, see [MCP and Skills](/integrations/mcp-and-skills).
+
+## 2. Test sending emails
+
+Build the agent in `agent.py`:
+
+```python agent.py
+from langchain.agents import create_agent
+from langchain_openai import ChatOpenAI
+
+from langchain_agentmail import AgentMailToolkit
+
+toolkit = AgentMailToolkit.from_api_key()
+agent = create_agent(
+    ChatOpenAI(model="gpt-4o-mini"),
+    tools=toolkit.get_tools(),
+    system_prompt="You are an assistant with your own AgentMail email inbox.",
+)
+```
+
+Have the agent create an inbox and send a message to an email account you already check, whether that is Gmail, Outlook, or anything else. Save this next to `agent.py` and run `python send.py`.
+
+Watch that account: the message shows up there within a couple of seconds, from an `@agentmail.to` address that did not exist a moment ago.
+
+```python send.py
+from agent import agent
+
+result = agent.invoke({
+    "messages": [(
+        "user",
+        "Create an inbox with the display name 'Support agent', then send an "
+        "email from it to you@example.com with the subject 'Hello from my agent' "
+        "and a one-line introduction. Reply with the inbox address once the email is out.",
+    )]
+})
+print(result["messages"][-1].content)
+```
+
+```text Sample output
+Your new inbox is faircost773@agentmail.to. I sent a one-line introduction
+from it to you@example.com.
+```
+
+Save the inbox address. Steps 3 and 4 use it.
+
+This prompt lets AgentMail generate the username.
+
+<Accordion title="Troubleshooting">
+- **`403` on the create when you ask for a specific username.** The name is taken, and the error lists up to three available alternatives in `suggestions`. The tool hands the whole error text to the model, so the agent can pick one and retry within the same run.
+</Accordion>
+
+## 3. Test searching the inbox
+
+`AgentMailLoader` turns messages into LangChain `Document` objects, one per message, ready for any vector store. Index the inbox and search for the email the agent sent in step 2. You should get that email back as the top hit:
+
+```python search.py
+from langchain_core.vectorstores import InMemoryVectorStore
+from langchain_openai import OpenAIEmbeddings
+
+from langchain_agentmail import AgentMailLoader
+
+docs = AgentMailLoader(inbox_id="<inbox_id>", limit=100).load()
+store = InMemoryVectorStore.from_documents(docs, OpenAIEmbeddings())
+retriever = store.as_retriever(search_kwargs={"k": 3})
+
+for doc in retriever.invoke("an introduction"):
+    print(doc.metadata["subject"], "|", doc.page_content[:60])
+```
+
+```text Sample output
+Hello from my agent | Hello! This is a message sent from my agent.
+
+--
+Sent via Ag
+```
+
+The trailing fragment is AgentMail's plain-text signature. It lives inside the body, so the 60-character slice cuts through it.
+
+The loader fetches the full body of every message it loads, so set `limit` on large inboxes.
+
+A document's `page_content` is the plain-text body, with quoted history stripped. Its `metadata` carries `inbox_id`, `message_id`, `thread_id`, `from`, `to`, `subject`, `labels`, `timestamp`, and attachment details. That is everything a search hit needs to become an action: pass its `message_id` to `agentmail_reply_to_message` to answer the message you found, or its `thread_id` to `agentmail_get_thread` to read the whole conversation.
+
+For keyword matching without an embedding model, `AgentMailRetriever(inbox_id="<inbox_id>", k=5).invoke("invoice")` scans recent messages in-process.
+
+## 4. Test answering incoming email
+
+Webhooks let the agent react the moment mail arrives instead of polling for it. AgentMail signs each delivery, and the package's `webhooks` extra verifies that signature and parses the payload into a typed event. Install it together with a server to receive the deliveries:
+
+```bash
+pip install "langchain-agentmail[webhooks] @ git+https://github.com/agentmail-to/langchain-agentmail.git" uvicorn
+```
+
+Save this FastAPI receiver as `webhook_app.py`. On each `message.received` event, it points the agent from step 2 at the message that just arrived:
+
+```python webhook_app.py
+import os
+
+from fastapi import FastAPI, HTTPException, Request
+from langchain.agents import create_agent
+from langchain_openai import ChatOpenAI
+
+from langchain_agentmail import AgentMailToolkit
+from langchain_agentmail.webhooks import (
+    InvalidSignatureError,
+    parse_event,
+    verify_signature,
+)
+
+SECRET = os.environ["AGENTMAIL_WEBHOOK_SECRET"]
+
+toolkit = AgentMailToolkit.from_api_key()
+agent = create_agent(
+    ChatOpenAI(model="gpt-4o-mini"),
+    tools=toolkit.get_tools(),
+    system_prompt="You answer email sent to your AgentMail inbox.",
+)
+
+app = FastAPI()
+
+
+@app.post("/agentmail")
+async def handle_webhook(request: Request) -> dict:
+    body = await request.body()
+    try:
+        verify_signature(
+            payload=body,
+            secret=SECRET,
+            svix_id=request.headers.get("svix-id", ""),
+            svix_timestamp=request.headers.get("svix-timestamp", ""),
+            svix_signature=request.headers.get("svix-signature", ""),
+        )
+    except InvalidSignatureError:
+        raise HTTPException(status_code=400, detail="Invalid signature")
+
+    payload = await request.json()
+    if payload.get("event_type") != "message.received":
+        return {"ok": True}
+
+    event = parse_event(payload)
+    agent.invoke({
+        "messages": [(
+            "user",
+            f"Message {event.message['message_id']} arrived in inbox "
+            f"{event.message['inbox_id']} on thread "
+            f"{event.message['thread_id']}. Read it and reply.",
+        )]
+    })
+    return {"ok": True}
+```
+
+Register the endpoint so AgentMail knows where to deliver. The URL must be reachable from the public internet over HTTPS. For a local test, a tunnel such as ngrok works.
+
+```python
+from agentmail import AgentMail
+
+webhook = AgentMail().webhooks.create(
+    url="https://<your-host>/agentmail",
+    event_types=["message.received"],
+)
+print(webhook.secret)
+```
+
+The response includes the webhook's signing secret, which starts with `whsec_`. Export it and start the server:
+
+```bash
+export AGENTMAIL_WEBHOOK_SECRET="<WEBHOOK_SECRET>"
+uvicorn webhook_app:app --port 8000
+```
+
+Send an email from your everyday account to the agent's inbox. You should get the agent's reply back in your account moments later, threaded under your email.
+
+One note on the receiver: `parse_event` returns typed models for `message.received`, `message.sent`, `message.delivered`, `message.bounced`, `message.complained`, `message.rejected`, and `domain.verified`. Subscribe the webhook to more of these types when your handler acts on them, and extend the handler's `event_type` check to match.
+
+<Accordion title="Troubleshooting">
+- **Deliveries return a `400`.** A delivery passes verification only when it is signed with your webhook's secret over the exact raw request body. Anything else returns a `400`, which in practice means a wrong `AGENTMAIL_WEBHOOK_SECRET`.
+</Accordion>
+
+## Scope the agent's tools
+
+`get_tools()` returns the full toolkit. An agent that only answers incoming mail needs three tools, so filter the list before handing it over:
+
+```python
+allowed = {"agentmail_list_threads", "agentmail_get_thread", "agentmail_reply_to_message"}
+tools = [tool for tool in toolkit.get_tools() if tool.name in allowed]
+```
+
+Limited to these three tools, the agent can only read conversations and send replies. The thread id in the handler's prompt is what makes this narrow set enough: the agent reads the conversation with `agentmail_get_thread` and answers with `agentmail_reply_to_message`, without listing or guessing. For the boundaries that matter once untrusted email starts steering an agent, see [Safety](/advanced/safety).
+
+<Accordion title="Troubleshooting">
+
+- **Missing `AGENTMAIL_API_KEY`.** `AgentMailToolkit.from_api_key()` and every tool constructed without an explicit key read the environment variable, and raise `ValueError: AgentMail API key not found` when it is unset. Export the key before building the agent.
+- **Judging a run by its final message.** Tool failures return to the model as text rather than raising, so an agent can report success after a failed operation. When the outcome looks wrong, print the `ToolMessage` entries in `result["messages"]` to see each tool's actual response.
+- **Verifying a re-serialized body.** `verify_signature` needs the exact raw bytes of the request body. Parse the JSON only after verification, the way `webhook_app.py` does. A body that has been decoded and re-encoded fails with a `400`.
+
+</Accordion>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Host the webhook receiver" icon="bolt" href="/advanced/webhooks">
+    Hosting, delivery retries, and deduplication for inbound events.
+  </Card>
+  <Card title="Send email" icon="paper-plane" href="/core/send">
+    Attachments, HTML bodies, and everything else behind the send tools.
+  </Card>
+</CardGroup>
+
+</Visibility>
+
+<Visibility for="agents">
+
+# Give a LangChain or LangGraph agent an email inbox
+
+The `langchain-agentmail` package turns an AgentMail inbox into standard `langchain-core` tools, a document loader, a retriever, and typed webhook events. Use it when an agent built with `create_agent` or any LangGraph graph needs to send, search, and reply to email from its own `@agentmail.to` address.
+
+## Do this
+
+Python 3.10 or newer. Install from GitHub, export `AGENTMAIL_API_KEY` and `OPENAI_API_KEY`, then build the agent. Any LangChain chat model works in place of `ChatOpenAI`.
+
+```bash
+pip install "git+https://github.com/agentmail-to/langchain-agentmail.git" langchain langchain-openai numpy
+export AGENTMAIL_API_KEY="<API_KEY>"
+export OPENAI_API_KEY="<OPENAI_API_KEY>"
+```
+
+```python
+from langchain.agents import create_agent
+from langchain_openai import ChatOpenAI
+
+from langchain_agentmail import AgentMailToolkit
+
+toolkit = AgentMailToolkit.from_api_key()  # reads AGENTMAIL_API_KEY
+agent = create_agent(
+    ChatOpenAI(model="gpt-4o-mini"),
+    tools=toolkit.get_tools(),
+    system_prompt="You are an assistant with your own AgentMail email inbox.",
+)
+
+result = agent.invoke({"messages": [(
+    "user",
+    "Create an inbox, then send an email from it to you@example.com "
+    "with the subject 'Hello from my agent' and a one-line introduction.",
+)]})
+print(result["messages"][-1].content)
+```
+
+## SDK
+
+Install: `pip install "git+https://github.com/agentmail-to/langchain-agentmail.git"`. For webhook verification, install the `webhooks` extra plus a server: `pip install "langchain-agentmail[webhooks] @ git+https://github.com/agentmail-to/langchain-agentmail.git" uvicorn`.
+
+- Build the toolkit: `AgentMailToolkit.from_api_key()` reads `AGENTMAIL_API_KEY`.
+- Get all 14 tools: `toolkit.get_tools()`.
+- Use one tool without the toolkit: `AgentMailSendTool(client=AgentMailClient()).invoke({"inbox_id": "...", "to": "...", "subject": "...", "text": "..."})`.
+- Load messages as documents: `AgentMailLoader(inbox_id="<inbox_id>", limit=100).load()`.
+- Keyword search without embeddings: `AgentMailRetriever(inbox_id="<inbox_id>", k=5).invoke("invoice")`.
+- Verify a delivery: `langchain_agentmail.webhooks.verify_signature(payload=raw_body, secret=..., svix_id=..., svix_timestamp=..., svix_signature=...)`.
+- Parse a verified payload: `langchain_agentmail.webhooks.parse_event(payload)`.
+- Register the webhook with the core SDK: `AgentMail().webhooks.create(url="https://<host>/agentmail", event_types=["message.received"])` returns the signing secret.
+
+Core SDK and CLI installs: /integrations/sdks-and-cli
+
+## Facts
+
+- Toolkit tools, one per AgentMail operation: `agentmail_list_inboxes`, `agentmail_create_inbox`, `agentmail_list_threads`, `agentmail_get_thread`, `agentmail_list_messages`, `agentmail_get_message`, `agentmail_send_message`, `agentmail_reply_to_message`, `agentmail_update_message_labels`, `agentmail_create_draft`, `agentmail_update_draft`, `agentmail_send_draft`, `agentmail_delete_draft`, `agentmail_get_attachment`.
+- Tools return results as JSON strings with HTML stripped and long bodies truncated.
+- `agentmail_create_draft` supports scheduled delivery via `send_at`. `agentmail_get_attachment` returns an expiring download URL. `agentmail_reply_to_message` supports reply-all.
+- `AgentMailLoader` yields one `Document` per message. `page_content` is the plain-text body with quoted history stripped. `metadata` carries `inbox_id`, `message_id`, `thread_id`, `from`, `to`, `subject`, `labels`, `timestamp`, and attachment details.
+- `AgentMailLoader` fetches the full body of every message it loads. Set `limit` on large inboxes.
+- Sent messages carry AgentMail's plain-text signature inside the body text.
+- `parse_event` returns typed models for `message.received`, `message.sent`, `message.delivered`, `message.bounced`, `message.complained`, `message.rejected`, and `domain.verified`.
+- The webhook signing secret starts with `whsec_` and is returned by `webhooks.create`. Store it as `AGENTMAIL_WEBHOOK_SECRET`.
+- Webhook URLs must be reachable from the public internet over HTTPS.
+- A delivery passes `verify_signature` only when signed with the webhook's secret over the exact raw request body.
+- Creating an inbox with a taken username returns a `403` listing up to 3 available alternatives in `suggestions`. The full error text goes to the model, so the agent can pick one and retry in the same run.
+- A reply-only agent needs three tools: `agentmail_list_threads`, `agentmail_get_thread`, `agentmail_reply_to_message`. Filter `toolkit.get_tools()` by `tool.name` before passing the list to `create_agent`.
+
+## Not supported
+
+- The documented install source is the GitHub URL above, not a plain `pip install langchain-agentmail`.
+- Tool failures do not raise exceptions. Errors return to the model as text, so an agent can report success after a failed operation. Inspect the `ToolMessage` entries in `result["messages"]` when an outcome looks wrong.
+- `verify_signature` does not accept a JSON body that was decoded and re-encoded. Verify the exact raw bytes first, parse after.
+
+## Errors
+
+| Error | Status | Cause | Fix |
+| --- | --- | --- | --- |
+| `ValueError: AgentMail API key not found` | none, Python exception | `AGENTMAIL_API_KEY` unset when the toolkit or a tool is built without an explicit key | Export `AGENTMAIL_API_KEY` before building the agent |
+| `InvalidSignatureError` | return `400` | Wrong `AGENTMAIL_WEBHOOK_SECRET`, or the body was re-serialized before verification | Verify the raw request body with the secret from `webhooks.create` |
+| `403` from `agentmail_create_inbox` | 403 | Requested inbox username is taken | Use one of the up to 3 names in `suggestions`, or omit the username so AgentMail generates one |
+
+## Verify
+
+```bash
+python -c "
+from langchain_agentmail import AgentMailToolkit
+for tool in AgentMailToolkit.from_api_key().get_tools():
+    print(tool.name)
+"
+```
+
+Success prints the 14 `agentmail_*` tool names. `ValueError: AgentMail API key not found` means `AGENTMAIL_API_KEY` is unset.
+
+## Related
+
+- /advanced/webhooks - hosting, delivery retries, and deduplication for inbound events
+- /core/send - attachments, HTML bodies, and the operations behind the send tools
+- /integrations/mcp-and-skills - hosted MCP server as an alternative to this package
+- /advanced/safety - boundaries for agents steered by untrusted email
+
+</Visibility>

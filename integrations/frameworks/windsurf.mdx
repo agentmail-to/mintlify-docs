@@ -1,0 +1,152 @@
+---
+title: Windsurf
+description: Connect Windsurf to AgentMail so Cascade can create inboxes, send email, and handle replies.
+icon: "/images/logos/windsurf.svg"
+---
+
+<Visibility for="humans">
+
+
+<img src="/images/banners/integration-windsurf.svg" alt="" noZoom />
+Cascade, the Windsurf agent, comes out of this setup with `@agentmail.to` inboxes of its own to list, create, and send from, all without leaving the editor.
+
+## 0. Before you start
+
+You need two things:
+
+- Windsurf, with the Cascade panel available.
+- An AgentMail API key. Generate one in the [AgentMail Console](https://console.agentmail.to/dashboard/api-keys) and export it in the environment you start Windsurf from:
+
+```bash
+export AGENTMAIL_API_KEY="<API_KEY>"
+```
+
+## 1. Add the hosted MCP server
+
+Windsurf reads MCP servers from `~/.codeium/windsurf/mcp_config.json`. Add the AgentMail entry there. Create the file if it does not exist yet:
+
+```json ~/.codeium/windsurf/mcp_config.json
+{
+  "mcpServers": {
+    "agentmail": {
+      "serverUrl": "https://mcp.agentmail.to/mcp",
+      "headers": {
+        "x-api-key": "${env:AGENTMAIL_API_KEY}"
+      }
+    }
+  }
+}
+```
+
+Windsurf fills `${env:AGENTMAIL_API_KEY}` from the environment it started from and sends the value as a request header on every call. You can also paste the key in place of the `${env:...}` reference. Keep the file out of version control if you do.
+
+Restart Windsurf so it loads the new server. It shows up under the **MCPs** icon in the Cascade panel. The full tool catalog, the OAuth option, and the configuration for every other client are on [MCP and Skills](/integrations/mcp-and-skills).
+
+## 2. Test the tools respond
+
+Ask Cascade:
+
+```text
+List my AgentMail inboxes.
+```
+
+Approve the tool call if Cascade asks. Expect a `list_inboxes` call followed by your inbox addresses, each one an `inboxId` you can name as a sender in step 3. An empty list still proves the connection works.
+
+<Accordion title="Troubleshooting">
+Two failures account for most setups:
+
+- **`401` on the first call.** No key reached the server. Usually, `AGENTMAIL_API_KEY` was not exported in the environment Windsurf started from.
+- **`403` on every call.** The server rejected the key. Usually a typo, or a value missing its `am_` prefix.
+</Accordion>
+
+## 3. Test sending emails
+
+If step 2 listed no inboxes, have Cascade create one before sending. Generated usernames always succeed.
+
+Name one of your inboxes as the sender and put an address you already check in place of `you@example.com`:
+
+```text
+Send an email from faircost773@agentmail.to to you@example.com with the subject
+"Hello from Windsurf" and the body "First email from my Windsurf agent."
+```
+
+Expect the email in that account about two seconds later, sent from Cascade's address, and a message ID and thread ID in Cascade's answer. Mention the thread ID in a follow-up prompt to keep the exchange in one email conversation.
+
+<Accordion title="Troubleshooting">
+- **`403` on the create.** A requested name that is taken fails with a `403` listing up to three open alternatives in `suggestions`, which Cascade reads from the tool result and can retry with.
+</Accordion>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="MCP and Skills" icon="plug" href="/integrations/mcp-and-skills">
+    The OAuth option, the hosted tool catalog, and configs for other editors.
+  </Card>
+  <Card title="Agent safety" icon="shield" href="/advanced/safety">
+    What Cascade should assume about inbound email before it acts on a reply.
+  </Card>
+</CardGroup>
+
+</Visibility>
+
+<Visibility for="agents">
+
+# Connect Windsurf to AgentMail
+
+Adding the hosted AgentMail MCP server to Windsurf gives Cascade, the Windsurf agent, `@agentmail.to` inboxes to list, create, and send from without leaving the editor. Auth is an AgentMail API key sent as a request header.
+
+## Do this
+
+1. Generate an API key at `https://console.agentmail.to/dashboard/api-keys` and export it in the environment you start Windsurf from: `export AGENTMAIL_API_KEY="<API_KEY>"`.
+2. Add the server to `~/.codeium/windsurf/mcp_config.json`. Create the file if it does not exist yet.
+
+```json
+{
+  "mcpServers": {
+    "agentmail": {
+      "serverUrl": "https://mcp.agentmail.to/mcp",
+      "headers": {
+        "x-api-key": "${env:AGENTMAIL_API_KEY}"
+      }
+    }
+  }
+}
+```
+
+3. Restart Windsurf so it loads the new server. It shows up under the MCPs icon in the Cascade panel.
+4. Ask Cascade `List my AgentMail inboxes.` and approve the tool call if asked.
+
+## Facts
+
+- Windsurf reads MCP servers from `~/.codeium/windsurf/mcp_config.json`. The URL key in this file is `serverUrl`, value `https://mcp.agentmail.to/mcp`.
+- Windsurf fills `${env:AGENTMAIL_API_KEY}` from the environment it started from and sends the value as the `x-api-key` header on every call.
+- Pasting the key in place of the `${env:...}` reference also works. Keep the file out of version control in that case.
+- Each inbox address returned by `list_inboxes` is an `inboxId` that can be named as a sender.
+- A send returns a message ID and a thread ID. Mentioning the thread ID in a follow-up prompt keeps the exchange in one email conversation.
+- Delivery takes about two seconds.
+- Generated inbox usernames always succeed.
+- The OAuth option and the full hosted tool catalog are on `/integrations/mcp-and-skills`.
+
+## Not supported
+
+- Windsurf does not load the new server without a restart.
+- An empty `list_inboxes` result is not a failure. It still proves the connection works.
+
+## Errors
+
+| Error | HTTP status | Cause | Fix |
+| --- | --- | --- | --- |
+| `401` | 401 | No key reached the server (usually `AGENTMAIL_API_KEY` was not exported in the environment Windsurf started from) | Export the key, then restart Windsurf from that environment |
+| `403` on every call | 403 | Server rejected the key (usually a typo or a value missing its `am_` prefix) | Fix the key value |
+| `403` on inbox create | 403 | Requested username is taken | Cascade reads up to three open alternatives from `suggestions` in the tool result and can retry with one, or use a generated username |
+
+## Verify
+
+Ask Cascade `List my AgentMail inboxes.` Success is a `list_inboxes` call followed by your inbox addresses. An empty list still proves the connection works.
+
+## Related
+
+- `/integrations/mcp-and-skills` - the OAuth option, the hosted tool catalog, and configs for other editors
+- `/advanced/safety` - what Cascade should assume about inbound email before acting on a reply
+
+</Visibility>

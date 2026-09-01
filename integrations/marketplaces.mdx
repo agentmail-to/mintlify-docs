@@ -1,0 +1,100 @@
+---
+title: Marketplaces and provisioning
+description: Install AgentMail through Vercel Marketplace or Stripe Projects, then use the credentials and billing managed by that provider.
+---
+
+<Visibility for="humans">
+
+# Install AgentMail through a marketplace
+
+AgentMail can be provisioned by Vercel Marketplace or Stripe Projects. These integrations create and manage an AgentMail organization through the provider's provisioning flow, with provider-managed authentication and billing. They are separate from the core AgentMail API, SDKs, and API-key workflow.
+
+<Info>
+Use this page when AgentMail was installed from Vercel Marketplace or Stripe Projects. For a direct integration, create and manage resources through the core API instead.
+</Info>
+
+## Install from Vercel Marketplace
+
+From the listing, select the Vercel account or team that should own the installation. Vercel sends the installation and resource provisioning requests to AgentMail, which creates the corresponding organization and resources.
+
+The Vercel Marketplace integration authenticates its provisioning requests with a Vercel-issued JWT. Do not send an AgentMail API key to the Marketplace provisioning endpoints, and do not use the Vercel JWT as a credential for the core AgentMail API.
+
+After installation, manage the Marketplace installation, its resources, and its plan in Vercel. Resource changes made there are reflected in the AgentMail organization created for that installation.
+
+## Provision through Stripe Projects
+
+Stripe Projects creates the AgentMail organization from its own account and resource flow, uses its own authorizer for resource operations, and signs requests used by the integration.
+
+The integration can create an account, provision resources, rotate the integration credential, change a supported plan, and remove provisioned resources. It can also create an SSO session or a one-time deep link into the AgentMail console for the provisioned organization.
+
+<Warning>
+Stripe Projects credentials are provisioning-plane credentials. They are not general-purpose AgentMail API keys and are not supported for sending mail, reading inboxes, or other core API operations.
+</Warning>
+
+## Use the right authentication path
+
+| Surface | Authentication | Use it for |
+| --- | --- | --- |
+| Vercel Marketplace provisioning | Vercel-issued JWT | Installation, resource, and plan lifecycle requests initiated by Vercel |
+| Stripe Projects provisioning | Stripe Projects authorizer and signed integration requests | Account, resource, plan, credential rotation, and SSO operations initiated by Stripe Projects |
+| Core AgentMail API | AgentMail API key | Inbox, message, thread, and other documented core API operations |
+
+A marketplace credential establishes which provider-managed organization can be changed. An AgentMail API key authorizes core API work within an organization. The credentials are not interchangeable.
+
+## Open the AgentMail console with Stripe Projects SSO
+
+When an operator needs access to a provisioned organization, request an SSO session or deep link through the Stripe Projects account flow. AgentMail validates that the organization belongs to Stripe Projects before it creates the console access link.
+
+Use this route instead of building a console login flow around the provisioned resource. The marketplace integration owns the account identity and access handoff.
+
+## What these integrations do not replace
+
+Marketplace provisioning does not add a new SDK surface for application code. Use the normal AgentMail SDKs or core API after provisioning when your application needs to create inboxes, send messages, or process mail.
+
+Marketplace lifecycle endpoints are provider-to-provider integration endpoints. They are documented separately from the core API and are not a public replacement for ordinary resource management.
+
+</Visibility>
+
+<Visibility for="agents">
+
+# Install AgentMail through Vercel Marketplace or Stripe Projects
+
+Vercel Marketplace and Stripe Projects create and manage an AgentMail organization through their own provisioning flows, with provider-managed authentication and billing. Use this page when AgentMail was installed through one of those providers, since a direct integration creates and manages resources through the core API instead.
+
+## Do this
+
+1. Install AgentMail from its Vercel Marketplace listing and select the Vercel account or team that should own the installation, or provision through the Stripe Projects account and resource flow.
+2. Let the provider send the installation and resource provisioning requests to AgentMail, which creates the corresponding organization and resources.
+3. Manage the installation, its resources, and its plan in the provider afterward. Resource changes made in Vercel are reflected in the AgentMail organization created for that installation.
+4. Use an AgentMail API key, never a marketplace credential, when application code calls the core AgentMail API.
+5. For console access to a Stripe-provisioned organization, request an SSO session or a one-time deep link through the Stripe Projects account flow.
+
+## Facts
+
+- Vercel Marketplace provisioning requests authenticate with a Vercel-issued JWT.
+- Stripe Projects uses its own authorizer for resource operations and signs the requests the integration uses.
+- The Stripe Projects integration can create an account, provision resources, rotate the integration credential, change a supported plan, and remove provisioned resources.
+- The Stripe Projects integration can also create an SSO session or a one-time deep link into the AgentMail console for the provisioned organization.
+- AgentMail validates that an organization belongs to Stripe Projects before it creates a console access link.
+- Credential per surface: a Vercel-issued JWT for Vercel Marketplace lifecycle requests, the Stripe Projects authorizer with signed integration requests for Stripe-initiated operations, an AgentMail API key for core API operations. The credentials are not interchangeable.
+- A marketplace credential establishes which provider-managed organization can be changed. An AgentMail API key authorizes core API work within an organization.
+- Marketplace lifecycle endpoints are provider-to-provider integration endpoints, documented separately from the core API.
+
+## Not supported
+
+- Do not send an AgentMail API key to the Marketplace provisioning endpoints.
+- Do not use a Vercel JWT as a credential for the core AgentMail API.
+- Stripe Projects credentials are provisioning-plane credentials. They are not supported for sending mail, reading inboxes, or other core API operations.
+- Marketplace provisioning adds no new SDK surface for application code. Use the normal AgentMail SDKs or core API after provisioning.
+- Marketplace lifecycle endpoints are not a public replacement for ordinary resource management.
+- Do not build a console login flow around a provisioned resource. The Stripe Projects SSO or deep-link route owns the account identity and access handoff.
+
+## Verify
+
+Confirm the provider's flow completed: the installation and its resources appear in the provider, and the corresponding AgentMail organization exists with those resources reflected.
+
+## Related
+
+- `/integrations/sdks-and-cli` - the SDK and core API calls application code uses after provisioning.
+
+</Visibility>
