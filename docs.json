@@ -364,12 +364,12 @@
     },
     {
       "source": "/asyncapi.json",
-      "destination": "/api-reference",
+      "destination": "/api-reference/inboxes/list-inboxes",
       "permanent": true
     },
     {
       "source": "/asyncapi.yaml",
-      "destination": "/api-reference",
+      "destination": "/api-reference/inboxes/list-inboxes",
       "permanent": true
     },
     {
@@ -583,13 +583,13 @@
       "permanent": true
     },
     {
-      "source": "/api-reference/:slug*",
-      "destination": "/api-reference",
+      "source": "/changelog/:slug*",
+      "destination": "/resources/changelog",
       "permanent": true
     },
     {
-      "source": "/changelog/:slug*",
-      "destination": "/resources/changelog",
+      "source": "/api-reference",
+      "destination": "/api-reference/inboxes/list-inboxes",
       "permanent": true
     }
   ]
