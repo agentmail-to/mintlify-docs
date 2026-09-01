@@ -7,36 +7,46 @@ description: What AgentMail is, why an agent needs its own inbox, and which surf
 
 
 <img src="/images/banners/start-intro.svg" alt="" noZoom />
-AgentMail is an API platform for giving AI agents their own email inboxes to send, receive, and act on emails. 
+AgentMail is an API platform that gives AI agents their own email inboxes to send, receive, and act on email.
 
-## What can you agent do with its own email address
+## What your agent can do with its own inbox
 
-- sign up on websites
-- have its own identity with a custom domain
-- reach out to people over email
-- let anybody reach it over email
-- keep your personal inbox separate
+- Sign up for services and read the verification codes and receipts that come back.
+- Hold a real identity on [your own domain](/advanced/custom-domains) that teammates can CC and forward to.
+- Reach anyone, and be reached, over the protocol everyone already speaks.
+- Keep agent mail out of human mailboxes.
 
 ## Why AgentMail
 
-- simple, agent-friendly APIs
-- webhooks and websockets so that your agent can reply instantly
-- strict boundaries to control who it can send and receive emails from
-- automatic scanning for viruses and prompt injection attempts
-- custom domains and subdomains for high deliverability
-- highly scalable with generous rate limits
+- Create an inbox in one call, then [send](/core/send), [receive](/core/receive), and reply from it.
+- [Webhooks](/advanced/webhooks) and [WebSockets](/advanced/websockets) wake your agent the moment mail lands.
+- [Threads](/core/conversations) arrive assembled, quotes stripped, attachments [extracted to text](/core/receive).
+- Viruses and spam are screened out before your agent sees them. Nothing to configure.
+- Server-side [allow and block lists](/core/inbound-control) bound who an inbox can mail. [Drafts](/core/send) act as a human-approval gate.
+- SPF, DKIM, and DMARC pass out of the box. A [custom domain](/advanced/custom-domains) gets its DNS records generated.
 
 ## Examples
 
-- An [outbound SDR agent](/examples/outbound-gtm-sdr-agent) that researches leads, sends personal first touches from its own inbox, and follows up.
+- An [outbound SDR agent](/examples/outbound-gtm-sdr-agent) that researches leads, sends first touches, and follows up.
 - A [customer support agent](/examples/customer-support-agent) that answers a support inbox from your docs.
-- An [AI employee](/examples/ai-employee-with-its-own-inbox) with an email address that your employees can CC into threads and forward documents to.
+- An [AI employee](/examples/ai-employee-with-its-own-inbox) with an address teammates can CC and forward to.
 
 ## Get started
 
-<Card title="Quickstart" icon="rocket" href="/quickstart" horizontal arrow>
-  Get a key, create an inbox, and send, receive, and reply loop from the CLI, curl, or the SDKs.
-</Card>
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Get a key, create an inbox, and run the send, receive, reply loop.
+  </Card>
+  <Card title="Architecture" icon="sitemap" href="/architecture">
+    The organization, pod, and inbox hierarchy, and where every other resource attaches.
+  </Card>
+  <Card title="MCP and Skills" icon="plug" href="/integrations/mcp-and-skills">
+    Give any MCP-capable client these operations as tools instead of code.
+  </Card>
+  <Card title="Console" icon="browser" href="https://console.agentmail.to">
+    The web dashboard: API keys, webhooks, domains, metrics, and billing.
+  </Card>
+</CardGroup>
 
 ## Connect it to your agent
 
@@ -95,17 +105,6 @@ AgentMail is an API platform for giving AI agents their own email inboxes to sen
 ## Support
 
 The fastest way to get help is the [AgentMail Discord](https://discord.gg/hTYatWYWBc), where the team answers questions. For anything you'd rather not post publicly, email [support@agentmail.cc](mailto:support@agentmail.cc).
-
-## Next Steps
-
-<CardGroup cols={2}>
-  <Card title="Quickstart" icon="rocket" href="/quickstart">
-    Create an inbox and run the send-and-receive loop.
-  </Card>
-  <Card title="Architecture" icon="sitemap" href="/architecture">
-    The organization, pod, and inbox hierarchy, and where every other resource attaches.
-  </Card>
-</CardGroup>
 
 </Visibility>
 

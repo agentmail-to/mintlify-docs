@@ -16,11 +16,15 @@ Everything you create or work with through AgentMail is a resource:
 - **Message**: one email, sent or received.
 - **Thread**: a conversation: its messages in order, assembled by AgentMail from reply headers.
 - **Label**: a tag on mail: yours to define, or a system label such as `sent`, `received`, or `bounced`.
+- **Domain**: a custom domain you verify so your inboxes can use its addresses.
+- **Webhook**: an HTTPS endpoint AgentMail calls when events happen.
+- **List**: an allow or block list of senders and recipients.
+- **API key**: the credential your requests authenticate with, scoped to one place in the hierarchy.
 
 ## The hierarchy
 
 1. An **organization** is your account. Everything you create belongs to it, and every API key is tied to exactly one organization.
-2. A **pod** is a compartment inside the organization. Every org starts with a Default Pod, which cannot be deleted, you can add more pods if you're building a [platform that gives email address](/advanced/multi-tenant) to your customers' agents.
+2. A **pod** is a compartment inside the organization. Every org starts with a Default Pod, which cannot be deleted. Add more pods if you're building a [platform that gives email addresses](/advanced/multi-tenant) to your customers' agents.
 3. An **inbox** belongs to exactly one pod and owns the email address your agent works with.
 
 ```mermaid
@@ -37,6 +41,37 @@ flowchart TD
 ```
 
 Webhooks, lists, and API keys cover exactly the scope you attach them to: the organization covers every inbox, a pod or inbox covers only itself. When list entries at several scopes match the same address, the most specific entry wins.
+
+## Keys and scopes
+
+Every API key is scoped to the organization, one pod, or one inbox. Most integrations use a pod-scoped key.
+
+The scope decides the shape of your requests. Pod- and inbox-scoped keys already know their pod, so they never name one. An organization-scoped key can reach several pods, so its requests for pod-level resources must say which. Here is the same operation, listing a pod's inboxes, under each kind of key:
+
+<CodeGroup>
+
+```bash Pod- or inbox-scoped key
+curl "https://api.agentmail.to/v0/inboxes" \
+  -H "Authorization: Bearer $AGENTMAIL_API_KEY"
+```
+
+```bash Organization-scoped key
+curl "https://api.agentmail.to/v0/pods/<pod_id>/inboxes" \
+  -H "Authorization: Bearer $AGENTMAIL_API_KEY"
+```
+
+</CodeGroup>
+
+Requests never name the organization, because the key identifies it. Swapping between pod- and organization-scoped keys means changing the paths to match.
+
+A key can ask what it is allowed to act on, which lets each agent holding a scoped key discover its own boundary at runtime:
+
+```bash
+curl "https://api.agentmail.to/v0/auth/me" \
+  -H "Authorization: Bearer $AGENTMAIL_API_KEY"
+```
+
+The response's `scope_type` (`organization`, `pod`, or `inbox`) tells you which request shape to use, and `scope_id` names the level it covers.
 
 ## Next Steps
 
