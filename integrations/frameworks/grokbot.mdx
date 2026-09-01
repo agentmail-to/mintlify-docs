@@ -1,0 +1,271 @@
+---
+title: Grok Bot
+description: Give each Grok Bot its own inbox to send, receive, and reply to email, from the app, Grok Build, or the Grok API.
+icon: "/images/logos/grok.svg"
+---
+
+<Visibility for="humans">
+
+
+<img src="/images/banners/integration-grokbot.svg" alt="" noZoom />
+[Grok Bot](https://x.ai/bot) is xAI's always-on agent. Each bot is a named teammate with a persistent cloud computer, taking work from the desktop app on macOS and Windows or from iOS. AgentMail gives every bot an email inbox of its own: a real address it sends from, receives at, and replies in, kept separate from your personal mail and from the other bots on your account.
+
+One AgentMail connection covers all three of xAI's agent surfaces: Grok Bot, the Grok Build terminal agent, and the Grok API. Follow along and you will watch your agent send an email from its own `@agentmail.to` address, then answer your reply in the same thread. xAI spells the product Grok Bot. The one-word Grokbot you see in search results is the same product.
+
+## 0. Get an API key
+
+The Grok Bot plugin signs in to AgentMail with OAuth, so it needs no key. The custom connector, Grok Build, and the Grok API authenticate with an API key instead. Generate one from the [AgentMail Console](https://console.agentmail.to/dashboard/api-keys) and export it:
+
+```bash
+export AGENTMAIL_API_KEY="<API_KEY>"
+```
+
+You also need access to the surface you are connecting. Grok Bot comes with qualifying xAI and Cursor plans, listed at [x.ai/bot](https://x.ai/bot). The Grok API takes its own key from the [xAI Console](https://console.x.ai).
+
+## 1. Connect AgentMail
+
+All three surfaces talk to the hosted AgentMail MCP server at `https://mcp.agentmail.to/mcp`. The full tool catalog, the OAuth details, and the local bridge live on [MCP and Skills](/integrations/mcp-and-skills).
+
+<Tabs>
+<Tab title="Grok Bot">
+
+AgentMail is an official plugin in Grok Bot's plugin browser, so the standard install is a few clicks.
+
+1. Open Grok Bot and go to **Settings**, then **Plugins**.
+2. Find **AgentMail** and choose **Add**.
+3. Complete the sign-in in your browser. The authorization screen names Cursor as the requesting app because Grok Bot signs in through your Cursor account. Approve it.
+
+Installed connectors are account-wide, so every bot on your account can now use AgentMail.
+
+If the plugin browser is restricted on your account, add the server as a custom connector instead. Open [grok.com/connectors](https://grok.com/connectors), choose **New Connector**, then **Custom**, set the server URL to `https://mcp.agentmail.to/mcp`, and authenticate with a header named `x-api-key` whose value is your API key.
+
+</Tab>
+<Tab title="Grok Build">
+
+Install [Grok Build](https://docs.x.ai/build/overview) if you have not already, then register the server with one command:
+
+```bash
+curl -fsSL https://x.ai/cli/install.sh | bash
+
+grok mcp add --transport http agentmail https://mcp.agentmail.to/mcp \
+  --header "Authorization: Bearer $AGENTMAIL_API_KEY"
+```
+
+Pass the key as an `Authorization: Bearer` header. With an `x-api-key` header, Grok Build starts an OAuth sign-in instead of using the key.
+
+Check the registration:
+
+```bash
+grok mcp list
+```
+
+You should see `agentmail: https://mcp.agentmail.to/mcp`. To go further and complete a live handshake with the server, run `grok mcp doctor agentmail`.
+
+You can also write the same configuration by hand, for example to keep it in version control:
+
+```toml title="~/.grok/config.toml"
+[mcp_servers.agentmail]
+url = "https://mcp.agentmail.to/mcp"
+headers = { "Authorization" = "Bearer <API_KEY>" }
+```
+
+Start a new `grok` session to pick up manual edits.
+
+</Tab>
+<Tab title="Grok API">
+
+Add AgentMail as a remote MCP tool in the `tools` array of your request. xAI manages the connection to the server for you.
+
+<CodeGroup>
+
+```json Tool object
+{
+  "type": "mcp",
+  "server_label": "agentmail",
+  "server_url": "https://mcp.agentmail.to/mcp",
+  "authorization": "Bearer <API_KEY>"
+}
+```
+
+```python Python
+import os
+
+from xai_sdk import Client
+from xai_sdk.chat import user
+from xai_sdk.tools import mcp
+
+client = Client(api_key=os.getenv("XAI_API_KEY"))
+chat = client.chat.create(
+    model="grok-4.6",
+    tools=[
+        mcp(
+            server_url="https://mcp.agentmail.to/mcp",
+            server_label="agentmail",
+            authorization="Bearer " + os.environ["AGENTMAIL_API_KEY"],
+        ),
+    ],
+)
+chat.append(user("Use the AgentMail tools to list_inboxes and tell me how many inboxes exist."))
+print(chat.sample().content)
+```
+
+</CodeGroup>
+
+The full request shape and streaming details are in [xAI's remote MCP guide](https://docs.x.ai/developers/tools/remote-mcp).
+
+</Tab>
+</Tabs>
+
+## 2. Test the tools respond
+
+Ask on whichever surface you connected: a bot in chat, a `grok` session, or the prompt of an API request.
+
+```text Prompt
+Use the AgentMail tools to list_inboxes and tell me how many inboxes exist.
+```
+
+The agent should call the tool and report a count, zero included if your organization has no inboxes yet.
+
+How you reach the tools differs by surface:
+
+- On Grok Bot, type `@` in chat to attach the AgentMail plugin to a task.
+- On Grok Build, tools are namespaced as `agentmail__list_inboxes`.
+- On the Grok API, tool calls carry the `server_label` you set as their prefix, `agentmail` in the snippet above.
+
+## 3. Test sending emails
+
+Ask the agent to create an inbox and send a test email to an address you already read, whether that is Gmail, Outlook, or any other client.
+
+The test email should show up in that mailbox moments later, from a brand-new `@agentmail.to` address.
+
+```text Prompt
+Create an AgentMail inbox for yourself, then send an email from it to
+you@example.com with the subject "Hello from my Grok Bot" and a one-line
+introduction. Report the inbox address back to me once it is sent.
+```
+
+Behind the prompt, the agent calls `create_inbox` and `send_message`. It reports the new address back, for example `faircost773@agentmail.to`. Save it for the next step.
+
+The prompt leaves the username to AgentMail, which generates an available one.
+
+<Accordion title="Troubleshooting">
+
+- **`403` when you ask for a specific username.** If it is taken, `create_inbox` returns a `403` whose `suggestions` field carries up to three available variants of the name, so the agent can pick one and retry on its own.
+- **Send fails with `message_rejected`.** The destination is blocked from receiving (usually the address was suppressed after an earlier bounce or complaint).
+- **Send succeeded but nothing arrived.** Check the spam folder, then [Deliverability](/advanced/deliverability).
+
+</Accordion>
+
+## 4. Test receiving and replying
+
+From your everyday account, reply to the email the agent sent you, and put a question in it the agent can answer. Then ask it to check the mail and respond.
+
+You should get the answer back in your account, threaded under your reply.
+
+```text Prompt
+Look at <inbox_id> for new mail, open the most recent thread, and send a short
+answer in that same thread.
+```
+
+Replace `<inbox_id>` with the address from step 3. The agent reads the conversation with `list_messages` and `get_thread`, then answers with `reply_to_message`, which keeps both sides of the exchange in one thread. Mail typically arrives within about two seconds in each direction, so if the agent reports no new mail, ask again.
+
+Make sure the agent replies from the same inbox that received your email.
+
+On Grok Bot, you can turn this check into a standing job: ask the bot to make it a routine, and it runs on the bot's cloud computer on a schedule.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Use a custom domain" icon="globe" href="/advanced/custom-domains">
+    Give your bots addresses on your own domain instead of `@agentmail.to`.
+  </Card>
+  <Card title="Set an authorization boundary" icon="shield" href="/advanced/safety">
+    Guardrails for bots that read untrusted mail and act on their own.
+  </Card>
+</CardGroup>
+
+</Visibility>
+
+<Visibility for="agents">
+
+# Connect AgentMail to Grok Bot, Grok Build, and the Grok API
+
+One AgentMail connection covers all three xAI agent surfaces through the hosted AgentMail MCP server at `https://mcp.agentmail.to/mcp`. Use it to give a Grok Bot, a Grok Build session, or a Grok API request an email inbox of its own to send from, receive at, and reply in.
+
+## Do this
+
+The runnable path is Grok Build. The Grok Bot plugin and the Grok API paths are in Facts below.
+
+1. Generate an API key at `https://console.agentmail.to/dashboard/api-keys` and export it:
+
+```bash
+export AGENTMAIL_API_KEY="<API_KEY>"
+```
+
+2. Install Grok Build and register the server:
+
+```bash
+curl -fsSL https://x.ai/cli/install.sh | bash
+
+grok mcp add --transport http agentmail https://mcp.agentmail.to/mcp \
+  --header "Authorization: Bearer $AGENTMAIL_API_KEY"
+```
+
+3. Check the registration with `grok mcp list`. The output should include `agentmail: https://mcp.agentmail.to/mcp`.
+4. In a `grok` session, create an inbox and send a test email:
+
+```text
+Create an AgentMail inbox for yourself, then send an email from it to
+you@example.com with the subject "Hello from my Grok Bot" and a one-line
+introduction. Report the inbox address back to me once it is sent.
+```
+
+5. Reply to the test email from your own account, then prompt the agent to look at the inbox for new mail, open the most recent thread, and send a short answer in that same thread. The agent reads with `list_messages` and `get_thread` and answers with `reply_to_message`, from the same inbox that received the mail.
+
+## Facts
+
+- Hosted MCP server URL for all three surfaces: `https://mcp.agentmail.to/mcp`. Full tool catalog, OAuth details, and the local bridge: [MCP and Skills](/integrations/mcp-and-skills).
+- Grok Bot plugin path: open Grok Bot, go to Settings, then Plugins, find AgentMail, choose Add, and complete the sign-in in the browser. The plugin authenticates with OAuth and needs no API key.
+- The Grok Bot authorization screen names Cursor as the requesting app because Grok Bot signs in through the Cursor account. Approve it.
+- Installed Grok Bot connectors are account-wide. Every bot on the account can use AgentMail.
+- Custom connector path when the plugin browser is restricted: open `https://grok.com/connectors`, choose New Connector, then Custom, set the server URL to `https://mcp.agentmail.to/mcp`, and authenticate with a header named `x-api-key` whose value is the API key.
+- Grok Build auth header: `Authorization: Bearer $AGENTMAIL_API_KEY`.
+- Manual Grok Build config lives in `~/.grok/config.toml` under `[mcp_servers.agentmail]` with `url = "https://mcp.agentmail.to/mcp"` and a `headers` table.
+- Grok API: add a `tools` entry with `"type": "mcp"`, `"server_label": "agentmail"`, `"server_url": "https://mcp.agentmail.to/mcp"`, and `"authorization": "Bearer <API_KEY>"`. xAI manages the connection to the server.
+- Tool naming by surface: Grok Build namespaces tools as `agentmail__list_inboxes`. Grok API tool calls carry the `server_label` as their prefix. On Grok Bot, type `@` in chat to attach the AgentMail plugin to a task.
+- Tools the flow exercises: `list_inboxes`, `create_inbox`, `send_message`, `list_messages`, `get_thread`, `reply_to_message`.
+- Creating an inbox without a username lets AgentMail generate an available one. Requesting a taken username makes `create_inbox` return `403` with up to 3 available variants of the name in `suggestions`, so the agent can retry on its own.
+- Mail typically arrives within about 2 seconds in each direction. If the agent reports no new mail right after a send, ask again.
+- Access: Grok Bot comes with qualifying xAI and Cursor plans, listed at `https://x.ai/bot`. The Grok API takes its own key from the xAI Console at `https://console.x.ai`.
+- On Grok Bot, a recurring mail check can become a routine that runs on the bot's cloud computer on a schedule.
+- xAI spells the product Grok Bot. The one-word Grokbot in search results is the same product.
+
+## Not supported
+
+- Grok Build with an `x-api-key` header does not use the key. It starts an OAuth sign-in instead. Pass the key as `Authorization: Bearer`.
+- A running `grok` session does not pick up manual `~/.grok/config.toml` edits. Start a new session.
+- The Grok Bot plugin does not take an API key. Only the custom connector, Grok Build, and the Grok API authenticate with one.
+
+## Errors
+
+| Error | Status | Cause | Fix |
+| --- | --- | --- | --- |
+| `message_rejected` | 403 | The destination is blocked from receiving, usually suppressed after an earlier bounce or complaint. | Send to a destination that can receive mail. If the send succeeded but nothing arrived, check spam, then [Deliverability](/advanced/deliverability). |
+| `resource_taken` | 403 | The requested inbox username belongs to another organization. | Retry with one of the up to 3 variants in `suggestions`. |
+| `already_exists` | 403 | An inbox with the requested username already exists in the organization. | Retry with a username from `suggestions`, or use the existing inbox. |
+
+## Verify
+
+```bash
+grok mcp doctor agentmail
+```
+
+This completes a live handshake with the server. On any surface, the prompt "Use the AgentMail tools to list_inboxes and tell me how many inboxes exist" should make the agent call the tool and report a count, zero included.
+
+## Related
+
+- [Custom domains](/advanced/custom-domains): addresses on your own domain instead of `@agentmail.to`.
+- [Agent safety](/advanced/safety): guardrails for bots that read untrusted mail and act on their own.
+- [MCP and Skills](/integrations/mcp-and-skills): the full hosted tool catalog, OAuth details, and the local bridge.
+
+</Visibility>

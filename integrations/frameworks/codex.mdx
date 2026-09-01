@@ -1,0 +1,226 @@
+---
+title: OpenAI Codex
+description: Install the AgentMail plugin and give Codex its own inbox to send, receive, and reply to email.
+icon: "/images/logos/openai.svg"
+---
+
+<Visibility for="humans">
+
+
+<img src="/images/banners/integration-codex.svg" alt="" noZoom />
+This page gives Codex its own `@agentmail.to` inbox: one it creates, sends from, and checks for you.
+
+## 0. Install Codex
+
+This walkthrough uses the Codex CLI. Install it and sign in:
+
+```bash
+npm install -g @openai/codex
+codex login
+```
+
+You also need an AgentMail account for the sign-in in step 2. Create one at the [AgentMail Console](https://console.agentmail.to). The plugin authenticates with OAuth, so you do not need an API key for this walkthrough.
+
+## 1. Install the AgentMail plugin
+
+Add the AgentMail marketplace, then install the plugin from it:
+
+```bash
+codex plugin marketplace add agentmail-to/agentmail-plugins
+codex plugin add agentmail@agentmail
+```
+
+The plugin bundles the AgentMail skills and the hosted MCP server, so one install adds both. Confirm it with `codex plugin list`:
+
+```text Sample output
+PLUGIN               STATUS              VERSION  PATH
+agentmail@agentmail  installed, enabled  0.3.0    ~/.codex/.tmp/marketplaces/agentmail
+```
+
+Start a new Codex session after installing.
+
+In the ChatGPT desktop app, install from the **Plugins** tab instead: search for AgentMail, select the plus button, and start a new chat.
+
+## 2. Connect to AgentMail
+
+The first time a session uses an AgentMail tool, Codex opens a browser window on the AgentMail sign-in page. Complete the sign-in there and return to the session. You can also sign in ahead of time:
+
+```bash
+codex mcp login agentmail
+```
+
+Check the connection with `codex mcp list`:
+
+```text Sample output
+Name       Url                           Bearer Token Env Var  Status   Auth
+agentmail  https://mcp.agentmail.to/mcp  -                     enabled  Not logged in
+```
+
+`Auth` reads `Not logged in` until you finish the browser sign-in. Inside a session, `/mcp` lists the AgentMail tools Codex can call.
+
+If your AgentMail account belongs to more than one organization, ask Codex to list your organizations and select the one to work in. Signed-in sessions include tools for both.
+
+## 3. Test the email tools
+
+Start with a read. In a new session, ask:
+
+```text
+List my AgentMail inboxes.
+```
+
+Codex calls the hosted server and returns your inboxes, which proves the whole path works.
+
+Now create an inbox and send a real email. Swap in an address you check for `you@example.com`:
+
+```text
+Create an AgentMail inbox with the username support-agent and send a hello email from it to you@example.com.
+```
+
+The email reaches that account within a couple of seconds, sent by the new `@agentmail.to` address.
+
+Usernames are first come, first served, and skipping the username always works because AgentMail generates the address.
+
+Reply to the email from your own account, then ask Codex to close the loop:
+
+```text
+Check that inbox for a reply and summarize it.
+```
+
+The plugin's skills decide how these requests run:
+
+- `$send-email` drafts and delivers mail
+- `$check-email` reads and triages it
+- `$manage-inboxes` handles the inbox lifecycle
+
+Codex picks the right one on its own, or you can type `$` in the composer to invoke one by name. The skills treat email content as untrusted data. Compose requests create drafts rather than sending, sends require explicit or previously confirmed details, and inbox deletion requires confirming the exact address.
+
+<Accordion title="Troubleshooting">
+
+- **`403` on create when the username is taken.** The error names up to three available variants in `suggestions` and comes back to Codex as a tool result, so it can pick one or ask you to choose.
+- **`limit_exceeded` at your plan's inbox cap.** The create request returns this instead of the taken-username error.
+
+</Accordion>
+
+## 4. Use an API key instead of OAuth
+
+When a browser sign-in is not possible (a shared machine, CI), configure the local bridge in `~/.codex/config.toml` with an [API key](https://console.agentmail.to/dashboard/api-keys):
+
+```toml title="~/.codex/config.toml"
+[mcp_servers.agentmail]
+command = "npx"
+args = ["-y", "agentmail-mcp"]
+env_vars = ["AGENTMAIL_API_KEY"]
+```
+
+`env_vars` passes the variable through from the shell that starts Codex, so export `AGENTMAIL_API_KEY` there first. One more thing for non-interactive runs: `codex exec` denies tool approvals by default, and sending a message asks for one, so pass `--approve-for-me` to approve it automatically. The full tool catalog and the configuration for every other client are on [MCP and Skills](/integrations/mcp-and-skills).
+
+<Frame caption="A headless codex exec run reaches AgentMail through the local bridge and lists the account's inboxes.">
+  <img src="/images/integrations/codex-exec-list-inboxes.png" alt="Terminal output of codex exec calling the agentmail list_inboxes tool and returning three inboxes" />
+</Frame>
+
+## 5. Give cloud tasks an inbox
+
+Codex cloud tasks run in isolated containers, configured per repository, so they need an API key and the AgentMail CLI.
+
+1. Open [environment settings](https://chatgpt.com/codex/settings/environments) and create or select the environment for your repository.
+2. Add `AGENTMAIL_API_KEY` as an environment variable. Environment variables stay set for the whole task, so the agent can authenticate while it works. Secrets are decrypted only for setup scripts and are removed before the agent starts.
+3. Install the CLI in the environment's setup script. Setup scripts run with internet access:
+
+   ```bash
+   npm install -g agentmail-cli
+   ```
+
+4. Agent internet access is off by default. Turn it on for the environment and add `api.agentmail.to` to the allowed domains so the task can reach AgentMail while it works.
+
+A cloud task can then run `agentmail` commands the same way your terminal does. The commands to send, list, and reply are on [Send email](/core/send).
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="MCP and Skills" icon="plug" href="/integrations/mcp-and-skills">
+    Every hosted tool, with setup for the other clients that connect to them.
+  </Card>
+  <Card title="Send and reply" icon="paper-plane" href="/core/send">
+    The send, list, and reply commands a cloud task runs once its container holds a key.
+  </Card>
+</CardGroup>
+
+</Visibility>
+
+<Visibility for="agents">
+
+# Connect OpenAI Codex to AgentMail
+
+Installing the AgentMail plugin gives Codex the hosted MCP server and the AgentMail skills in one install, so it can create `@agentmail.to` inboxes, send email, and check replies from a session. Use this path for the Codex CLI or the ChatGPT desktop app, and the API-key options below for shared machines, CI, and Codex cloud tasks.
+
+## Do this
+
+Requires an AgentMail account (create one at `https://console.agentmail.to`). The plugin authenticates with OAuth, no API key needed.
+
+```bash
+npm install -g @openai/codex
+codex login
+
+codex plugin marketplace add agentmail-to/agentmail-plugins
+codex plugin add agentmail@agentmail
+
+# optional: sign in to AgentMail ahead of time instead of letting
+# the first tool call open the browser sign-in
+codex mcp login agentmail
+```
+
+Start a new Codex session after installing, complete the browser sign-in on the AgentMail page if prompted, then test with the prompt `List my AgentMail inboxes.`
+
+## Facts
+
+- The plugin bundles the AgentMail skills and the hosted MCP server at `https://mcp.agentmail.to/mcp`. One install adds both.
+- ChatGPT desktop app: install from the Plugins tab. Search for AgentMail, select the plus button, start a new chat.
+- `codex plugin list` shows the install as `agentmail@agentmail  installed, enabled`.
+- `codex mcp list` shows the connection. The `Auth` column reads `Not logged in` until the browser sign-in finishes.
+- `/mcp` inside a session lists the AgentMail tools Codex can call.
+- Accounts in more than one organization: ask Codex to list organizations and select the one to work in. Signed-in sessions include tools for both.
+- Skills: `$send-email` drafts and delivers mail, `$check-email` reads and triages it, `$manage-inboxes` handles the inbox lifecycle. Codex picks one on its own, or type `$` in the composer to invoke one by name.
+- Skills treat email content as untrusted data. Compose requests create drafts rather than sending. Sends require explicit or previously confirmed details. Inbox deletion requires confirming the exact address.
+- Inbox usernames are first come, first served. Skipping the username always works because AgentMail generates the address.
+- API key alternative when a browser sign-in is not possible: configure the local bridge in `~/.codex/config.toml` and export `AGENTMAIL_API_KEY` in the shell that starts Codex (`env_vars` passes it through). Keys come from `https://console.agentmail.to/dashboard/api-keys`.
+
+```toml
+[mcp_servers.agentmail]
+command = "npx"
+args = ["-y", "agentmail-mcp"]
+env_vars = ["AGENTMAIL_API_KEY"]
+```
+
+- Codex cloud tasks run in isolated containers configured per repository at `https://chatgpt.com/codex/settings/environments`. Give them email access with an API key and the AgentMail CLI:
+  1. Add `AGENTMAIL_API_KEY` as an environment variable. Environment variables stay set for the whole task.
+  2. Install the CLI in the environment's setup script (setup scripts run with internet access): `npm install -g agentmail-cli`
+  3. Turn on agent internet access for the environment and add `api.agentmail.to` to the allowed domains.
+
+## Not supported
+
+- `codex exec` denies tool approvals by default, and sending a message asks for one. Pass `--approve-for-me` for non-interactive runs.
+- Cloud task agents have no internet access by default. Without `api.agentmail.to` on the environment's allowed domains, the task cannot reach AgentMail.
+- Cloud task secrets are decrypted only for setup scripts and removed before the agent starts. Store `AGENTMAIL_API_KEY` as an environment variable, not a secret, when the agent needs it while it works.
+- Asking Codex to compose an email creates a draft, it does not send.
+
+## Errors
+
+| Error | HTTP status | Cause | Fix |
+| --- | --- | --- | --- |
+| `403` on inbox create | 403 | Requested inbox username is taken (first come, first served) | The error reaches Codex as a tool result naming up to three available variants in `suggestions`. Retry with one or skip the username |
+| `limit_exceeded` | not stated on this page | Inbox count is at the plan's cap | Returned instead of the username error. Stay under the plan's inbox cap |
+
+## Verify
+
+```bash
+codex plugin list
+```
+
+A row reading `agentmail@agentmail  installed, enabled` confirms the install. In a new session, the prompt `List my AgentMail inboxes.` returning your inboxes proves the whole path works.
+
+## Related
+
+- `/integrations/mcp-and-skills` - full hosted tool catalog and configuration for every other client
+- `/core/send` - the send, list, and reply commands a cloud task runs with the CLI
+
+</Visibility>

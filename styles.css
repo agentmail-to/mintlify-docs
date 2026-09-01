@@ -1,3 +1,14 @@
+/* AgentMail brand: Geist Mono for all code (body font Inter is set in docs.json). */
+@import url("https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500&display=swap");
+
+code,
+kbd,
+samp,
+pre,
+pre * {
+    font-family: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
 /* ==================================================================
    AgentMail docs landing — global shell.
    Namespaced .aml-*. Monochrome (black/white/zinc) only.
@@ -5,8 +16,6 @@
    light tokens are the fallback when the user toggles.
    Per-section styles live inline in /snippets/landing/*.jsx.
    ================================================================== */
-@import url("https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500&display=swap");
-
 .aml {
     /* light (fallback) tokens */
     --aml-ink: #0a0a0b;
@@ -113,6 +122,22 @@ body:has(.aml) [data-test="navbar"] {
     border: 0;
     border-top: 1px dashed var(--aml-rail);
     margin: 0;
+}
+
+/* ---- the theme underlines content links with the brand green; the landing
+        is monochrome and draws its own borders ---- */
+.aml a {
+    border-bottom: none !important;
+}
+.aml a.aml-btn--primary {
+    border-bottom: 1px solid var(--aml-acc) !important;
+}
+.aml a.aml-btn--ghost {
+    border-bottom: 1px solid var(--aml-ink) !important;
+}
+.aml a.uc-card,
+.aml a.cta-tile {
+    border-bottom: 1px solid var(--aml-card-bd) !important;
 }
 
 /* ---- mono kicker with leading square dot ---- */
@@ -358,8 +383,10 @@ body:has(.aml) [data-test="navbar"] {
         flex-direction: column;
         align-items: stretch;
     }
+    /* the desktop flex-basis would become a forced *height* in column flow */
+    .aml-hero-copy,
     .aml-hero-art {
-        justify-content: center;
+        flex: 0 0 auto;
     }
     .aml-secthead-right {
         flex-basis: 100%;
@@ -385,17 +412,4 @@ body:has(.aml) [data-test="navbar"] {
     .aml-hero-actions {
         flex-direction: column;
     }
-}
-
-/* Agent-rendition sections (inside <Visibility for="agents">) are hidden on
-   the web but their headings still register in the on-page TOC. The variant
-   uses a fixed section vocabulary, so hide exactly those anchors. */
-#table-of-contents-content .toc-item:has(> a[href="#do-this"]),
-#table-of-contents-content .toc-item:has(> a[href="#sdk"]),
-#table-of-contents-content .toc-item:has(> a[href="#facts"]),
-#table-of-contents-content .toc-item:has(> a[href="#not-supported"]),
-#table-of-contents-content .toc-item:has(> a[href="#errors"]),
-#table-of-contents-content .toc-item:has(> a[href="#verify"]),
-#table-of-contents-content .toc-item:has(> a[href="#related"]) {
-  display: none;
 }

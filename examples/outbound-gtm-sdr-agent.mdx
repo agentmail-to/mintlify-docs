@@ -1,0 +1,516 @@
+---
+title: "Outbound GTM / SDR AI agent"
+description: "Build an SDR agent on Vercel Eve and AgentMail: research prospects, send personalized outreach, follow up, classify replies, and hand hot leads to a human."
+---
+
+<Visibility for="humans">
+
+Give an agent the SDR job. It pulls in your leads, researches each one, sends personal first touches from its own inbox, follows up on silence, and reads every reply. You only see the hot leads, with the full thread and research attached.
+
+This cookbook builds it as a [Vercel Eve](https://eve.dev) agent with AgentMail as the email layer.
+
+### What it needs to do
+
+1. Pull in leads and research every prospect
+2. Set up the agent's email address so the mail lands
+3. Send a personalized email to every prospect, staying under about 25 sends per inbox per day
+4. Follow up, classify replies with a small model, and put hot leads in front of a human
+
+
+<Prompt description="Copy this prompt into Claude Code, Cursor, or another coding agent to build it." actions={["copy", "cursor"]}>
+Build an outbound SDR agent as a Vercel Eve agent (eve.dev) with AgentMail
+(agentmail.to) as its email layer.
+
+What it does:
+- Loads leads (email, name, company) from a CSV into a local store with a
+  per-lead state machine: new, contacted, replied, handed_off, closed,
+  suppressed.
+- Researches each prospect (their site, recent news, open roles) with a
+  research tool and stores found facts as notes. Every line of outreach must
+  trace to a stored fact. Skip leads where research finds nothing useful.
+- Sends a short plain-text first touch from an AgentMail inbox on a dedicated
+  outreach domain (AgentMail domains API for DNS records and verification,
+  inboxes API for the address). Every send carries an Idempotency-Key header
+  so retries never double-send. Hard cap: 25 sends per inbox per day.
+- Schedules the follow-up at send time as an AgentMail scheduled reply draft
+  (in_reply_to plus send_at, 4 days out) so it threads under the first touch,
+  and deletes that draft the moment anything comes back from the prospect.
+- Receives message.received, message.bounced, and message.complained on an
+  AgentMail webhook (Svix-signed), dedupes by message id, and maps each email
+  thread to one durable agent session.
+- Classifies each reply with a small model into: interested, question,
+  not_now, not_interested, out_of_office, referral, unsubscribe, auto_reply.
+  Unsubscribes, declines, bounces, and complaints go to AgentMail's send
+  block list and the lead is suppressed for good. Out-of-office reschedules
+  the follow-up. Auto-replies are ignored.
+- On interested: reply within seconds with a short acknowledgment that
+  proposes two concrete times, forward the thread to the human with the
+  research notes and the ask "reply to this, or CC yourself in and take it
+  from here", label the thread handed-off, and never touch that thread again.
+- Hard rules: max 3 touches per prospect, nothing after any human reply,
+  never answer a message with an Auto-Submitted header.
+- Warmup runs through an external tool connected to the inbox over AgentMail
+  IMAP/SMTP. No cold sends before warmup finishes.
+- Every outbound send is gated on human approval until I loosen it.
+</Prompt>
+
+## Before you start
+
+- Node.js 24 or newer, and an [AI Gateway](https://vercel.com/docs/ai-gateway) key (or any model provider key) for Eve.
+- An AgentMail API key on the Developer plan or above (custom domains are not on the Free plan).
+- A registered outreach domain that is not your main domain. Let it age about two weeks before sending.
+- A lead list with validated addresses. Bad addresses bounce, and high bounce rates damage the domain's reputation.
+
+Scaffold the agent and add the two SDKs:
+
+```bash
+npx eve@latest init sdr-agent --model anthropic/claude-sonnet-5
+cd sdr-agent
+npm install agentmail svix
+export AGENTMAIL_API_KEY="..."
+```
+
+Eve builds the agent from the files under `agent/`: `instructions.md` is the system prompt, each file in `agent/tools/` is a tool, and `agent/channels/` holds HTTP entry points. `npm run dev` gives you an interactive session with the agent at any point below.
+
+Two small shared files the tools import:
+
+```typescript agent/lib/agentmail.ts
+import { AgentMailClient } from "agentmail";
+
+export const agentmail = new AgentMailClient(); // reads AGENTMAIL_API_KEY
+export const INBOX = process.env.SDR_INBOX!; // set after part 2, e.g. mara@tryacme.com
+```
+
+```typescript agent/lib/leads.ts
+import { DatabaseSync } from "node:sqlite";
+
+export const db = new DatabaseSync("pipeline.db");
+db.exec(`CREATE TABLE IF NOT EXISTS leads (
+    email TEXT PRIMARY KEY,
+    name TEXT, company TEXT, notes TEXT,
+    state TEXT DEFAULT 'new',   -- new, contacted, replied, handed_off, closed, suppressed
+    thread_id TEXT,
+    followup_draft_id TEXT,
+    touches INTEGER DEFAULT 0,
+    contacted_at TEXT
+)`);
+```
+
+Swap SQLite for Postgres or your CRM if that is where your pipeline already lives.
+
+## 1. Get leads in and research them
+
+The easiest way is a CSV file with email, name, and company columns, loaded into the `leads` table. If your pipeline lives in a CRM like Attio or HubSpot, pull from there instead, since that is also where the results should land later.
+
+The agent does the research itself through a tool. This one fetches the prospect's site and runs a news search (Exa here, but any search API works):
+
+```typescript agent/tools/research_prospect.ts
+import { defineTool } from "eve/tools";
+import { z } from "zod";
+
+export default defineTool({
+  description:
+    "Research a prospect before drafting. Fetches their website and searches recent news. " +
+    "Returns raw findings; only claims backed by these findings may appear in the email.",
+  inputSchema: z.object({ company: z.string(), domain: z.string() }),
+  async execute({ company, domain }) {
+    const site = await fetch(`https://${domain}`)
+      .then((r) => r.text())
+      .catch(() => "");
+    const news = await fetch("https://api.exa.ai/search", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-API-Key": process.env.EXA_API_KEY! },
+      body: JSON.stringify({
+        query: `${company} funding hiring product launch`,
+        numResults: 5,
+        contents: { text: { maxCharacters: 1500 } },
+      }),
+    }).then((r) => r.json());
+    return { site: site.slice(0, 5000), news: news.results };
+  },
+});
+```
+
+Add two small tools the same way: `get_next_leads` (reads `new` leads from the table) and `update_lead` (writes state, notes, and thread ids back). The instructions in part 3 tell the agent when to call each one.
+
+## 2. Set up the agent's email address
+
+Cold email from a brand-new address on your main domain gets filtered and puts the domain at risk. Use a dedicated outreach domain, verified DNS, an inbox named for a person, and a few weeks of warmup.
+
+### Add the domain
+
+In the [Console](https://console.agentmail.to), open **Domains** and click **Add Domain**, or use any of these interfaces:
+
+<CodeGroup>
+
+```bash CLI
+agentmail domains create --domain tryacme.com
+```
+
+```bash API
+curl -X POST "https://api.agentmail.to/v0/domains" \
+  -H "Authorization: Bearer $AGENTMAIL_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{ "domain": "tryacme.com" }'
+```
+
+```typescript TypeScript
+const domain = await agentmail.domains.create({ domain: "tryacme.com" });
+for (const record of domain.records) {
+  console.log(record.type, record.name, record.value);
+}
+```
+
+```python Python
+domain = client.domains.create(domain="tryacme.com")
+for record in domain.records:
+    print(record.type, record.name, record.value)
+```
+
+</CodeGroup>
+
+The response includes the SPF, DKIM, DMARC, and MX records to publish at your registrar. Publish them exactly as returned. If the domain already has an SPF record, merge the new value into it instead of adding a second record. Then verify with `agentmail.domains.verify(domain.domainId)` and wait until `status` is `VERIFIED` (or subscribe to the `domain.verified` webhook event) before creating inboxes on it.
+
+### Create the inbox
+
+Use a person's name rather than a role account. `mara@tryacme.com` gets more replies than `sales@tryacme.com`.
+
+```typescript
+const inbox = await agentmail.inboxes.create({
+  username: "mara",
+  domain: "tryacme.com",
+  displayName: "Mara Ellison",
+});
+console.log(inbox.email); // mara@tryacme.com
+```
+
+The response's `email` field is the agent's address. Set it as `SDR_INBOX` in the agent's environment.
+
+### Warm up the inbox
+
+A new inbox needs a few weeks of warmup traffic before cold outreach. Connect it to a warmup tool (Instantly, Smartlead) through the tool's custom provider option:
+
+| Setting | IMAP (read) | SMTP (send) |
+| --- | --- | --- |
+| Host | `imap.agentmail.to` | `smtp.agentmail.to` |
+| Port | `993` | `465` |
+| Security | SSL/TLS | SSL/TLS |
+| Username | `mara@tryacme.com` | `mara@tryacme.com` |
+| Password | your API key | your API key |
+
+Ramp schedules are in the [deliverability guide](/advanced/deliverability). While the inbox warms, build the rest of the pipeline. Everything below works against a test inbox on `agentmail.to` immediately.
+
+## 3. Send a personalized email to every prospect
+
+The drafting rules live in the agent's system prompt. Add the outbound section:
+
+```markdown agent/instructions.md (outbound section)
+You are Mara, an SDR for Acme. Work through leads with get_next_leads.
+
+For each lead: call research_prospect first. Write a plain-text email under
+120 words with one reason to reply. Every claim about the prospect must come
+from the research findings. If the research has nothing useful, mark the lead
+closed with update_lead and move on. Close with a low-pressure question, not
+a calendar link.
+
+Send with send_first_touch, then schedule the follow-up with
+schedule_followup. Never contact a lead in state suppressed or closed, and
+never send more than 3 emails to one person.
+```
+
+The send tool enforces the sending constraints in code. It carries an idempotency key (a crash and retry sends one email, not two), refuses past the daily cap, and is gated on human approval until you loosen it:
+
+```typescript agent/tools/send_first_touch.ts
+import { defineTool } from "eve/tools";
+import { always } from "eve/tools/approval";
+import { z } from "zod";
+import { agentmail, INBOX } from "../lib/agentmail";
+import { db } from "../lib/leads";
+
+const DAILY_CAP = 25; // deliverability ceiling for one warmed inbox
+
+export default defineTool({
+  description: "Send the first outreach email to a prospect. Refuses past the daily cap.",
+  inputSchema: z.object({ to: z.string(), subject: z.string(), text: z.string() }),
+  approval: always(), // a person reviews every send. Relax per category later
+  async execute({ to, subject, text }) {
+    const today = db.prepare(
+      "SELECT COUNT(*) AS n FROM leads WHERE date(contacted_at) = date('now')",
+    ).get() as { n: number };
+    if (today.n >= DAILY_CAP) return { sent: false, reason: "daily cap reached" };
+
+    const sent = await agentmail.inboxes.messages.send(
+      INBOX,
+      { to: [to], subject, text },
+      { headers: { "Idempotency-Key": `first-${to}` } },
+    );
+    db.prepare(
+      "UPDATE leads SET state='contacted', thread_id=?, touches=touches+1, contacted_at=datetime('now') WHERE email=?",
+    ).run(sent.threadId, to);
+    return { sent: true, messageId: sent.messageId, threadId: sent.threadId };
+  },
+});
+```
+
+The follow-up is scheduled the moment the first touch goes out, as a reply draft. `inReplyTo` points at the first touch, so recipients, subject, and threading derive from it, and `sendAt` sets the date. Because AgentMail stores it as a scheduled draft, canceling is one delete call, with no separate scheduler to race:
+
+```typescript agent/tools/schedule_followup.ts
+import { defineTool } from "eve/tools";
+import { z } from "zod";
+import { agentmail, INBOX } from "../lib/agentmail";
+import { db } from "../lib/leads";
+
+export default defineTool({
+  description: "Schedule a follow-up 4 days out, threaded under the first touch.",
+  inputSchema: z.object({ email: z.string(), messageId: z.string(), text: z.string() }),
+  async execute({ email, messageId, text }) {
+    const draft = await agentmail.inboxes.drafts.create(INBOX, {
+      inReplyTo: messageId,
+      text,
+      sendAt: new Date(Date.now() + 4 * 86_400_000).toISOString(),
+    });
+    db.prepare("UPDATE leads SET followup_draft_id=? WHERE email=?").run(draft.draftId, email);
+    return { draftId: draft.draftId };
+  },
+});
+```
+
+A matching `cancel_followup` tool calls `agentmail.inboxes.drafts.delete(INBOX, draftId)` and clears the column. Run `npm run dev` at this point: give the agent a few test leads and watch it research, draft, ask for send approval, and schedule follow-ups.
+
+## 4. Handle replies and surface hot leads
+
+Replies, bounces, and complaints arrive on one webhook. Register it once (the response contains the Svix secret, shown once, save it as `AGENTMAIL_WEBHOOK_SECRET`):
+
+```typescript
+const webhook = await agentmail.webhooks.create({
+  url: "https://sdr-agent.example.com/webhooks/agentmail",
+  eventTypes: ["message.received", "message.bounced", "message.complained"],
+  inboxIds: [INBOX],
+  clientId: "sdr-agent-v1",
+});
+```
+
+In Eve, the receiving end is a channel. It verifies the signature, dedupes (webhook delivery is at least once), handles bounces and complaints in code, and turns each genuine reply into an agent turn. `from(threadId)` maps each email thread to its own durable session, which retains the conversation context across turns:
+
+```typescript agent/channels/agentmail.ts
+import { defineChannel, POST } from "eve/channels";
+import { Webhook } from "svix";
+import { suppress, claim } from "../lib/leads";
+
+const verifier = new Webhook(process.env.AGENTMAIL_WEBHOOK_SECRET!);
+
+export default defineChannel({
+  turnPolicy: "queue",
+  routes: [
+    POST("/webhooks/agentmail", async (request, { from }) => {
+      const payload = await request.text();
+      let event: any;
+      try {
+        event = verifier.verify(payload, {
+          "svix-id": request.headers.get("svix-id") ?? "",
+          "svix-timestamp": request.headers.get("svix-timestamp") ?? "",
+          "svix-signature": request.headers.get("svix-signature") ?? "",
+        });
+      } catch {
+        return new Response(null, { status: 400 });
+      }
+
+      const message = event.message;
+      if (!claim(message.message_id)) return new Response(null, { status: 200 });
+
+      if (event.event_type !== "message.received") {
+        // suppress() also cancels the lead's pending follow-up draft
+        suppress(message.to[0]);
+        return new Response(null, { status: 200 });
+      }
+
+      await from(message.thread_id).send(
+        `New reply from ${message.from} in thread ${message.thread_id}. ` +
+          `Classify it with the classifier subagent, then act per the playbook.`,
+        { auth: null },
+      );
+      return new Response(null, { status: 200 });
+    }),
+  ],
+});
+```
+
+Classification runs on a small model. In Eve that is a subagent with its own model, two files:
+
+```typescript agent/subagents/classifier/agent.ts
+import { defineAgent } from "eve";
+
+export default defineAgent({
+  description: "Classifies one inbound reply to a cold email.",
+  model: "anthropic/claude-haiku-4.5",
+});
+```
+
+```markdown agent/subagents/classifier/instructions.md
+Classify the reply into one of: interested, question, not_now, not_interested,
+out_of_office, referral, unsubscribe, auto_reply. Return JSON:
+{category, summary (one line), return_date (out_of_office only),
+referred_contact (referral only)}.
+
+"Interesting, but ask me next quarter" is not_now. "Take me off your list" is
+unsubscribe even without the word unsubscribe. Read only what the prospect
+wrote, not the quoted history.
+```
+
+The reply half of the playbook tells the root agent what to do with each category:
+
+```markdown agent/instructions.md (reply section)
+When a reply comes in: cancel the pending follow-up with cancel_followup,
+fetch the message, and pass its extracted_text to the classifier.
+
+- interested: send a short acknowledgment with reply_in_thread (under five
+  sentences, first line reacting to what they said, propose two concrete
+  times, calendar link as fallback, no pitching). Then forward_to_human with
+  the research notes and this ask: "Reply to this, or CC yourself into the
+  thread and take it from here." Label the thread handed-off.
+- unsubscribe or not_interested: block_sender, mark the lead suppressed.
+- out_of_office: reschedule the follow-up for after the return date.
+- auto_reply: do nothing.
+- anything else (question, not_now, referral): forward_to_human with the
+  classifier's summary.
+
+Never reply in a thread labeled handed-off. Never reply to a message whose
+Auto-Submitted header is set.
+```
+
+The three tools referenced are thin wrappers, one AgentMail call each: `reply_in_thread` posts to the reply endpoint with an idempotency key, `forward_to_human` calls the forward endpoint plus `agentmail.threads.update(threadId, { addLabels: ["handed-off"] })`, and `block_sender` calls `agentmail.lists.create("send", "block", { entry })`. The block list is org-level, so an opt-out here binds every future campaign even if a fresh lead list re-imports the address. On the interested path the agent answers in seconds, and that matters: replies sent within 30 minutes book meetings at several times the rate of next-day replies.
+
+If your team lives in Slack, add a webhook post to `forward_to_human`.
+
+### Keep the guardrails in code
+
+The tools enforce what the prompt only asks for: the daily cap and idempotency keys in `send_first_touch`, `approval: always()` on every outbound send until you relax it per category, the touch counter in the lead table, and the `handed-off` label check. Underneath all of that, sends to previously bounced, complained, or unsubscribed addresses fail with `403 MessageRejectedError` before anything leaves. Watch `message.bounced` and `message.complained` rates per campaign and stop the ramp when they move. Practitioner ceilings: bounces under 2 percent, complaints under 0.3 percent.
+
+## Extend the pipeline
+
+Common next steps: enrichment feeding the research notes (Clay, Apollo), more inboxes once volume outgrows one address, A/B testing subject lines, meeting booking beyond a calendar link, and syncing state back to the CRM. To add inboxes, add more `INBOX` values. The channel, classifier, and lead table stay the same.
+
+</Visibility>
+
+<Visibility for="agents">
+
+# Build an outbound SDR agent on Vercel Eve and AgentMail
+
+Builds an agent that loads leads, researches every prospect, sends personalized first touches from its own inbox, follows up on silence, classifies replies with a small model, and hands hot leads to a human with the thread and research attached. Use it to run cold outbound with a human approval gate on every send.
+
+## Do this
+
+Feed this prompt verbatim to a coding agent (Claude Code, Cursor, or similar) to build the whole agent:
+
+```
+Build an outbound SDR agent as a Vercel Eve agent (eve.dev) with AgentMail
+(agentmail.to) as its email layer.
+
+What it does:
+- Loads leads (email, name, company) from a CSV into a local store with a
+  per-lead state machine: new, contacted, replied, handed_off, closed,
+  suppressed.
+- Researches each prospect (their site, recent news, open roles) with a
+  research tool and stores found facts as notes. Every line of outreach must
+  trace to a stored fact. Skip leads where research finds nothing useful.
+- Sends a short plain-text first touch from an AgentMail inbox on a dedicated
+  outreach domain (AgentMail domains API for DNS records and verification,
+  inboxes API for the address). Every send carries an Idempotency-Key header
+  so retries never double-send. Hard cap: 25 sends per inbox per day.
+- Schedules the follow-up at send time as an AgentMail scheduled reply draft
+  (in_reply_to plus send_at, 4 days out) so it threads under the first touch,
+  and deletes that draft the moment anything comes back from the prospect.
+- Receives message.received, message.bounced, and message.complained on an
+  AgentMail webhook (Svix-signed), dedupes by message id, and maps each email
+  thread to one durable agent session.
+- Classifies each reply with a small model into: interested, question,
+  not_now, not_interested, out_of_office, referral, unsubscribe, auto_reply.
+  Unsubscribes, declines, bounces, and complaints go to AgentMail's send
+  block list and the lead is suppressed for good. Out-of-office reschedules
+  the follow-up. Auto-replies are ignored.
+- On interested: reply within seconds with a short acknowledgment that
+  proposes two concrete times, forward the thread to the human with the
+  research notes and the ask "reply to this, or CC yourself in and take it
+  from here", label the thread handed-off, and never touch that thread again.
+- Hard rules: max 3 touches per prospect, nothing after any human reply,
+  never answer a message with an Auto-Submitted header.
+- Warmup runs through an external tool connected to the inbox over AgentMail
+  IMAP/SMTP. No cold sends before warmup finishes.
+- Every outbound send is gated on human approval until I loosen it.
+```
+
+Scaffold and dependencies:
+
+```bash
+npx eve@latest init sdr-agent --model anthropic/claude-sonnet-5
+cd sdr-agent
+npm install agentmail svix
+export AGENTMAIL_API_KEY="..."
+```
+
+Eve reads `agent/instructions.md` as the system prompt, each file in `agent/tools/` as a tool, and `agent/channels/` as HTTP entry points. `npm run dev` opens an interactive session with the agent.
+
+## SDK
+
+`npm install agentmail`. The page's client is TypeScript: `new AgentMailClient()` reads `AGENTMAIL_API_KEY`.
+
+- Add the outreach domain: `agentmail.domains.create({ domain: "tryacme.com" })`. Also CLI `agentmail domains create --domain tryacme.com`, HTTP `POST https://api.agentmail.to/v0/domains`, Python `client.domains.create(domain="tryacme.com")`.
+- Verify the domain: `agentmail.domains.verify(domain.domainId)`, then wait until `status` is `VERIFIED`.
+- Create the inbox: `agentmail.inboxes.create({ username: "mara", domain: "tryacme.com", displayName: "Mara Ellison" })`. The response's `email` field is the agent's address. Set it as `SDR_INBOX`.
+- Send the first touch: `agentmail.inboxes.messages.send(INBOX, { to: [to], subject, text }, { headers: { "Idempotency-Key": ... } })`.
+- Schedule the follow-up: `agentmail.inboxes.drafts.create(INBOX, { inReplyTo: messageId, text, sendAt })` with `sendAt` an ISO timestamp 4 days out.
+- Cancel the follow-up: `agentmail.inboxes.drafts.delete(INBOX, draftId)`.
+- Register the webhook: `agentmail.webhooks.create({ url, eventTypes: ["message.received", "message.bounced", "message.complained"], inboxIds: [INBOX], clientId: "sdr-agent-v1" })`.
+- Reply and forward: thin wrappers on the reply and forward endpoints, each send carrying an `Idempotency-Key` header.
+- Label a thread handed off: `agentmail.threads.update(threadId, { addLabels: ["handed-off"] })`.
+- Block a sender org-wide: `agentmail.lists.create("send", "block", { entry })`.
+
+Full SDK surface: [/integrations/sdks-and-cli](/integrations/sdks-and-cli).
+
+## Facts
+
+- Custom domains require the Developer plan or above. The Free plan does not include them.
+- Requires Node.js 24 or newer and an AI Gateway key (or any model provider key) for Eve.
+- Use a registered outreach domain that is not the main domain. Let it age about two weeks before sending.
+- Env vars: `AGENTMAIL_API_KEY`, `SDR_INBOX` (the inbox address), `AGENTMAIL_WEBHOOK_SECRET` (the Svix secret, shown once at webhook creation), `EXA_API_KEY` (research tool).
+- `domains.create` returns the SPF, DKIM, DMARC, and MX records to publish at the registrar. Publish them exactly as returned. If the domain already has an SPF record, merge the new value into it instead of adding a second record.
+- Create inboxes on a domain only after `status` is `VERIFIED` (or after the `domain.verified` webhook event).
+- Name the inbox for a person. `mara@tryacme.com` gets more replies than `sales@tryacme.com`.
+- Hard cap: 25 sends per inbox per day, the deliverability ceiling for one warmed inbox.
+- Every send carries an `Idempotency-Key` header, so a crash and retry sends one email, not two.
+- The follow-up is a scheduled reply draft. `inReplyTo` points at the first touch, so recipients, subject, and threading derive from it, and `sendAt` sets the date. Canceling is one draft delete, with no separate scheduler to race.
+- Webhook deliveries are Svix-signed and at least once. Dedupe by message id. Each email thread maps to one durable agent session.
+- Reply categories: `interested`, `question`, `not_now`, `not_interested`, `out_of_office`, `referral`, `unsubscribe`, `auto_reply`.
+- Unsubscribes, declines, bounces, and complaints go to the send block list and the lead is suppressed for good. `out_of_office` reschedules the follow-up. `auto_reply` gets no action.
+- The send block list is org-level. An opt-out binds every future campaign even if a fresh lead list re-imports the address.
+- Hard rules: max 3 touches per prospect, nothing after any human reply, no reply to a message whose `Auto-Submitted` header is set, no reply in a thread labeled `handed-off`.
+- Every outbound send is gated on human approval (`approval: always()` in Eve) until relaxed per category.
+- Warmup runs through an external tool (Instantly, Smartlead) over IMAP/SMTP: IMAP host `imap.agentmail.to` port `993`, SMTP host `smtp.agentmail.to` port `465`, both SSL/TLS, username is the inbox address, password is the API key.
+- Keep bounces under 2 percent and complaints under 0.3 percent per campaign. Stop the ramp when `message.bounced` or `message.complained` rates move.
+
+## Not supported
+
+- No cold sends before warmup finishes. A new inbox needs a few weeks of warmup traffic.
+- Sends to previously bounced, complained, or unsubscribed addresses do not go out. AgentMail rejects them with `403 MessageRejectedError` before anything leaves.
+- Webhook delivery is not exactly once. A handler without message id dedupe processes repeats.
+
+## Errors
+
+| Error | HTTP status | Cause | Fix |
+| --- | --- | --- | --- |
+| `MessageRejectedError` (code `message_rejected`) | 403 | The recipient previously bounced, complained, or unsubscribed and is on the org send block list | Mark the lead suppressed and stop contacting the address |
+
+## Verify
+
+Run `npm run dev`, hand the agent a few test leads, and watch it research, draft, ask for send approval, and schedule follow-ups. The full pipeline works against a test inbox on `agentmail.to` immediately while the outreach domain warms.
+
+## Related
+
+- [/examples/customer-support-agent](/examples/customer-support-agent) - the inbound counterpart, same webhook and channel pattern.
+- [/examples/ai-employee-with-its-own-inbox](/examples/ai-employee-with-its-own-inbox) - an agent teammates email directly.
+- [/advanced/custom-domains](/advanced/custom-domains) - adding, publishing DNS for, and verifying the outreach domain.
+- [/advanced/deliverability](/advanced/deliverability) - warmup ramp schedules.
+- [/advanced/webhooks](/advanced/webhooks) - event payloads and Svix signature verification.
+- [/core/imap-smtp](/core/imap-smtp) - the credentials warmup tools connect with.
+
+</Visibility>

@@ -1,0 +1,156 @@
+---
+title: "Account lifecycle"
+description: "Delete data, exercise GDPR rights, and close your AgentMail account."
+icon: "door-open"
+---
+
+<Visibility for="humans">
+
+This page covers the end of the lifecycle: deleting resources and their data through the API, what AgentMail retains and for how long, exercising your data protection rights, and closing an account.
+
+## Deleting data through the API
+
+Deletion covers every resource your agents create and is **permanent**: there is no undelete.
+
+| Resource | Endpoint | What happens |
+| --- | --- | --- |
+| Thread | `DELETE /v0/inboxes/{inbox_id}/threads/{thread_id}` | Permanently deletes the thread and its messages. |
+| Inbox | `DELETE /v0/inboxes/{inbox_id}` (also pod-scoped: `DELETE /v0/pods/{pod_id}/inboxes/{inbox_id}`) | Permanently deletes the inbox; its threads, messages, and attachments are cleaned up asynchronously after the delete returns. |
+| Draft | `DELETE /v0/inboxes/{inbox_id}/drafts/{draft_id}` | Permanently deletes the draft. |
+| Domain | `DELETE /v0/domains/{domain_id}` (also pod-scoped) | Removes the domain from AgentMail. Existing mail data is retained. |
+| Pod | `DELETE /v0/pods/{pod_id}` | Deletes the pod. A pod that still contains inboxes or domains cannot be deleted; empty it first. |
+| Webhook | `DELETE /v0/webhooks/{webhook_id}` | Stops event delivery immediately. |
+| API key | `DELETE /v0/api-keys/{api_key}` | Revokes the credential immediately. |
+
+<Warning>
+Deleting is different from trashing. Adding the `trash` label to a message or thread only hides it from default list results and is reversible: remove the label and it comes back. `DELETE` removes the data permanently.
+</Warning>
+
+## What AgentMail retains
+
+From the [privacy policy](https://www.agentmail.to/legal/privacy-policy), the current retention periods for service data:
+
+- Email messages, drafts, attachments, and inbox records remain available until you delete them.
+- Database point-in-time recovery provides recovery points for up to 35 days.
+- Metrics are retained for up to 90 days.
+- Email open-tracking records are scheduled to expire after 90 days.
+- Most application, security, and diagnostic logs are retained for up to 365 days.
+
+This means data you delete can persist in encrypted backups for up to 35 days after deletion before it ages out of the recovery window.
+
+## GDPR and data protection rights
+
+If you are a resident of the EU or EEA, you have data protection rights under GDPR, including the right to access, update, or delete the information AgentMail holds on you; the rights of rectification, objection, and restriction; the right to data portability; and the right to withdraw consent.
+
+To find out what personal data AgentMail holds about you, or to have it removed, email [support@agentmail.cc](mailto:support@agentmail.cc). You may be asked to verify your identity before the request is processed, and some data necessary to provide the service cannot be removed while your account remains open.
+
+## Closing an account
+
+There is no self-serve "delete my account" API. Closing out fully looks like this:
+
+1. **Delete your resources.** Remove inboxes, domains, and pods through the API or the [console](https://console.agentmail.to) so mail data is permanently deleted rather than left dormant.
+2. **Revoke credentials.** Delete all API keys so nothing can authenticate against the organization.
+3. **Leave or close the organization.** In the console you can leave an organization that has other members. If you are the organization's only member, the leave action is blocked; this is the one step that cannot be done self-serve.
+4. **Request closure.** Email [support@agentmail.cc](mailto:support@agentmail.cc) from the account's email address and ask for the organization to be closed and its data deleted. This is also the path for GDPR erasure of the account itself.
+
+<Note>
+Billing stops mattering once the paid subscription is cancelled. Do that in the console's billing settings (or through the Vercel dashboard, if you installed AgentMail through the Vercel Marketplace) before requesting closure.
+</Note>
+
+</Visibility>
+
+<Visibility for="agents">
+
+# Delete AgentMail data and close an account
+
+Every resource an agent creates can be permanently deleted through the API, and full account closure is a short runbook that ends with an email to support. Use this for offboarding, GDPR erasure, and knowing how long deleted data persists in backups and logs.
+
+## Do this
+
+Full offboarding, in order. Every `DELETE` below is permanent, with no undelete.
+
+```bash
+# 1. Delete each inbox. Its threads, messages, and attachments are
+#    cleaned up asynchronously after the call returns.
+curl -X DELETE "https://api.agentmail.to/v0/inboxes/<inbox_id>" \
+  -H "Authorization: Bearer $AGENTMAIL_API_KEY"
+
+# 2. Delete each domain.
+curl -X DELETE "https://api.agentmail.to/v0/domains/<domain_id>" \
+  -H "Authorization: Bearer $AGENTMAIL_API_KEY"
+
+# 3. Delete each pod once it is empty. A pod still holding inboxes or
+#    domains cannot be deleted.
+curl -X DELETE "https://api.agentmail.to/v0/pods/<pod_id>" \
+  -H "Authorization: Bearer $AGENTMAIL_API_KEY"
+
+# 4. Delete each webhook. Event delivery stops immediately.
+curl -X DELETE "https://api.agentmail.to/v0/webhooks/<webhook_id>" \
+  -H "Authorization: Bearer $AGENTMAIL_API_KEY"
+
+# 5. Revoke every API key last. Revocation is immediate.
+curl -X DELETE "https://api.agentmail.to/v0/api-keys/<api_key>" \
+  -H "Authorization: Bearer $AGENTMAIL_API_KEY"
+```
+
+Then finish outside the API:
+
+1. Cancel the paid subscription in the console's billing settings, or in the Vercel dashboard for a Vercel Marketplace install.
+2. In the console, leave the organization if it has other members. The only remaining member cannot leave self-serve.
+3. Email `support@agentmail.cc` from the account's email address and ask for the organization to be closed and its data deleted. This is also the GDPR erasure path for the account itself.
+
+## Facts
+
+- Thread: `DELETE /v0/inboxes/{inbox_id}/threads/{thread_id}` permanently deletes the thread and its messages.
+- Inbox: `DELETE /v0/inboxes/{inbox_id}`, or pod-scoped `DELETE /v0/pods/{pod_id}/inboxes/{inbox_id}`, permanently deletes the inbox. Its threads, messages, and attachments are cleaned up asynchronously after the delete returns.
+- Draft: `DELETE /v0/inboxes/{inbox_id}/drafts/{draft_id}` permanently deletes the draft.
+- Domain: `DELETE /v0/domains/{domain_id}`, also available pod-scoped, removes the domain from AgentMail. Existing mail data is retained.
+- Pod: `DELETE /v0/pods/{pod_id}` deletes the pod only after it holds no inboxes and no domains.
+- Webhook: `DELETE /v0/webhooks/{webhook_id}` stops event delivery immediately.
+- API key: `DELETE /v0/api-keys/{api_key}` revokes the credential immediately.
+- Deletion is permanent for every resource. There is no undelete.
+- Trashing is different from deleting. The `trash` label only hides a message or thread from default list results, and removing the label brings it back.
+- Email messages, drafts, attachments, and inbox records remain available until deleted.
+- Database point-in-time recovery keeps recovery points for up to 35 days, so deleted data can persist in encrypted backups for up to 35 days after deletion before it ages out of the recovery window.
+- Metrics are retained for up to 90 days. Email open-tracking records are scheduled to expire after 90 days.
+- Most application, security, and diagnostic logs are retained for up to 365 days.
+- GDPR rights for EU and EEA residents: access, update, deletion, rectification, objection, restriction, data portability, and withdrawal of consent. Send requests to `support@agentmail.cc`. Identity verification may be required before a request is processed.
+- Some data necessary to provide the service cannot be removed while the account remains open.
+- Account closure requests must be emailed to `support@agentmail.cc` from the account's email address.
+
+## Not supported
+
+- No self-serve delete-account API exists. Organization closure happens by emailing `support@agentmail.cc`.
+- `DELETE /v0/pods/{pod_id}` does not cascade. A pod that still contains inboxes or domains cannot be deleted, so empty it first.
+- `DELETE /v0/domains/{domain_id}` does not delete existing mail data.
+- No undelete or restore endpoint exists for any deleted resource.
+- The organization's only member cannot use the console's leave action. That final step goes through the support email.
+- Deleting data does not purge it from backups immediately. It persists in the point-in-time recovery window for up to 35 days.
+
+## Errors
+
+| Error | Status | Cause | Fix |
+| --- | --- | --- | --- |
+| `cannot_delete` | 409 | Dependent resources still block the deletion, for example a pod that still contains inboxes or domains. | Delete the blocking resources named in the message, then retry. |
+| `not_found` | 404 | No resource with this identifier is visible to the API key, including one already deleted. | Check the id and the key's scope. |
+
+## Verify
+
+A completed delete makes the identifier unresolvable. Repeat the call and expect `404`:
+
+```bash
+curl -s -o /dev/null -w "%{http_code}" -X DELETE \
+  "https://api.agentmail.to/v0/inboxes/<inbox_id>/threads/<thread_id>" \
+  -H "Authorization: Bearer $AGENTMAIL_API_KEY"
+```
+
+For a revoked API key, any request authenticated with it stops working immediately.
+
+## Related
+
+- `/advanced/errors` - the error envelope and the `cannot_delete` and `not_found` cases.
+- `/extras/labels-and-system-labels` - the `trash` label that hides mail without deleting it.
+- `/extras/security-compliance` - the encryption and backup posture behind the retention windows.
+- `/advanced/webhooks` - creating and managing the webhooks that step 4 deletes.
+
+</Visibility>

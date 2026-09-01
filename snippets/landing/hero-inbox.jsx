@@ -73,13 +73,15 @@ export const LandingHero = () => {
           width: 100%;
           max-width: 560px;
           margin-left: auto;
+          overflow: clip;
         }
         .hero-stage {
           position: relative;
           width: 560px;
           height: 470px;
           transform-origin: top left;
-          transform: scale(calc(100cqw / 560));
+          /* tan(atan2()) divides two lengths into the plain number scale() needs */
+          transform: scale(tan(atan2(100cqw, 560px)));
           font-family: var(--aml-sans);
         }
         .hero-glow {
@@ -186,7 +188,7 @@ export const LandingHero = () => {
           stroke-width: 1;
         }
         .hero-pill {
-          position: absolute; left: 448px; top: 242px;
+          position: absolute; left: 440px; top: 242px;
           font-family: var(--aml-mono); font-size: 11px;
           background: var(--aml-acc); color: var(--aml-acc-contrast);
           padding: 5px 10px; border-radius: 6px;

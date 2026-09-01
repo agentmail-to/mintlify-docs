@@ -1,0 +1,319 @@
+---
+title: Vercel AI SDK
+description: Give a Vercel AI SDK agent its own inbox to send, receive, and reply to email.
+icon: "/images/logos/vercel.svg"
+---
+
+<Visibility for="humans">
+
+
+<img src="/images/banners/integration-ai-sdk.svg" alt="" noZoom />
+Agents built with the [Vercel AI SDK](https://ai-sdk.dev) get email through the `agentmail-toolkit` package. This page walks you through an agent that creates its own `@agentmail.to` inbox, sends an email, and replies to one it receives, first from a script and then from a Next.js route that fires when mail arrives.
+
+## 0. Get API keys
+
+- `AGENTMAIL_API_KEY` authenticates the email tools. Generate one from the [AgentMail Console](https://console.agentmail.to/dashboard/api-keys).
+- `OPENAI_API_KEY` authenticates the model calls behind `generateText`. Generate one from the [OpenAI dashboard](https://platform.openai.com/api-keys).
+
+```bash
+export AGENTMAIL_API_KEY="<API_KEY>"
+export OPENAI_API_KEY="<OPENAI_API_KEY>"
+```
+
+If you installed AgentMail through the Vercel Marketplace, your project's environment already carries the AgentMail credentials. [Marketplaces and provisioning](/integrations/marketplaces) covers that setup.
+
+## 1. Install and load the tools
+
+Install the toolkit, the AI SDK, and a model provider. The toolkit builds its tools for AI SDK 6, so pin that major along with `@ai-sdk/openai` 3, the provider major that matches it:
+
+```bash
+npm install agentmail-toolkit ai@6 @ai-sdk/openai@3
+npm install -D tsx
+npm pkg set type=module
+```
+
+`tsx` runs the TypeScript scripts in the next steps, and `"type": "module"` lets them use top-level `await`.
+
+Define the agent in `agent.ts`. The toolkit's `getTools()` returns the email tools as the AI SDK's own `Tool` type, keyed by tool name, so the object goes straight into `tools:`:
+
+```typescript agent.ts
+import { openai } from "@ai-sdk/openai";
+import { AgentMailToolkit } from "agentmail-toolkit/ai-sdk";
+import { generateText, stepCountIs } from "ai";
+
+export async function runEmailAgent(prompt: string) {
+  const result = await generateText({
+    model: openai.chat("gpt-4o"),
+    system:
+      "You are an email agent with your own AgentMail inbox. " +
+      "You can create inboxes, send email, and read and reply to threads.",
+    prompt,
+    tools: new AgentMailToolkit().getTools(),
+    stopWhen: stepCountIs(10),
+  });
+  return result.text;
+}
+```
+
+`stopWhen: stepCountIs(10)` is what turns one generation into an agent loop. After each tool call the model runs again with the result, up to ten steps, which leaves room for several email operations plus a final answer. The same `tools` object works in `streamText` when you want to stream the answer instead.
+
+`openai.chat("gpt-4o")` picks the Chat Completions API on purpose: through the provider's default Responses API, the model fills every optional tool field with empty strings, values the listing tools reject. The Troubleshooting accordion at the end of this page shows what that failure looks like.
+
+`new AgentMailToolkit()` reads `AGENTMAIL_API_KEY` from the environment. To supply credentials differently, hand it a configured client: `new AgentMailToolkit(new AgentMailClient({ apiKey: "..." }))`.
+
+The hosted MCP server described in [MCP and Skills](/integrations/mcp-and-skills) is an alternative to the toolkit if you prefer to connect that way.
+
+## 2. Test sending emails
+
+First job for the agent: create an inbox and send an email to an account you already read, Gmail, Outlook, whichever you use. Save this next to `agent.ts` and run it with `npx tsx send.ts`.
+
+Within seconds, that account receives a message from an `@agentmail.to` address that AgentMail just created.
+
+```typescript send.ts
+import { runEmailAgent } from "./agent";
+
+const output = await runEmailAgent(
+  "Create an inbox with the display name 'Support agent', then send an email " +
+    "from it to you@example.com with the subject 'Hello from my agent' and a " +
+    "one-line introduction. Include the new inbox address in your final answer.",
+);
+console.log(output);
+```
+
+That answer comes from two tool calls, `create_inbox` and then `send_message`, followed by a summary:
+
+```text Sample output
+Done. Your new inbox is faircost773@agentmail.to, and I sent the email to
+you@example.com with the subject "Hello from my agent".
+```
+
+<Frame caption="A send run traced with a small onStepFinish log in agent.ts; this run reused an existing inbox, so list_inboxes stands in for create_inbox.">
+  <img src="/images/integrations/ai-sdk-send-run.png" alt="Terminal output of npx tsx send.ts showing list_inboxes and send_message tool calls followed by the agent's final answer" />
+</Frame>
+
+Note the inbox address in the output. The next step sends mail to it.
+
+<Accordion title="Troubleshooting">
+
+- **`403` on create with a taken username.** If your prompt asks for a specific username and it is taken, the create call fails with a `403` naming up to three available variants in `suggestions`. Leave the username out, as this prompt does, and AgentMail picks one.
+- **`403` `limit_exceeded` at your plan's inbox cap.** Creation fails with an error that names the cap and the upgrade that raises it.
+
+A failed tool call does not end the run: the AI SDK records it as a `tool-error` part and feeds the error text, suggestions included, back to the model, so the agent can retry with an available name in its next step.
+
+</Accordion>
+
+## 3. Test receiving and replying
+
+Now give the agent something to answer. From your own account, email the address from step 2 with a subject line and a question.
+
+Then run the script below to have the agent read and answer it. The reply arrives back in your account, threaded under the message you sent.
+
+```typescript reply.ts
+import { runEmailAgent } from "./agent";
+
+const output = await runEmailAgent(
+  "Check inbox <inbox_id>, read its newest thread, and reply to it briefly " +
+    "in the same thread.",
+);
+console.log(output);
+```
+
+Swap the address from step 2 in for `<inbox_id>`. Nothing carries over between runs, so the prompt has to name the inbox itself.
+
+To answer, the agent chains `list_threads`, `get_thread`, and `reply_to_message`. Delivery takes about two seconds in each direction. An agent that reports an empty inbox most likely ran before your email arrived, so run it again.
+
+## Scope the agent's tools
+
+`getTools()` with no arguments returns the full toolkit. Pass an array of names to hand over only what the job calls for:
+
+```typescript
+const tools = new AgentMailToolkit().getTools([
+  "list_threads",
+  "get_thread",
+  "reply_to_message",
+]);
+```
+
+This scoped set limits the agent to reading and answering mail in inboxes that already exist.
+
+## Reply as email arrives
+
+The walkthrough prompts the agent by hand. Deployed on Vercel, your project can react on its own: AgentMail sends a signed `POST` to a route in your app whenever the inbox receives an email, and the route runs the agent to answer it.
+
+You need a webhook subscription pointing at the route's public URL, with its signing secret stored as `AGENTMAIL_WEBHOOK_SECRET`. [Webhooks](/advanced/webhooks) covers creating the subscription, choosing events, and handling retried deliveries. Install the verification library with `npm install svix`.
+
+```typescript app/api/agentmail/route.ts
+import { openai } from "@ai-sdk/openai";
+import { AgentMailToolkit } from "agentmail-toolkit/ai-sdk";
+import { generateText, stepCountIs } from "ai";
+import { Webhook } from "svix";
+
+const verifier = new Webhook(process.env.AGENTMAIL_WEBHOOK_SECRET!);
+
+type ReceivedEvent = {
+  event_type: string;
+  message: { inbox_id: string; thread_id: string };
+};
+
+export async function POST(request: Request) {
+  const payload = await request.text();
+
+  let event: ReceivedEvent;
+  try {
+    event = verifier.verify(payload, {
+      "svix-id": request.headers.get("svix-id") ?? "",
+      "svix-timestamp": request.headers.get("svix-timestamp") ?? "",
+      "svix-signature": request.headers.get("svix-signature") ?? "",
+    }) as ReceivedEvent;
+  } catch {
+    return new Response("invalid signature", { status: 400 });
+  }
+
+  if (event.event_type === "message.received") {
+    await generateText({
+      model: openai.chat("gpt-4o"),
+      system:
+        "You answer email sent to this inbox. Keep replies short and stay in the same thread.",
+      prompt:
+        `Inbox ${event.message.inbox_id} received an email in thread ` +
+        `${event.message.thread_id}. Read the thread and reply to its latest message.`,
+      tools: new AgentMailToolkit().getTools(["get_thread", "reply_to_message"]),
+      stopWhen: stepCountIs(5),
+    });
+  }
+
+  return new Response(null, { status: 200 });
+}
+```
+
+The handler reads the raw body before anything else because the signature is computed over the exact bytes. A `message.received` event names the `inbox_id` and `thread_id` that changed, so the prompt hands both to the agent, and the toolkit is scoped to the two tools this job needs: `get_thread` to read the conversation and `reply_to_message` to answer it.
+
+<Accordion title="Troubleshooting">
+
+- **Missing `stopWhen`.** Without it the loop stops after one step (the default stop condition is `stepCountIs(1)`), so the model makes its first tool call and the run ends with empty `text`. Budget steps for the tool calls the task needs plus a final answer.
+- **Missing `OPENAI_API_KEY`.** The run fails with `AI_LoadAPIKeyError` before any email tool runs. The email tools run on `AGENTMAIL_API_KEY`, but the model behind `generateText` authenticates separately with OpenAI.
+- **Missing `AGENTMAIL_API_KEY`.** The run still finishes, but every email tool call errors with `Please provide 'apiKey' when initializing the client, or set the 'AGENTMAIL_API_KEY' environment variable`, and the agent reports it could not do the work. Set the variable in the environment the process runs in. A shell `export` only covers local runs, so a deployed route needs it in the project's environment settings.
+- **Calling the model with `openai("gpt-4o")`.** The provider default routes through the Responses API, where the model fills every optional tool field with empty strings and empty arrays. Each `list_threads` call then fails, first as `Type validation failed` from the tool's input check, then as `HTTP 400` from the API, and the agent gives up without reaching the thread. `openai.chat("gpt-4o")` routes through the Chat Completions API, where the model passes only the fields the call needs.
+- **Installing `ai` 7 next to the toolkit.** npm refuses with a conflicting peer dependency error naming `ai@"^6.0.0-beta.150"`, the range the toolkit accepts. Use `ai@6` together with `@ai-sdk/openai@3`.
+- **Misspelled tool names in `getTools([...])`.** Unknown names are silently dropped, leaving the agent with fewer tools than you meant to give it. Log `Object.keys(tools)` once to confirm the list.
+
+</Accordion>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Set up webhooks" icon="bolt" href="/advanced/webhooks">
+    Register the subscription your route needs and process deliveries exactly once.
+  </Card>
+  <Card title="Set an authorization boundary" icon="shield" href="/advanced/safety">
+    Keep untrusted email content from steering what your agent does.
+  </Card>
+</CardGroup>
+
+</Visibility>
+
+<Visibility for="agents">
+
+# Give a Vercel AI SDK agent an email inbox
+
+The `agentmail-toolkit` package exposes AgentMail operations as AI SDK `Tool` objects for `generateText` and `streamText`. Use it when an agent built on AI SDK 6 should create inboxes, send email, and read and reply to threads, from a script or from a Next.js route that fires on incoming mail.
+
+## Do this
+
+```bash
+npm install agentmail-toolkit ai@6 @ai-sdk/openai@3
+npm install -D tsx
+npm pkg set type=module
+export AGENTMAIL_API_KEY="<API_KEY>"
+export OPENAI_API_KEY="<OPENAI_API_KEY>"
+```
+
+Save as `agent.ts`. Run scripts that import it with `npx tsx <script>.ts`:
+
+```typescript
+import { openai } from "@ai-sdk/openai";
+import { AgentMailToolkit } from "agentmail-toolkit/ai-sdk";
+import { generateText, stepCountIs } from "ai";
+
+export async function runEmailAgent(prompt: string) {
+  const result = await generateText({
+    model: openai.chat("gpt-4o"),
+    system:
+      "You are an email agent with your own AgentMail inbox. " +
+      "You can create inboxes, send email, and read and reply to threads.",
+    prompt,
+    tools: new AgentMailToolkit().getTools(),
+    stopWhen: stepCountIs(10),
+  });
+  return result.text;
+}
+```
+
+`openai.chat("gpt-4o")` and `stopWhen: stepCountIs(10)` are both load-bearing. See Not supported.
+
+## SDK
+
+Install: `npm install agentmail-toolkit ai@6 @ai-sdk/openai@3`
+
+- Build the toolkit: `new AgentMailToolkit()` reads `AGENTMAIL_API_KEY` from the environment.
+- Pass credentials another way: `new AgentMailToolkit(new AgentMailClient({ apiKey: "..." }))`.
+- Get every tool, keyed by tool name: `new AgentMailToolkit().getTools()`. The object goes straight into `tools:`.
+- Get a subset: `new AgentMailToolkit().getTools(["list_threads", "get_thread", "reply_to_message"])`.
+- The same `tools` object works in `streamText`.
+- Verify webhook deliveries with `svix` (`npm install svix`): `new Webhook(process.env.AGENTMAIL_WEBHOOK_SECRET).verify(rawBody, headers)` with headers `svix-id`, `svix-timestamp`, `svix-signature`.
+
+Core SDK and CLI installs: /integrations/sdks-and-cli
+
+## Facts
+
+- The toolkit builds its tools for AI SDK 6. Pin `ai@6` together with the matching provider major, `@ai-sdk/openai@3`.
+- The AI SDK's default stop condition is `stepCountIs(1)`. Without `stopWhen`, the run ends after the model's first tool call with empty `text`. Budget steps for the task's tool calls plus a final answer.
+- `openai.chat("gpt-4o")` routes through the Chat Completions API. The provider default `openai("gpt-4o")` routes through the Responses API, where the model fills every optional tool field with empty strings and empty arrays, values the listing tools reject.
+- A failed tool call does not end the run. The AI SDK records it as a `tool-error` part and feeds the error text back to the model, which can retry in its next step.
+- Creating an inbox with a taken username fails with a `403` naming up to 3 available variants in `suggestions`. Creating past the plan's inbox cap fails with `403` `limit_exceeded`, an error that names the cap and the upgrade that raises it.
+- Tools the page exercises: `create_inbox`, `send_message`, `list_threads`, `get_thread`, `reply_to_message`.
+- A reply-only agent needs `list_threads`, `get_thread`, and `reply_to_message`. A webhook route needs only `get_thread` and `reply_to_message`, because the `message.received` event already names the `inbox_id` and `thread_id` that changed.
+- Webhook deliveries are signed over the exact raw request body. Read it with `await request.text()` before parsing, verify with the subscription's signing secret stored as `AGENTMAIL_WEBHOOK_SECRET`, return `400` on failure and `200` otherwise.
+- Nothing carries over between runs. Each prompt must name the inbox to operate on.
+- Delivery takes about two seconds in each direction. An agent that reports an empty inbox most likely ran before the email arrived. Run it again.
+- A Vercel Marketplace install already carries AgentMail credentials in the project environment: /integrations/marketplaces.
+- A shell `export` covers only local runs. A deployed route needs `AGENTMAIL_API_KEY` in the project's environment settings.
+
+## Not supported
+
+- `ai@7` does not install next to the toolkit. npm refuses with a conflicting peer dependency error naming `ai@"^6.0.0-beta.150"`, the range the toolkit accepts.
+- The Responses API route via `openai("gpt-4o")` does not work with the listing tools. Each `list_threads` call fails as `Type validation failed`, then `HTTP 400`, and the agent gives up.
+- Unknown names in `getTools([...])` are silently dropped, leaving the agent with fewer tools than intended. Log `Object.keys(tools)` once to confirm the list.
+- A missing `AGENTMAIL_API_KEY` does not fail the run. The run finishes with every email tool call erroring and the agent reporting it could not do the work.
+
+## Errors
+
+| Error | Status | Cause | Fix |
+| --- | --- | --- | --- |
+| `AI_LoadAPIKeyError` | none, thrown | `OPENAI_API_KEY` unset. Fails before any email tool runs | Set `OPENAI_API_KEY` |
+| `Please provide 'apiKey' when initializing the client, or set the 'AGENTMAIL_API_KEY' environment variable` | none, per tool call | `AGENTMAIL_API_KEY` unset where the process runs | Set the variable in that environment. For a deployed route, the project's environment settings |
+| `Type validation failed`, then `HTTP 400` | 400 | Model called through the Responses API via `openai("gpt-4o")` | Use `openai.chat("gpt-4o")` |
+| Conflicting peer dependency naming `ai@"^6.0.0-beta.150"` | none, npm install | `ai@7` installed next to the toolkit | Install `ai@6` with `@ai-sdk/openai@3` |
+| `403` with `suggestions` on `create_inbox` | 403 | Requested inbox username taken | Fed back to the model as a `tool-error`, so the agent retries with an available name. Or leave the username out |
+| `limit_exceeded` | 403 | Inbox creation at the plan's cap | The error names the cap and the upgrade that raises it |
+| `invalid signature` from the webhook route | 400 | Signature did not verify over the raw body | Check `AGENTMAIL_WEBHOOK_SECRET` and verify the raw body before parsing |
+
+## Verify
+
+Save as `tools.ts` and run `npx tsx tools.ts`:
+
+```typescript
+import { AgentMailToolkit } from "agentmail-toolkit/ai-sdk";
+console.log(Object.keys(new AgentMailToolkit().getTools()));
+```
+
+Success prints the tool names, including `create_inbox`, `send_message`, `list_threads`, `get_thread`, and `reply_to_message`. This confirms the install, not the key. To confirm the key, run the send flow above and check that the email arrives.
+
+## Related
+
+- /advanced/webhooks - register the subscription the route needs and process deliveries exactly once
+- /advanced/safety - keep untrusted email content from steering the agent
+- /integrations/marketplaces - AgentMail credentials provisioned through the Vercel Marketplace
+- /integrations/mcp-and-skills - hosted MCP server alternative to the toolkit
+
+</Visibility>

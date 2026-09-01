@@ -1,0 +1,215 @@
+---
+title: MCP and Skills
+description: Connect any MCP client to AgentMail's hosted email tools, and install the AgentMail skill in your coding agent.
+---
+
+<Visibility for="humans">
+
+<Info>If you don't have an API key yet, follow the [Quickstart](/quickstart) first.</Info>
+
+## Configure the MCP server
+
+The hosted server is a Streamable HTTP endpoint at `https://mcp.agentmail.to/mcp`. It accepts two credentials:
+
+- **OAuth**: the client opens the AgentMail sign-in the first time it connects. Nothing to configure and no key to store.
+- **API key**: the client sends your key as an `x-api-key` header, or as `Authorization: Bearer am_...` if it only supports authorization headers.
+
+Most JSON-configured clients take an entry like one of these. Field names vary a little by client, and the platform pages above show real variants:
+
+<CodeGroup>
+
+```json OAuth
+{
+  "mcpServers": {
+    "agentmail": {
+      "url": "https://mcp.agentmail.to/mcp"
+    }
+  }
+}
+```
+
+```json API key
+{
+  "mcpServers": {
+    "agentmail": {
+      "url": "https://mcp.agentmail.to/mcp",
+      "headers": {
+        "x-api-key": "${env:AGENTMAIL_API_KEY}"
+      }
+    }
+  }
+}
+```
+
+```bash Claude Code
+claude mcp add --transport http agentmail https://mcp.agentmail.to/mcp
+```
+
+</CodeGroup>
+
+Clients with a connector UI, such as Claude Desktop, take `https://mcp.agentmail.to/mcp` as a custom connector instead. Keep the API key in a header or an `${env:...}` reference rather than in the server URL, where it would end up in logs.
+
+To test the connection, ask the client to list your AgentMail inboxes. A connected server returns the inbox list.
+
+<Accordion title="Troubleshooting">
+If the test fails, here are the usual causes:
+
+- **OAuth sign-in never finished.** The sign-in opens in the browser on first use. Finish it, and pick an organization if you belong to more than one.
+- **The API key is rejected.** The configured process needs the complete key, including its `am_` prefix.
+- **`404` on every call.** The server URL is incorrect (the endpoint is exactly `https://mcp.agentmail.to/mcp`).
+</Accordion>
+
+### MCP tool reference
+
+| Resource | MCP tools |
+| --- | --- |
+| Inboxes | `list_inboxes`, `get_inbox`, `create_inbox`, `update_inbox`, `delete_inbox` |
+| Threads | `list_threads`, `search_threads`, `get_thread`, `update_thread`, `delete_thread` |
+| Messages | `list_messages`, `search_messages`, `send_message`, `reply_to_message`, `forward_message`, `update_message` |
+| Drafts | `create_draft`, `list_drafts`, `get_draft`, `update_draft`, `send_draft`, `delete_draft` |
+| Attachments | `get_attachment` |
+| Agent sign-up | `agent_verify` |
+| Organizations | `list_organizations`, `select_organization` |
+
+A few behaviors to know before your agent relies on these tools:
+
+- `search_threads` and `search_messages` rank results by relevance and exclude spam and trash.
+- `update_thread` and `update_message` add and remove labels. System labels such as `sent` and `received` cannot be modified.
+- `send_draft` sends immediately, converting the draft to a sent message and deleting it. `delete_draft` on a scheduled draft cancels the scheduled send.
+- `get_attachment` returns the attachment's metadata and a download URL, plus extracted text for PDF and DOCX files.
+- `agent_verify` finishes agent self sign-up. When a plan-cap error asks for verification, the agent submits the 6-digit code emailed at sign-up to lift the unverified organization's limits.
+- `list_organizations` and `select_organization` apply to OAuth sessions. A user in several organizations uses them to pick which one every other tool acts on.
+
+For webhooks, domains, pods, and API keys, use the [CLI or an SDK](/integrations/sdks-and-cli).
+
+### Run a local MCP server
+
+The stdio bridge is for clients that launch a local process but cannot reach a remote server or send custom headers. Run it with `npx -y agentmail-mcp` (Node) or `uvx agentmail-mcp` (Python), with your API key in the bridge's process environment:
+
+```json
+{
+  "mcpServers": {
+    "agentmail": {
+      "command": "npx",
+      "args": ["-y", "agentmail-mcp"],
+      "env": {
+        "AGENTMAIL_API_KEY": "am_..."
+      }
+    }
+  }
+}
+```
+
+The bridge is a transport, not a second implementation. It discovers the tool catalog above from the hosted server and forwards every call there, so local and remote behave the same. To expose only some tools to the client, append `--tools` with a comma-separated list, for example `"args": ["-y", "agentmail-mcp", "--tools", "list_inboxes,get_thread"]`. The bridge then filters the catalog and rejects calls outside it.
+
+## Skills
+
+The AgentMail skill packages email workflows as instructions your coding agent discovers and follows. You may already have it:
+
+- The [OpenClaw plugin](/integrations/frameworks/openclaw) installs it along with an inbound email channel. That page covers the channel setup.
+- The plugin marketplace bundles it, so the [Codex](/integrations/frameworks/codex) and [Claude Cowork](/integrations/frameworks/claude-cowork) plugin installs come with the skill.
+
+On any other host that reads `SKILL.md` files, install it with skills.sh:
+
+```bash
+npx skills add agentmail-to/agentmail-skills
+```
+
+The installer lists the repository's skills and the agents it detects on your machine. Name both to skip the prompts. This form installs the core skill for Claude Code:
+
+```bash
+npx skills add agentmail-to/agentmail-skills --skill agentmail --agent claude-code
+```
+
+Set `AGENTMAIL_API_KEY` in that host's environment. The skill's workflows authenticate with it.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="SDKs and CLI" icon="code" href="/integrations/sdks-and-cli">
+    Typed TypeScript and Python calls, and terminal commands for everything beyond the MCP catalog.
+  </Card>
+  <Card title="Webhooks" icon="bolt" href="/advanced/webhooks">
+    Get called the moment new mail arrives instead of polling.
+  </Card>
+</CardGroup>
+
+</Visibility>
+
+<Visibility for="agents">
+
+# Connect an MCP client to AgentMail's hosted email tools
+
+AgentMail runs a hosted MCP server that gives any MCP-capable client tools over inboxes, threads, messages, drafts, and attachments, and ships a skill for hosts that read `SKILL.md` files. Use the server when an agent should operate email as tools rather than through code.
+
+## Do this
+
+Add the hosted server to the client's MCP configuration. Field names vary a little by client:
+
+```json
+{
+  "mcpServers": {
+    "agentmail": {
+      "url": "https://mcp.agentmail.to/mcp",
+      "headers": {
+        "x-api-key": "${env:AGENTMAIL_API_KEY}"
+      }
+    }
+  }
+}
+```
+
+Omit the `headers` block to use OAuth instead, in which case the client opens the AgentMail sign-in on first connect. In Claude Code, run `claude mcp add --transport http agentmail https://mcp.agentmail.to/mcp`. Then ask the client to list AgentMail inboxes. A connected server returns the inbox list.
+
+## Facts
+
+- The hosted server is a Streamable HTTP endpoint at exactly `https://mcp.agentmail.to/mcp`.
+- Accepted credentials: OAuth (browser sign-in on first use, nothing to configure, no key to store), or an API key sent as an `x-api-key` header, or as `Authorization: Bearer am_...` when the client only supports authorization headers.
+- API keys start with `am_` and must be configured complete, prefix included.
+- Keep the key in a header or an `${env:...}` reference, never in the server URL, where it would end up in logs.
+- Clients with a connector UI, such as Claude Desktop, take `https://mcp.agentmail.to/mcp` as a custom connector.
+- Inbox tools: `list_inboxes`, `get_inbox`, `create_inbox`, `update_inbox`, `delete_inbox`.
+- Thread tools: `list_threads`, `search_threads`, `get_thread`, `update_thread`, `delete_thread`.
+- Message tools: `list_messages`, `search_messages`, `send_message`, `reply_to_message`, `forward_message`, `update_message`.
+- Draft tools: `create_draft`, `list_drafts`, `get_draft`, `update_draft`, `send_draft`, `delete_draft`.
+- Attachment tool: `get_attachment`. Agent sign-up tool: `agent_verify`. Organization tools: `list_organizations`, `select_organization`.
+- `search_threads` and `search_messages` rank results by relevance and exclude spam and trash.
+- `update_thread` and `update_message` add and remove labels.
+- `send_draft` sends immediately, converting the draft to a sent message and deleting it. `delete_draft` on a scheduled draft cancels the scheduled send.
+- `get_attachment` returns the attachment's metadata and a download URL, plus extracted text for PDF and DOCX files.
+- `agent_verify` finishes agent self sign-up. When a plan-cap error asks for verification, submit the 6-digit code emailed at sign-up to lift the unverified organization's limits.
+- `list_organizations` and `select_organization` apply to OAuth sessions. A user in several organizations uses them to pick which one every other tool acts on.
+- Local stdio bridge, for clients that launch a local process but cannot reach a remote server or send custom headers: `npx -y agentmail-mcp` (Node) or `uvx agentmail-mcp` (Python), with `AGENTMAIL_API_KEY` in the bridge's process environment.
+- The bridge is a transport, not a second implementation. It discovers the tool catalog from the hosted server and forwards every call there, so local and remote behave the same.
+- To expose only some tools through the bridge, append `--tools` with a comma-separated list, for example `"args": ["-y", "agentmail-mcp", "--tools", "list_inboxes,get_thread"]`. The bridge then filters the catalog and rejects calls outside it.
+- Skill install on any host that reads `SKILL.md` files: `npx skills add agentmail-to/agentmail-skills`. The installer lists the repository's skills and the agents it detects, and naming both skips the prompts: `npx skills add agentmail-to/agentmail-skills --skill agentmail --agent claude-code` installs the core skill for Claude Code.
+- The skill's workflows authenticate with `AGENTMAIL_API_KEY` set in that host's environment.
+- The OpenClaw plugin installs the skill along with an inbound email channel. The Codex and Claude Cowork plugin installs bundle the skill through the plugin marketplace.
+
+## Not supported
+
+- No MCP tools exist for webhooks, domains, pods, or API keys. Use the CLI or an SDK for those.
+- System labels such as `sent` and `received` cannot be modified by `update_thread` or `update_message`.
+- The tool catalog has no sign-up tool. `agent_verify` only finishes a sign-up started elsewhere.
+- The stdio bridge adds no behavior of its own. Every call is forwarded to the hosted server.
+
+## Errors
+
+| Error | HTTP status | Cause | Fix |
+| --- | --- | --- | --- |
+| Not found | 404 | The server URL is incorrect. | The endpoint is exactly `https://mcp.agentmail.to/mcp`. |
+| Connection test fails with OAuth | - | The browser sign-in was not finished. | Finish the sign-in, and pick an organization if you belong to more than one. |
+| Connection test fails with an API key | - | The configured process holds an incomplete key. | Configure the complete key, including its `am_` prefix. |
+
+## Verify
+
+Ask the client to list your AgentMail inboxes. A connected server returns the inbox list.
+
+## Related
+
+- `/quickstart` - get an API key first.
+- `/integrations/sdks-and-cli` - typed SDK calls and CLI commands for everything beyond the MCP catalog, including webhooks, domains, pods, and API keys.
+- `/advanced/webhooks` - get called the moment new mail arrives instead of polling.
+- Platform setup pages with real config variants: `/integrations/frameworks/codex`, `/integrations/frameworks/claude-cowork`, `/integrations/frameworks/cursor`, `/integrations/frameworks/windsurf`, `/integrations/frameworks/openclaw`, `/integrations/frameworks/grokbot`, `/integrations/frameworks/hermes`, `/integrations/frameworks/replit`, `/integrations/frameworks/sim`.
+
+</Visibility>

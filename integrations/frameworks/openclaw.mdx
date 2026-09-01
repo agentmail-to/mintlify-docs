@@ -1,0 +1,326 @@
+---
+title: OpenClaw
+description: Install the official AgentMail plugin so your OpenClaw agent can send email from its own inbox and be reached at an allowlisted address.
+icon: "/images/logos/openclaw.svg"
+---
+
+<Visibility for="humans">
+
+
+<img src="/images/banners/integration-openclaw.svg" alt="" noZoom />
+OpenClaw is an open-source AI assistant that runs on your own hardware and talks to you over chat channels such as WhatsApp, Telegram, and Discord. AgentMail publishes an official plugin for it on ClawHub, the OpenClaw package registry. The plugin adds two surfaces: a CLI-backed skill your agent uses to create inboxes and send email, and an email channel so inbound mail can drive the agent directly.
+
+## 0. Get an API key
+
+Generate an API key from the [AgentMail Console](https://console.agentmail.to/dashboard/api-keys). If you are new to AgentMail, the [Quickstart](/quickstart) walks through keys and inboxes first.
+
+Put the key in the environment that runs the OpenClaw Gateway. For a managed Gateway, that is `~/.openclaw/.env`:
+
+```dotenv ~/.openclaw/.env
+AGENTMAIL_API_KEY=<API_KEY>
+# Optional. Enables signed webhook ingress for the email channel in step 3.
+AGENTMAIL_WEBHOOK_SECRET=<WEBHOOK_SECRET>
+```
+
+The plugin bundles the AgentMail CLI for macOS, Linux, and Windows, so this key is the only credential you manage. Check the [ClawHub listing](https://clawhub.ai/agentmail/plugins/agentmail) for the OpenClaw and Node.js versions the current plugin release supports.
+
+## 1. Install the plugin
+
+Install and enable the plugin from ClawHub, then restart the Gateway so it loads:
+
+```bash
+openclaw plugins install clawhub:@agentmail/agentmail
+openclaw plugins enable agentmail
+openclaw gateway restart
+```
+
+Keep the `clawhub:` prefix. It makes OpenClaw resolve the package on ClawHub instead of npm, git, or a local path.
+
+Confirm the Gateway loads the plugin:
+
+```bash
+openclaw plugins inspect agentmail --runtime
+```
+
+`inspect --runtime` loads the plugin and reports the surfaces it registered, including the `agentmail` command you will use in the next step.
+
+<Frame caption="A loaded plugin reports both surfaces: the email channel and the agentmail CLI command.">
+  <img src="/images/integrations/openclaw-inspect.png" alt="Output of openclaw plugins inspect agentmail --runtime showing status loaded" />
+</Frame>
+
+The bundled CLI takes its key from the plugin entry in `~/.openclaw/openclaw.json` and ignores keys inherited from the process that invokes it. Point the entry at the `AGENTMAIL_API_KEY` you set in the Gateway environment.
+
+```json5 ~/.openclaw/openclaw.json
+{
+  plugins: {
+    entries: {
+      agentmail: {
+        config: {
+          apiKey: { source: "env", provider: "default", id: "AGENTMAIL_API_KEY" },
+        },
+      },
+    },
+  },
+}
+```
+
+To point the CLI at a different API host, add `baseUrl` next to `apiKey`. The CLI appends the `/v0` version prefix itself, so pass the bare host, for example `"https://api.agentmail.to"`.
+
+<Accordion title="Troubleshooting">
+- **`openclaw agentmail` fails with `AgentMail CLI requires plugins.entries.agentmail.config.apiKey.`** The plugin entry above is missing. The bundled CLI takes its key only from that entry.
+- **Every call fails with a `404` on a doubled path.** The `baseUrl` ends in `/v0`. The CLI appends the version prefix itself, so pass the bare host.
+- **The channel works but the CLI-backed skill has no credential.** The `apiKey` is set only under `channels.agentmail`, which configures the channel alone. Set the plugin entry above as well so both surfaces work.
+</Accordion>
+
+## 2. Test sending emails
+
+The plugin registers a passthrough command for the bundled CLI. Keep the `--` separator: OpenClaw forwards everything after it to AgentMail.
+
+List your inboxes to find the address your agent will send from:
+
+```bash
+openclaw agentmail -- --format json inboxes list
+```
+
+```json Sample response
+{
+  "count": 1,
+  "inboxes": [
+    {
+      "organization_id": "1a2b3c4d-5e6f-4a1b-8c2d-3e4f5a6b7c8d",
+      "pod_id": "1a2b3c4d-5e6f-4a1b-8c2d-3e4f5a6b7c8d",
+      "inbox_id": "faircost773@agentmail.to",
+      "email": "faircost773@agentmail.to",
+      "display_name": "Support agent",
+      "updated_at": "2026-08-23T09:26:01.279Z",
+      "created_at": "2026-08-23T09:26:01.279Z"
+    }
+  ]
+}
+```
+
+If the list is empty, create an inbox. Pick a `--username` for the part before the `@`, or omit it and AgentMail generates one. Save the `inbox_id` from the response.
+
+```bash
+openclaw agentmail -- --format json inboxes create \
+  --username support-agent \
+  --display-name "Support agent"
+```
+
+Usernames are first come, first served.
+
+Now send a test email from your agent's inbox to an email account you already check. It should be there moments after the command returns:
+
+```bash
+openclaw agentmail -- --format json inboxes:messages send \
+  --inbox-id "<inbox_id>" \
+  --to "you@example.com" \
+  --subject "Hello from OpenClaw" \
+  --text "First email from my agent."
+```
+
+```json Sample response
+{
+  "message_id": "<010001a02e069a11-3c52b1de-91f7-4d02-b1cd-6a2e40c3f7aa-000000@email.amazonses.com>",
+  "thread_id": "7d54a1cf-20b8-4e19-9d63-52c40a8e2b91"
+}
+```
+
+The send returns the message's `message_id` and the `thread_id` of the conversation it starts. Your agent uses these to follow up in the same thread.
+
+<Frame caption="The passthrough command listing inboxes and sending the first email.">
+  <img src="/images/integrations/openclaw-passthrough.png" alt="Terminal session running openclaw agentmail passthrough commands to list inboxes and send an email" />
+</Frame>
+
+For credential safety, the passthrough rejects `--api-key`, `--base-url`, and `--environment` overrides, and it strips inherited proxy variables such as `HTTP_PROXY` and `HTTPS_PROXY`. If an argument's value is itself `--base-url` or `--environment`, or starts with `--base-url=` or `--environment=`, pass it in `--option=value` form, for example `--subject=--base-url`.
+
+You can also skip the commands and ask the agent directly, for example "send an email to you@example.com about tomorrow's meeting". The skill reads the bundled CLI's help at runtime. It covers inboxes, messages, threads, drafts, webhooks, domains, pods, and API keys, and new AgentMail resources work without a plugin update. The command runs on the OpenClaw host, so a sandboxed agent needs permission to execute it there.
+
+<Accordion title="Troubleshooting">
+- **`403` on the create.** The username is unavailable. The error lists up to three currently available variants of the name in `suggestions`, so your agent can pick one and retry.
+</Accordion>
+
+## 3. Turn email into an OpenClaw channel
+
+Sending is agent-initiated. In the other direction, an email to your agent's inbox drives an agent turn, the same way a WhatsApp or Discord message does, and the agent replies inside the same email thread.
+
+```mermaid
+flowchart LR
+    A[you@example.com] -- email --> B[Agent inbox]
+    B -- webhook or WebSocket --> C[OpenClaw Gateway]
+    C --> D[Agent turn]
+    D -- reply in the same thread --> A
+```
+
+Configure the channel under `channels.agentmail` in `~/.openclaw/openclaw.json`, then restart the Gateway:
+
+```json5 ~/.openclaw/openclaw.json
+{
+  channels: {
+    agentmail: {
+      apiKey: { source: "env", provider: "default", id: "AGENTMAIL_API_KEY" },
+      inboxId: "faircost773@agentmail.to", // the inbox from step 2
+      webhookSecret: { source: "env", provider: "default", id: "AGENTMAIL_WEBHOOK_SECRET" },
+      dmPolicy: "allowlist",
+      allowFrom: ["you@example.com"], // senders allowed to reach the agent
+      mediaMaxMb: 20, // attachment size cap in MB
+    },
+  },
+}
+```
+
+With `AGENTMAIL_WEBHOOK_SECRET` set, the channel receives Svix-signed webhooks. Without it, the channel falls back to WebSocket ingress. Mail reaches the agent either way, with no polling loop.
+
+To run several inboxes, configure each one under `channels.agentmail.accounts.<id>`.
+
+Keep the casing of `inboxId` stable across config changes. It identifies the channel's durable receive queue, and changing only the case can deliver already-handled messages one more time.
+
+## 4. Test receiving and replying
+
+From an address in `allowFrom`, send an email to your agent's inbox. Give it a subject and a question the agent can answer.
+
+The message drives an agent turn with no prompting on your side, and the reply arrives in the same email thread, from the agent's address.
+
+The channel is locked down by default:
+
+- `dmPolicy` defaults to `allowlist`. An empty `allowFrom` denies every sender, so an unconfigured channel accepts no one.
+- `dmPolicy: "open"` accepts mail from anyone and requires `allowFrom` to include `"*"`. Opening the channel is explicit.
+- The channel is reply-only, with `replyAll: false`. A channel turn answers the message that triggered it. New email to other recipients goes through the CLI-backed skill instead.
+- Every reply re-authorizes the `From` of the message that triggered it, so a forged `Reply-To` does not change where the reply goes.
+- Inbound mail is committed durably before it is acknowledged, so a Gateway restart mid-turn does not lose the message.
+
+<Accordion title="Troubleshooting">
+- **Nothing comes back.** Check that the sending address is in `allowFrom` and that you restarted the Gateway after the config change.
+</Accordion>
+
+## Use the skill without the plugin
+
+Use the plugin on OpenClaw. For hosts that discover `SKILL.md` instructions, such as Claude Code, Cursor, and Codex, install with:
+
+```bash
+npx skills add agentmail-to/agentmail-skills
+```
+
+The installer asks which host to target. On an OpenClaw host, verify with `openclaw skills list --eligible`: the list should include `agentmail`. For the full skill and MCP options, see [MCP and Skills](/integrations/mcp-and-skills).
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Agent safety" icon="shield" href="/advanced/safety">
+    The inbound-safety model behind the channel's allowlist and reply-only defaults.
+  </Card>
+  <Card title="MCP and Skills" icon="plug" href="/integrations/mcp-and-skills">
+    Connect AgentMail to Claude Code, Cursor, Codex, and other agent hosts.
+  </Card>
+</CardGroup>
+
+</Visibility>
+
+<Visibility for="agents">
+
+# Give an OpenClaw agent email with the AgentMail plugin
+
+The official AgentMail plugin on ClawHub adds two surfaces to OpenClaw: a CLI-backed skill the agent uses to create inboxes and send email, and an email channel that turns inbound mail into agent turns with replies in the same thread. Use it when an OpenClaw agent should send from its own address or be reachable at an allowlisted one.
+
+## Do this
+
+1. Generate an API key at `https://console.agentmail.to/dashboard/api-keys` and put it in the environment that runs the OpenClaw Gateway. For a managed Gateway that is `~/.openclaw/.env`:
+
+```dotenv
+AGENTMAIL_API_KEY=<API_KEY>
+# Optional. Enables signed webhook ingress for the email channel.
+AGENTMAIL_WEBHOOK_SECRET=<WEBHOOK_SECRET>
+```
+
+2. Install and enable the plugin, then restart the Gateway so it loads:
+
+```bash
+openclaw plugins install clawhub:@agentmail/agentmail
+openclaw plugins enable agentmail
+openclaw gateway restart
+```
+
+3. List inboxes with `openclaw agentmail -- --format json inboxes list`. If the list is empty, create one (omit `--username` to let AgentMail generate one) and save the `inbox_id` from the response:
+
+```bash
+openclaw agentmail -- --format json inboxes create \
+  --username support-agent \
+  --display-name "Support agent"
+```
+
+4. Send a test email from the agent's inbox:
+
+```bash
+openclaw agentmail -- --format json inboxes:messages send \
+  --inbox-id "<inbox_id>" \
+  --to "you@example.com" \
+  --subject "Hello from OpenClaw" \
+  --text "First email from my agent."
+```
+
+5. To let inbound email drive the agent, configure the channel under `channels.agentmail` in `~/.openclaw/openclaw.json`, then restart the Gateway:
+
+```json5
+{
+  channels: {
+    agentmail: {
+      apiKey: { source: "env", provider: "default", id: "AGENTMAIL_API_KEY" },
+      inboxId: "faircost773@agentmail.to",
+      webhookSecret: { source: "env", provider: "default", id: "AGENTMAIL_WEBHOOK_SECRET" },
+      dmPolicy: "allowlist",
+      allowFrom: ["you@example.com"],
+      mediaMaxMb: 20,
+    },
+  },
+}
+```
+
+6. From an address in `allowFrom`, email the agent's inbox. The message drives an agent turn with no prompting, and the reply arrives in the same email thread from the agent's address.
+
+## Facts
+
+- Install source: ClawHub, the OpenClaw package registry. Keep the `clawhub:` prefix in `openclaw plugins install clawhub:@agentmail/agentmail` so OpenClaw resolves the package on ClawHub instead of npm, git, or a local path.
+- The plugin bundles the AgentMail CLI for macOS, Linux, and Windows. The ClawHub listing at `https://clawhub.ai/agentmail/plugins/agentmail` states the supported OpenClaw and Node.js versions.
+- Both the email channel and the CLI-backed skill authenticate with `AGENTMAIL_API_KEY` from the Gateway environment. A different key or API base URL goes in `plugins.entries.agentmail.config` in `~/.openclaw/openclaw.json` (`apiKey` plus `baseUrl: "https://api.agentmail.to/v0"`).
+- Passthrough syntax: `openclaw agentmail -- <cli arguments>`. Everything after `--` is forwarded to the bundled AgentMail CLI, which runs on the OpenClaw host. A sandboxed agent needs permission to execute it there.
+- The skill reads the bundled CLI's help at runtime. It covers inboxes, messages, threads, drafts, webhooks, domains, pods, and API keys, and new AgentMail resources work without a plugin update.
+- A send returns `message_id` and `thread_id`. Use `thread_id` to follow up in the same thread.
+- Requesting a taken username returns `403` with up to 3 currently available variants of the name in `suggestions`.
+- With `AGENTMAIL_WEBHOOK_SECRET` set, the channel receives Svix-signed webhooks. Without it, the channel falls back to WebSocket ingress. Mail reaches the agent either way, with no polling loop.
+- `dmPolicy` defaults to `allowlist`. An empty `allowFrom` denies every sender. `dmPolicy: "open"` accepts mail from anyone and requires `allowFrom` to include `"*"`.
+- Every reply re-authorizes the `From` of the message that triggered it, so a forged `Reply-To` does not change where the reply goes.
+- Inbound mail is committed durably before it is acknowledged. A Gateway restart mid-turn does not lose the message.
+- Several inboxes: configure each one under `channels.agentmail.accounts.<id>`.
+- `mediaMaxMb` caps attachment size in MB.
+- Keep the casing of `inboxId` stable across config changes. It identifies the channel's durable receive queue, and changing only the case can deliver already-handled messages one more time.
+- On hosts that discover `SKILL.md` instructions (Claude Code, Cursor, Codex), install the standalone skill with `npx skills add agentmail-to/agentmail-skills` instead of the plugin. On an OpenClaw host, `openclaw skills list --eligible` should list `agentmail`.
+
+## Not supported
+
+- Passthrough arguments cannot override `--api-key`, `--base-url`, or `--environment`, and inherited proxy variables such as `HTTP_PROXY` and `HTTPS_PROXY` are stripped. An argument whose value must literally start with `--base-url` or `--environment` needs `--option=value` form, for example `--subject=--base-url-is-restricted`.
+- The CLI ignores API keys inherited from the process that invokes it. Only the Gateway environment or the plugin config supplies the key.
+- An `apiKey` set only under `channels.agentmail` configures the channel alone and leaves the CLI-backed skill without a credential.
+- The channel is reply-only, with `replyAll: false`. A channel turn answers the message that triggered it. New email to other recipients goes through the CLI-backed skill.
+
+## Errors
+
+| Error | Status | Cause | Fix |
+| --- | --- | --- | --- |
+| `resource_taken` | 403 | The requested inbox username belongs to another organization. | Retry with one of the up to 3 variants in `suggestions`. |
+| `already_exists` | 403 | An inbox with the requested username already exists in the organization. | Retry with a username from `suggestions`, or use the existing inbox. |
+
+## Verify
+
+```bash
+openclaw plugins inspect agentmail --runtime
+```
+
+This loads the plugin and reports the surfaces it registered, including the `agentmail` command. Then `openclaw agentmail -- --format json inboxes list` returning a `count` and an `inboxes` array confirms the credential works end to end.
+
+## Related
+
+- [Agent safety](/advanced/safety): the inbound-safety model behind the channel's allowlist and reply-only defaults.
+- [MCP and Skills](/integrations/mcp-and-skills): skill and MCP options for Claude Code, Cursor, Codex, and other agent hosts.
+- [Quickstart](/quickstart): keys and inboxes for readers new to AgentMail.
+
+</Visibility>

@@ -1,0 +1,464 @@
+---
+title: "Receive email"
+description: "List the messages an inbox received, read full bodies, download attachments, and choose what your agent sees."
+---
+
+<Visibility for="humans">
+
+
+<img src="/images/banners/core-receive.svg" alt="" noZoom />
+<Info>If you don't have an API key yet, follow the [Quickstart](/quickstart) first.</Info>
+
+## List all messages in an inbox
+
+You can start receiving emails right after you have created an inbox. Results include sent and received mail alike, newest first.
+
+Each entry is a summary: who sent it, who got it, the subject, its labels, and a `preview` of the body. That is usually enough for your agent to triage without fetching anything else. When your agent needs a whole conversation, fetch [threads](/core/conversations) instead of stitching messages together. One call returns the full exchange in order.
+
+`inbox_id` is the only required input. The optional parameters filter and page the results, full list below the code.
+
+<CodeGroup>
+
+```bash CLI
+agentmail inboxes:messages list \
+  --inbox-id "example@agentmail.to"
+```
+
+```bash API
+curl "https://api.agentmail.to/v0/inboxes/example@agentmail.to/messages" \
+  -H "Authorization: Bearer $AGENTMAIL_API_KEY"
+```
+
+```typescript TypeScript
+const messages = await client.inboxes.messages.list("example@agentmail.to");
+for (const message of messages.messages) {
+  console.log(message.messageId, message.from, message.subject);
+}
+```
+
+```python Python
+messages = client.inboxes.messages.list(inbox_id="example@agentmail.to")
+for message in messages.messages:
+    print(message.message_id, message.from_, message.subject)
+```
+
+</CodeGroup>
+
+| Param | Type | What it means |
+| --- | --- | --- |
+| `limit` | integer | Number of messages per page. |
+| `page_token` | string | Where to resume. Pass the `next_page_token` from the previous page. |
+| `labels` | string[] | Only messages that carry every label you list, for example `unread`. |
+| `before`, `after` | RFC 3339 timestamp | Bound the results by time, like `2026-08-24T00:00:00Z`. |
+| `ascending` | boolean | Oldest first instead of newest first. |
+| `from`, `to`, `subject` | string[] | Match against the sender, any recipient (`to`, `cc`, or `bcc`), or the subject. Repeatable, and every value must match. |
+| `include_spam`, `include_blocked`, `include_unauthenticated`, `include_trash` | boolean | Also return messages those labels normally hide. See [Choose which messages you list](#choose-which-messages-you-list). |
+
+The `from`, `to`, and `subject` filters match whole words and word prefixes, not fragments in the middle of a word: `subject=metrics` finds "Weekly metrics report", `subject=etrics` finds nothing.
+
+`count` is the number of messages in the current page. When more remain, the response includes a `next_page_token`. The `labels` on each entry tell you which direction the message went:
+
+- `received` arrived from outside
+- `sent` went out from this inbox
+
+```json Sample response
+{
+  "count": 1,
+  "messages": [
+    {
+      "inbox_id": "example@agentmail.to",
+      "thread_id": "7c00cf26-ab80-4e20-a8a6-0285223b385d",
+      "message_id": "<010001a034352488-0023daba-a7dd-4ce7-a8b8-b4eec4905809-000000@email.amazonses.com>",
+      "labels": ["received", "unread"],
+      "timestamp": "2026-08-24T14:38:13Z",
+      "from": "You <you@example.com>",
+      "to": ["example@agentmail.to"],
+      "subject": "Weekly metrics report",
+      "preview": "Hi, this week's numbers are attached. Let me know if anything looks off.",
+      "attachments": [
+        {
+          "attachment_id": "079de291-1800-4156-8f6a-3ee90fd701eb",
+          "filename": "weekly-metrics.csv",
+          "size": 38,
+          "content_type": "text/csv",
+          "content_disposition": "attachment"
+        }
+      ],
+      "size": 5103,
+      "created_at": "2026-08-24T14:38:14Z",
+      "updated_at": "2026-08-24T14:38:14Z"
+    }
+  ]
+}
+```
+
+You will use `message_id` for everything that follows on this page: reading the message in full, downloading its attachments, and replying. `attachments[].attachment_id` is the other half of the download call, and `thread_id` groups the message with the rest of its conversation.
+
+<Accordion title="Troubleshooting">
+When a listing fails or an email seems to be missing:
+
+- A `404` with "Inbox not found" means the inbox is not visible to your API key (usually, it is a typo in the `inbox_id`).
+- A `400 ValidationError` means a parameter is malformed, and its `errors` array names the field. The usual causes:
+  - `limit` above 100 on a request with a `labels`, `from`, `to`, or `subject` filter
+  - `before` or `after` that is not a full timestamp
+  - a `from`, `to`, or `subject` value made only of digits, which is read as a number. Include a non-digit character.
+- An email that arrived can still be hidden if it carries `spam`, `blocked`, `unauthenticated`, or `trash`. Pass the matching include flag to see it.
+- Delivery takes about two seconds. If a fresh email is not there, wait a moment and list again.
+- An inbox cannot mail its own address, so a test email sent from the inbox to itself does not arrive.
+</Accordion>
+
+## Read one message in full
+
+The `preview` is the first 200 characters of the plain-text body, with no formatting.
+
+To act on a message, get it by its `inbox_id` and `message_id`; the response is the full summary plus the complete body.
+
+<CodeGroup>
+
+```bash CLI
+agentmail inboxes:messages get \
+  --inbox-id "example@agentmail.to" \
+  --message-id "<message_id>"
+```
+
+```bash API
+curl "https://api.agentmail.to/v0/inboxes/example@agentmail.to/messages/<message_id>" \
+  -H "Authorization: Bearer $AGENTMAIL_API_KEY"
+```
+
+```typescript TypeScript
+const message = await client.inboxes.messages.get("example@agentmail.to", "<message_id>");
+console.log(message.extractedText ?? message.text ?? message.html);
+```
+
+```python Python
+message = client.inboxes.messages.get(
+    inbox_id="example@agentmail.to",
+    message_id="<message_id>",
+)
+print(message.extracted_text or message.text or message.html)
+```
+
+</CodeGroup>
+
+A `message_id` contains `<`, `>`, and `@`, so URL-encode it when you build the API path by hand. The CLI and SDKs encode it for you.
+
+The response carries the body in up to four fields:
+
+- `text` is the plain-text body as the sender's client produced it, quoted history from earlier messages included.
+- `html` is the rich version of the same content.
+- `extracted_text` and `extracted_html` hold only the new content, with the quoted history and signatures stripped out. Each describes one message; no field holds a quote-stripped rendition of a whole thread.
+
+For replies, read `extracted_text` first so your agent sees what the sender just wrote instead of the whole conversation replayed. Fall back to `text`, then `html`. Some clients, Gmail and Outlook forwards in particular, send HTML with no plain-text part, and then `text` and `preview` are absent. When the reply's markup, links, or formatting are the input to your workflow, prefer `extracted_html` first instead, with a fallback that matches how your application handles HTML.
+
+```json Sample response
+{
+  "inbox_id": "example@agentmail.to",
+  "thread_id": "7c00cf26-ab80-4e20-a8a6-0285223b385d",
+  "message_id": "<010001a0343cff6a-cb637a47-c313-4245-82ac-2638d40395dc-000000@email.amazonses.com>",
+  "labels": ["received", "unread"],
+  "timestamp": "2026-08-24T14:46:47Z",
+  "from": "You <you@example.com>",
+  "to": ["example@agentmail.to"],
+  "subject": "Re: Weekly metrics report",
+  "in_reply_to": "<010001a0343c5b99-1ea2468f-46cd-405b-b01f-a0a98b750af3-000000@email.amazonses.com>",
+  "text": "Yes, all five refunds for week 35 are confirmed final.\n\nOn Mon, Aug 24, 2026 at 2:46 PM UTC example@agentmail.to wrote:\n\n> Thanks. Is the week 35 refund count final?",
+  "extracted_text": "Yes, all five refunds for week 35 are confirmed final."
+}
+```
+
+To answer this message, pass its `message_id` to the [reply call](/core/send#reply-to-a-message), from the same `inbox_id` that received it. `in_reply_to` and `references` hold the ids of earlier messages in the chain, useful when you need to know which message this one answers.
+
+<Accordion title="Troubleshooting">
+- **An unencoded `message_id` in the API path fails with a `400`.** The id contains `<`, `>`, and `@`; URL-encode it when you build the path by hand.
+- **A `404` with "Message not found"** means the id does not match a message visible to your key (usually, the message lives in a different inbox than the one in the request, since a message is addressed by its `inbox_id` and `message_id` together).
+</Accordion>
+
+## Download an attachment from a message
+
+The message object carries only attachment metadata. To read a file, get the attachment by id: you need the `inbox_id`, the `message_id`, and the `attachment_id` from the message's `attachments` array.
+
+<CodeGroup>
+
+```bash CLI
+agentmail inboxes:messages get-attachment \
+  --inbox-id "example@agentmail.to" \
+  --message-id "<message_id>" \
+  --attachment-id "<attachment_id>"
+
+# then fetch the file
+curl -o weekly-metrics.csv "<download_url from the response>"
+```
+
+```bash API
+curl "https://api.agentmail.to/v0/inboxes/example@agentmail.to/messages/<message_id>/attachments/<attachment_id>" \
+  -H "Authorization: Bearer $AGENTMAIL_API_KEY"
+```
+
+```typescript TypeScript
+const attachment = await client.inboxes.messages.getAttachment(
+  "example@agentmail.to",
+  "<message_id>",
+  "<attachment_id>",
+);
+const file = await fetch(attachment.downloadUrl);
+```
+
+```python Python
+import httpx
+
+attachment = client.inboxes.messages.get_attachment(
+    inbox_id="example@agentmail.to",
+    message_id="<message_id>",
+    attachment_id="<attachment_id>",
+)
+file = httpx.get(attachment.download_url).content
+```
+
+</CodeGroup>
+
+The call returns links, not bytes:
+
+- `download_url` serves the original file. Fetch it with any HTTP client, no `Authorization` header needed.
+- When AgentMail can pull text out of the file (PDFs, Word documents, spreadsheets), `text_url` serves that text as a plain file, ready to hand to a model without any parsing on your side. The extraction runs on AgentExtract, the same AgentMail engine that produces a message's `extracted_text`.
+
+Both links stop working at `expires_at`, one hour after the call. The ids stay valid, so get the attachment again whenever you need fresh links.
+
+```json Sample response
+{
+  "attachment_id": "079de291-1800-4156-8f6a-3ee90fd701eb",
+  "filename": "weekly-metrics.csv",
+  "size": 38,
+  "content_type": "text/csv",
+  "content_disposition": "attachment",
+  "download_url": "https://cdn.agentmail.to/attachments/079de291-1800-4156-8f6a-3ee90fd701eb?Expires=1787586009&Key-Pair-Id=KEP2XXZ8TNG4T&Signature=<signature>",
+  "text_url": "https://cdn.agentmail.to/extracted/079de291-1800-4156-8f6a-3ee90fd701eb?Expires=1787586009&Key-Pair-Id=KEP2XXZ8TNG4T&Signature=<signature>",
+  "expires_at": "2026-08-24T15:40:09Z"
+}
+```
+
+<Accordion title="Troubleshooting">
+- **A `404` with "Attachment not found"** means the `attachment_id` does not belong to that message. Attachment ids are listed on the parent, so get the message and read its `attachments[].attachment_id`.
+</Accordion>
+
+## Choose which messages you list
+
+AgentMail labels every message when it arrives, and the listing uses those labels to keep your agent's view clean. Filter with `labels` to pick out the mail you care about. The usual pattern is polling for `unread`:
+
+<CodeGroup>
+
+```bash CLI
+agentmail inboxes:messages list \
+  --inbox-id "example@agentmail.to" \
+  --label unread
+```
+
+```bash API
+curl "https://api.agentmail.to/v0/inboxes/example@agentmail.to/messages?labels=unread" \
+  -H "Authorization: Bearer $AGENTMAIL_API_KEY"
+```
+
+```typescript TypeScript
+const unread = await client.inboxes.messages.list("example@agentmail.to", {
+  labels: ["unread"],
+});
+```
+
+```python Python
+unread = client.inboxes.messages.list(
+    inbox_id="example@agentmail.to",
+    labels=["unread"],
+)
+```
+
+</CodeGroup>
+
+Each system label tells you how a message arrived:
+
+| Label | Meaning for inbound mail | Listed by default |
+| --- | --- | --- |
+| `received` | Arrived from outside. Messages the inbox sent carry `sent` instead. | Yes |
+| `unread` | Not handled yet. Every received message starts with it. | Yes |
+| `spam` | Failed spam screening on arrival. | Only with `include_spam` |
+| `blocked` | The sender is barred by your [inbound rules](/core/inbound-control). | Only with `include_blocked` |
+| `unauthenticated` | Could not be verified as coming from its claimed sender (usually, the sender has no SPF, DKIM, or DMARC set up). | Only with `include_unauthenticated` |
+| `trash` | Moved to trash. You add this label yourself with the update call below. | Only with `include_trash` |
+
+What gets rejected before delivery, the ARC fallback that keeps forwarded Gmail and Outlook mail working, and the API-key permissions behind the include flags are all covered in [how inbound mail is classified](/core/inbound-control#understand-how-inbound-mail-is-classified).
+
+Once your agent has handled a message, mark it so the next `unread` poll skips it:
+
+<CodeGroup>
+
+```bash CLI
+agentmail inboxes:messages update \
+  --inbox-id "example@agentmail.to" \
+  --message-id "<message_id>" \
+  --remove-labels unread
+```
+
+```bash API
+curl -X PATCH "https://api.agentmail.to/v0/inboxes/example@agentmail.to/messages/<message_id>" \
+  -H "Authorization: Bearer $AGENTMAIL_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{ "remove_labels": ["unread"] }'
+```
+
+```typescript TypeScript
+await client.inboxes.messages.update("example@agentmail.to", "<message_id>", {
+  removeLabels: ["unread"],
+});
+```
+
+```python Python
+client.inboxes.messages.update(
+    inbox_id="example@agentmail.to",
+    message_id="<message_id>",
+    remove_labels=["unread"],
+)
+```
+
+</CodeGroup>
+
+The update returns the message's new label state:
+
+```json Sample response
+{
+  "message_id": "<010001a034352488-0023daba-a7dd-4ce7-a8b8-b4eec4905809-000000@email.amazonses.com>",
+  "labels": ["received"]
+}
+```
+
+Remove `unread` only after the work is done. If your agent crashes mid-task, the message stays in the next poll instead of getting lost.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Send and reply" icon="paper-plane" href="/core/send">
+    Answer the mail you receive.
+  </Card>
+  <Card title="Webhooks" icon="bell" href="/advanced/webhooks">
+    Get notified the moment mail arrives instead of polling.
+  </Card>
+</CardGroup>
+
+</Visibility>
+
+<Visibility for="agents">
+
+# Receive email in an inbox
+
+Listing an inbox returns message summaries for triage, getting a message by id returns the full body, and the attachment call returns download links. Use this to poll an inbox and act on incoming mail.
+
+## Do this
+
+1. List the messages that still need handling:
+
+```bash
+curl "https://api.agentmail.to/v0/inboxes/example@agentmail.to/messages?labels=unread" \
+  -H "Authorization: Bearer $AGENTMAIL_API_KEY"
+```
+
+2. Read one message in full. URL-encode the `message_id` from the listing:
+
+```bash
+curl "https://api.agentmail.to/v0/inboxes/example@agentmail.to/messages/<url_encoded_message_id>" \
+  -H "Authorization: Bearer $AGENTMAIL_API_KEY"
+```
+
+Read the body from `extracted_text` (new content only, quoted history stripped), then fall back to `text`, then `html`.
+
+3. Download an attachment listed in the message's `attachments` array:
+
+```bash
+curl "https://api.agentmail.to/v0/inboxes/example@agentmail.to/messages/<url_encoded_message_id>/attachments/<attachment_id>" \
+  -H "Authorization: Bearer $AGENTMAIL_API_KEY"
+# fetch the returned download_url with any HTTP client, no Authorization header needed
+```
+
+4. After the work is done, mark the message so the next `unread` poll skips it:
+
+```bash
+curl -X PATCH "https://api.agentmail.to/v0/inboxes/example@agentmail.to/messages/<url_encoded_message_id>" \
+  -H "Authorization: Bearer $AGENTMAIL_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{ "remove_labels": ["unread"] }'
+```
+
+## SDK
+
+```bash
+npm install agentmail        # TypeScript
+pip install agentmail        # Python
+npm install -g agentmail-cli # CLI
+```
+
+- List messages: TypeScript `client.inboxes.messages.list("example@agentmail.to", { labels: ["unread"] })`, Python `client.inboxes.messages.list(inbox_id="example@agentmail.to", labels=["unread"])`, CLI `agentmail inboxes:messages list --inbox-id "example@agentmail.to" --label unread`
+- Get one message: TypeScript `client.inboxes.messages.get(inboxId, messageId)`, Python `client.inboxes.messages.get(inbox_id=..., message_id=...)`, CLI `agentmail inboxes:messages get --inbox-id ... --message-id ...`
+- Get attachment links: TypeScript `client.inboxes.messages.getAttachment(inboxId, messageId, attachmentId)`, Python `client.inboxes.messages.get_attachment(inbox_id=..., message_id=..., attachment_id=...)`, CLI `agentmail inboxes:messages get-attachment`
+- Update labels: TypeScript `client.inboxes.messages.update(inboxId, messageId, { removeLabels: ["unread"] })`, Python `client.inboxes.messages.update(inbox_id=..., message_id=..., remove_labels=["unread"])`, CLI `agentmail inboxes:messages update --remove-labels unread`
+
+The SDKs and CLI URL-encode `message_id` automatically. Full reference: [/integrations/sdks-and-cli](/integrations/sdks-and-cli).
+
+## Facts
+
+- `GET https://api.agentmail.to/v0/inboxes/{inbox_id}/messages` lists sent and received messages alike, newest first. `ascending=true` returns oldest first.
+- List parameters: `limit`, `page_token`, `labels`, `before`, `after`, `from`, `to`, `subject`, `include_spam`, `include_blocked`, `include_unauthenticated`, `include_trash`.
+- A listed message must carry every label passed in `labels`. `before` and `after` take full RFC 3339 timestamps like `2026-08-24T00:00:00Z`.
+- The `from`, `to`, and `subject` filters are repeatable and every value must match. The `to` filter matches recipients in `to`, `cc`, or `bcc`.
+- `from`, `to`, and `subject` match whole words and word prefixes. `subject=metrics` finds "Weekly metrics report". `subject=etrics` finds nothing.
+- A list response carries `count` (messages in the current page) and, when more remain, `next_page_token`. Pass `next_page_token` as `page_token` to resume.
+- `limit` above 100 fails validation when the request also has a `labels`, `from`, `to`, or `subject` filter.
+- `preview` is the first 200 characters of the plain-text body, with no formatting.
+- `GET https://api.agentmail.to/v0/inboxes/{inbox_id}/messages/{message_id}` returns the full message. Body fields: `text` (as sent, quoted history included), `html`, `extracted_text` and `extracted_html` (new content only).
+- A `message_id` contains `<`, `>`, and `@`. URL-encode it in paths built by hand. An unencoded id fails with a `400`.
+- Direction labels: `received` arrived from outside, `sent` went out from the inbox. Every received message starts with `unread`.
+- Hidden labels and their include flags: `spam` (`include_spam`), `blocked` (`include_blocked`), `unauthenticated` (`include_unauthenticated`), `trash` (`include_trash`).
+- `spam` means the message failed spam screening on arrival. `blocked` means the sender is barred by inbound rules. `unauthenticated` means the sender could not be verified (usually no SPF, DKIM, or DMARC). `trash` is added by the update call.
+- Rejected before delivery and never stored: messages carrying a virus, and messages that fail DMARC while the sender's DMARC policy is `quarantine` or `reject`.
+- On an enforcing DMARC failure, an ARC chain sealed by google.com, microsoft.com, outlook.com, or icloud.com substitutes the original sender's authentication results, so mail auto-forwarded from Gmail or Outlook still passes.
+- Mail that fails authentication under a permissive policy, or arrives with no authentication, is delivered with the `unauthenticated` label.
+- An API key created without read access to the hidden labels does not see those messages even with the include flags set.
+- `GET https://api.agentmail.to/v0/inboxes/{inbox_id}/messages/{message_id}/attachments/{attachment_id}` returns `download_url` (the original file, no `Authorization` header needed) and, for files AgentMail can extract text from (PDFs, Word documents, spreadsheets), `text_url`.
+- Attachment links expire at `expires_at`, one hour after the call. The ids stay valid, so repeat the call for fresh links.
+- `PATCH https://api.agentmail.to/v0/inboxes/{inbox_id}/messages/{message_id}` takes `add_labels` and `remove_labels` and returns the message's new label state.
+- Delivery takes about two seconds. If a fresh email is missing, wait a moment and list again.
+- `thread_id` groups a message with its conversation. `in_reply_to` and `references` hold the ids of earlier messages in the chain.
+
+## Not supported
+
+- Listing does not return bodies. Only the 200-character `preview` is in a summary. Get the message by id for the body.
+- The attachment endpoint returns links, not file bytes. Fetch `download_url` separately.
+- `from`, `to`, and `subject` filters do not match fragments in the middle of a word.
+- A `from`, `to`, or `subject` value made only of digits is read as a number and fails validation. Include a non-digit character.
+- No include flag reveals virus mail or mail dropped for an enforcing DMARC failure. Those messages are never stored.
+- An inbox cannot mail its own address. A test email from the inbox to itself never arrives.
+- `text` and `preview` can be absent. Some clients, Gmail and Outlook forwards in particular, send HTML with no plain-text part. Read `html` in that case.
+- Do not store `download_url` or `text_url`. Both stop working one hour after the call that returned them.
+
+## Errors
+
+| Error | HTTP | Cause | Fix |
+| --- | --- | --- | --- |
+| `Inbox not found` | 404 | The inbox is not visible to the API key, usually a typo in `inbox_id`. | Check the `inbox_id`. |
+| `ValidationError` | 400 | A malformed parameter: `limit` above 100 with a `labels`, `from`, `to`, or `subject` filter, a partial `before` or `after` timestamp, or an all-digit `from`, `to`, or `subject` value. | Correct the field named in the `errors` array. |
+| `Message not found` | 404 | No message with that id is visible to the key, usually the message lives in a different inbox than the one in the request. | Use the `inbox_id` and `message_id` pair from the same listing. |
+| `Attachment not found` | 404 | The `attachment_id` does not belong to that message. | Get the message and read `attachments[].attachment_id`. |
+
+## Verify
+
+```bash
+curl -s "https://api.agentmail.to/v0/inboxes/example@agentmail.to/messages?limit=1" \
+  -H "Authorization: Bearer $AGENTMAIL_API_KEY"
+```
+
+Success is a `200` JSON body with `count` and a `messages` array. Each entry carries `message_id`, `thread_id`, `labels`, `from`, `to`, `subject`, and `preview`.
+
+## Related
+
+- [/core/send](/core/send) answers the mail received here, using the `message_id` from a listing.
+- [/advanced/webhooks](/advanced/webhooks) notifies the moment mail arrives instead of polling.
+- [/core/conversations](/core/conversations) fetches a whole conversation in one call.
+- [/core/inbound-control](/core/inbound-control) sets the rules behind the `blocked` label.
+
+</Visibility>

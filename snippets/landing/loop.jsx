@@ -77,13 +77,15 @@ export const LandingLoop = () => {
         .loop-wrap {
           container-type: inline-size;
           width: 100%;
+          overflow: clip;
         }
         .loop-stage {
           position: relative;
           width: 1100px;
           height: 430px;
           transform-origin: top left;
-          transform: scale(calc(100cqw / 1100));
+          /* tan(atan2()) divides two lengths into the plain number scale() needs */
+          transform: scale(tan(atan2(100cqw, 1100px)));
         }
         .loop-wrap { aspect-ratio: 1100 / 430; }
         .loop-glow {

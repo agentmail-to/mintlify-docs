@@ -1,0 +1,206 @@
+---
+title: Cursor
+description: Connect Cursor to AgentMail and give its agent an inbox it can send, receive, and reply from.
+icon: "/images/logos/cursor.svg"
+---
+
+<Visibility for="humans">
+
+
+<img src="/images/banners/integration-cursor.svg" alt="" noZoom />
+By the end of this page, the Cursor agent will list, create, and send from its own `@agentmail.to` inboxes, straight from chat.
+
+## 0. Before you start
+
+You need two things:
+
+- Cursor 2.5 or later, since that release added plugin support.
+- An AgentMail account. Create one at the [AgentMail Console](https://console.agentmail.to). The plugin authenticates with OAuth, so you only need an API key if you choose the API-key connection in step 1.
+
+## 1. Install the AgentMail plugin
+
+Type this in Cursor's chat input:
+
+```text
+/add-plugin agentmail
+```
+
+You can also open **Customize** in the sidebar and install AgentMail from there, at user or project scope, or start from the [Cursor Marketplace listing](https://cursor.com/marketplace/agentmail). All routes install the same plugin.
+
+The plugin adds the hosted AgentMail MCP server and skills that guide the agent through composing, sending, and triaging email, so one install covers both. Open a new chat after installing. The first time the agent uses an AgentMail tool, Cursor opens the AgentMail sign-in in your browser. Complete it and the connection authenticates with OAuth.
+
+### Or add the hosted server directly
+
+The server entry goes in `~/.cursor/mcp.json`, or in `.cursor/mcp.json` inside a project to scope it there:
+
+<CodeGroup>
+
+```json OAuth
+{
+  "mcpServers": {
+    "agentmail": {
+      "url": "https://mcp.agentmail.to/mcp"
+    }
+  }
+}
+```
+
+```json API key
+{
+  "mcpServers": {
+    "agentmail": {
+      "url": "https://mcp.agentmail.to/mcp",
+      "headers": {
+        "x-api-key": "${env:AGENTMAIL_API_KEY}"
+      }
+    }
+  }
+}
+```
+
+</CodeGroup>
+
+With OAuth, leave credentials out of the file. Cursor opens the browser sign-in the first time the server connects. With an API key, generate one in the [Console](https://console.agentmail.to/dashboard/api-keys) and export `AGENTMAIL_API_KEY` in the environment Cursor starts from. Cursor fills in `${env:...}` values from that environment and sends the key as a request header.
+
+Either way, the server appears under **Customize**, where you can check that it is enabled. The full tool catalog and the configuration for every other client are on [MCP and Skills](/integrations/mcp-and-skills).
+
+## 2. Test the tools respond
+
+Open a new chat in Agent mode and ask:
+
+```text
+List my AgentMail inboxes.
+```
+
+Allow the tool call if Cursor asks for approval. The agent calls `list_inboxes` on the hosted server, which confirms the connection end to end:
+
+```json Sample tool result
+{
+  "count": 1,
+  "limit": 10,
+  "inboxes": [
+    {
+      "inboxId": "faircost773@agentmail.to",
+      "email": "faircost773@agentmail.to",
+      "displayName": "Support agent",
+      "createdAt": "2026-08-23T09:26:01.279Z",
+      "updatedAt": "2026-08-23T09:26:01.279Z"
+    }
+  ]
+}
+```
+
+The inbox's address is in the `email` field, the sender you will name in step 3. An empty list also counts as a working connection, and step 3 covers creating your first inbox.
+
+<Accordion title="Troubleshooting">
+
+If the call fails instead, the status code tells you where to look:
+
+- **`401` with OAuth.** The sign-in is unfinished or the session expired. Let Cursor open the browser flow again and finish it.
+- **`401` with an API key.** No key reached the server (usually, `AGENTMAIL_API_KEY` is missing from the environment Cursor started from).
+- **`403` on every tool call.** The key is invalid (usually, a typo or a value that lost its `am_` prefix).
+- **`404`.** The server URL is incorrect (the endpoint is exactly `https://mcp.agentmail.to/mcp`).
+
+</Accordion>
+
+## 3. Test sending emails
+
+Sending needs an inbox to send from. If step 2 listed none, ask the agent to create one first. It can pick a username or leave it out and let AgentMail generate the address, which always works.
+
+Now send a real email. Put one of your inboxes in as the sender and your everyday address in place of `you@example.com`:
+
+```text
+Send an email from faircost773@agentmail.to to you@example.com with the subject
+"Hello from Cursor" and the body "First email from my Cursor agent."
+```
+
+The agent calls `send_message` and reports the new message's ID along with the ID of the thread it starts. Name that thread in a follow-up prompt, like asking the agent to check it for a reply, and it stays in the same conversation.
+
+Check your account and the email is there within a second or two, the agent's address in the From line.
+
+With the plugin installed, its skills separate composing from sending. Asking the agent to write or draft an email creates a draft rather than sending one, and the agent confirms any recipient, subject, or content it had to infer before it sends. Keep the prompt explicit, as above, and it sends in one pass.
+
+<Accordion title="Troubleshooting">
+
+- **`403` on create with a taken username.** The error's `suggestions` field holds up to three available variants, and since it arrives as a tool result, the agent can retry with one or ask you to choose.
+
+</Accordion>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="MCP and Skills" icon="plug" href="/integrations/mcp-and-skills">
+    The complete tool list behind the plugin, plus setups for other MCP clients.
+  </Card>
+  <Card title="Agent safety" icon="shield" href="/advanced/safety">
+    The rules behind the draft-first behavior: treat inbound mail as untrusted and confirm sends.
+  </Card>
+</CardGroup>
+
+</Visibility>
+
+<Visibility for="agents">
+
+# Connect Cursor to AgentMail
+
+The AgentMail plugin gives the Cursor agent the hosted email tools plus skills that guide composing, sending, and triaging, so it can list, create, and send from `@agentmail.to` inboxes straight from chat. Requires Cursor 2.5 or later, the release that added plugin support, and an AgentMail account from `https://console.agentmail.to`.
+
+## Do this
+
+1. Type `/add-plugin agentmail` in Cursor's chat input.
+2. Open a new chat in Agent mode.
+3. Prompt `List my AgentMail inboxes.` and allow the tool call if Cursor asks for approval.
+4. Complete the AgentMail sign-in that Cursor opens in the browser on the first tool use. The connection authenticates with OAuth.
+5. The agent calls `list_inboxes` and returns your inboxes. An empty list also counts as a working connection.
+
+## Facts
+
+- The same plugin installs from three routes: `/add-plugin agentmail` in chat, Customize in the sidebar (at user or project scope), or the marketplace listing at `https://cursor.com/marketplace/agentmail`.
+- One install adds both the hosted AgentMail MCP server and the skills.
+- Direct server connection without the plugin: add the hosted server to `~/.cursor/mcp.json`, or to `.cursor/mcp.json` inside a project to scope it there.
+
+```json
+{
+  "mcpServers": {
+    "agentmail": {
+      "url": "https://mcp.agentmail.to/mcp"
+    }
+  }
+}
+```
+
+- API key variant of the direct config: add a `headers` object containing `"x-api-key": "${env:AGENTMAIL_API_KEY}"` to the server entry. Cursor fills `${env:...}` values from the environment it starts from and sends the key as a request header. Generate the key at `https://console.agentmail.to/dashboard/api-keys` and export `AGENTMAIL_API_KEY` before starting Cursor.
+- The endpoint is exactly `https://mcp.agentmail.to/mcp`.
+- Either way, the server appears under Customize, which shows whether it is enabled.
+- `list_inboxes` returns `count`, `limit`, and an `inboxes` array whose items carry `inboxId`, `email`, `displayName`, `createdAt`, and `updatedAt`. The sendable address is the `email` field.
+- `send_message` reports the new message's ID and the ID of the thread it starts. Naming that thread in a follow-up prompt keeps the exchange in the same conversation.
+- Creating an inbox without a username always works because AgentMail generates the address.
+- Plugin skills separate composing from sending. A write or draft request creates a draft, and the agent confirms any recipient, subject, or content it had to infer before it sends. An explicit prompt sends in one pass.
+- Delivery takes a second or two, with the agent's address in the From line.
+
+## Not supported
+
+- With OAuth, credentials do not go in the config file. Leave them out and let Cursor open the browser sign-in on first connect.
+- An API key is not needed for the plugin or OAuth routes, only for the API-key connection.
+- Asking the agent to write or draft an email does not send it. That creates a draft.
+
+## Errors
+
+| Error | HTTP status | Cause | Fix |
+| --- | --- | --- | --- |
+| `401` with OAuth | 401 | Sign-in unfinished or session expired | Let Cursor open the browser flow again and finish it |
+| `401` with an API key | 401 | No key reached the server (usually `AGENTMAIL_API_KEY` missing from the environment Cursor started from) | Export the key, then restart Cursor from that environment |
+| `403` on every tool call | 403 | Invalid key (usually a typo or a value that lost its `am_` prefix) | Fix the key value |
+| `404` | 404 | Incorrect server URL | Set the URL to exactly `https://mcp.agentmail.to/mcp` |
+| `403` on inbox create | 403 | Requested username is taken | The `suggestions` field holds up to three available variants. The error arrives as a tool result, so the agent can retry with one or ask the user to choose |
+
+## Verify
+
+In a new chat in Agent mode, prompt `List my AgentMail inboxes.` Success is a `list_inboxes` tool result shaped like `{"count": 1, "limit": 10, "inboxes": [...]}`. An empty list still proves the connection works end to end.
+
+## Related
+
+- `/integrations/mcp-and-skills` - the complete tool list behind the plugin, plus setups for other MCP clients
+- `/advanced/safety` - the rules behind the draft-first behavior, treating inbound mail as untrusted and confirming sends
+
+</Visibility>

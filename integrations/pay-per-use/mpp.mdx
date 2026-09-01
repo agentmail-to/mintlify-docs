@@ -1,0 +1,257 @@
+---
+title: MPP
+description: Pay for AgentMail per request from your agent's wallet, with no API key.
+icon: "/images/logos/mpp.svg"
+---
+
+<Visibility for="humans">
+
+
+<img src="/images/banners/integration-mpp.svg" alt="" noZoom />
+[MPP](https://mpp.dev) (Machine Payments Protocol) is an open standard from Stripe and Tempo that lets machines pay for HTTP requests. Over MPP, your agent buys each AgentMail call with a signed payment from its own wallet, so it needs no API key and no plan. If you have an API key, follow the [Quickstart](/quickstart) instead. If your agent's wallet is on a chain like Base or Solana, use [x402](/integrations/pay-per-use/x402).
+
+On this page, your agent buys its own `@agentmail.to` inbox with its wallet and starts watching it for new email.
+
+## 0. Fund a Tempo account
+
+AgentMail charges MPP requests in USDC.e, a bridged form of USDC, on the Tempo blockchain. You need:
+
+- Node.js
+- An EVM private key you control
+- A USDC.e balance on Tempo, held by that key's address
+
+Tempo's [funding guide](https://docs.tempo.xyz/guide/getting-funds) shows how: onramp with fiat through Tempo Wallet, or bridge from another chain. USDC bridged over Stargate appears on Tempo as USDC.e.
+
+A few dollars covers this walkthrough. The inbox you create in step 2 costs $2.00, and every other request on this page is free.
+
+## 1. Create a paying client
+
+Install the AgentMail SDK, the MPP client, and viem:
+
+```bash
+npm install agentmail mppx viem
+```
+
+Put your private key in an environment variable, wrap it in an MPP client, and hand that client to the SDK. Then make a free call to check that the payment loop works end to end.
+
+```typescript
+import { privateKeyToAccount } from "viem/accounts";
+import { Mppx, tempo } from "mppx/client";
+import { AgentMailClient } from "agentmail";
+
+const account = privateKeyToAccount(process.env.TEMPO_PRIVATE_KEY as `0x${string}`);
+const mppx = Mppx.create({ methods: [tempo({ account })] });
+
+const client = new AgentMailClient({ mppx });
+
+const inboxes = await client.inboxes.list();
+console.log(inboxes.count);
+```
+
+When you pass `mppx`, the SDK sends API requests to `https://mpp.api.agentmail.to` and WebSocket connections to `wss://mpp.ws.agentmail.to`. The paths, methods, and responses are the same as the regular API. Only the host and the authentication change.
+
+A count in the output (`0` on a fresh wallet) means the client completed a full challenge and credential exchange with AgentMail.
+
+<Accordion title="Troubleshooting">
+- **`402` even on this free call.** Your payment credential failed verification on the Tempo chain (usually, the detail reads `Proof signature does not match source` because the key has not yet held funds on Tempo). Finish step 0 with the same key you put in `TEMPO_PRIVATE_KEY`, then run it again.
+</Accordion>
+
+## 2. Test creating an inbox with a paid request
+
+The create is the one paid call in this walkthrough, and it costs $2.00 from your wallet.
+
+```typescript
+const inbox = await client.inboxes.create({ displayName: "Support agent" });
+console.log(inbox.inboxId);
+```
+
+A returned `inboxId` means the payment settled and the inbox exists:
+
+```json Sample response
+{
+  "organization_id": "1a2b3c4d-5e6f-4a1b-8c2d-3e4f5a6b7c8d",
+  "pod_id": "1a2b3c4d-5e6f-4a1b-8c2d-3e4f5a6b7c8d",
+  "inbox_id": "faircost773@agentmail.to",
+  "email": "faircost773@agentmail.to",
+  "display_name": "Support agent",
+  "created_at": "2026-08-25T11:00:52Z",
+  "updated_at": "2026-08-25T11:00:52Z"
+}
+```
+
+That call ran MPP's challenge and credential loop. AgentMail answered the first attempt with a `402` carrying a `WWW-Authenticate: Payment` header, whose base64 `request` parameter decodes to the payment terms:
+
+```json Decoded challenge
+{
+  "amount": "2000000",
+  "currency": "0x20C000000000000000000000b9537d11c60E8b50",
+  "methodDetails": { "chainId": 4217 },
+  "recipient": "0x6e3184C204e596dED89E8A5693B602097F4Ab687"
+}
+```
+
+`amount` is the price in the currency's 6-decimal units, so `2000000` is $2.00. `currency` is the USDC.e token address on Tempo (chain id 4217), and `recipient` is AgentMail's wallet. The `mppx` client signed a payment matching these terms and retried the request with the credential attached. Each request gets its own challenge, which expires five minutes after it is issued. You only handle a challenge yourself if you call the API without the SDK.
+
+The inbox belongs to the wallet that paid for it, so run your agent with the same key everywhere and it sees the same inboxes.
+
+To pick the address yourself, pass a `username` (the part before `@agentmail.to`). Omit `username` and AgentMail generates one.
+
+<Accordion title="Troubleshooting">
+- **`403` with `Ownership required`.** The request touches an inbox owned by a different wallet. Sign with the key that paid for the inbox.
+- **`403` with `suggestions` on the create.** The `username` you picked is taken, whether by another wallet or already by yours. The error lists up to three available alternatives in `suggestions`.
+</Accordion>
+
+## 3. Test receiving events over the WebSocket
+
+Subscribe to your new inbox, then send it an email from whatever mailbox you already use.
+
+You should see a `Subscribed to` line as soon as the socket is ready, and a `New email from` line moments after your email arrives.
+
+```typescript
+const socket = await client.websockets.connect();
+
+socket.on("message", (event) => {
+  if (event.type === "subscribed") {
+    console.log("Subscribed to", event.inboxIds);
+  } else if (event.type === "event" && event.eventType === "message.received") {
+    console.log("New email from", event.message.from);
+  }
+});
+
+socket.sendSubscribe({ type: "subscribe", inboxIds: [inbox.inboxId] });
+```
+
+Connecting is free. The SDK completes the same challenge and credential exchange before the socket opens, so the connection is tied to your wallet like every other request.
+
+## 4. Know what each request costs
+
+The price of a request is the `amount` in its challenge. Your client reads it before it pays, and it pays exactly what the challenge asks.
+
+| Request | Price |
+| --- | --- |
+| Create an inbox | $2.00 |
+| Send an email (send, reply, forward, or send a draft) | $0.01 |
+| Create a draft, webhook, pod, or inbound-control entry | $0.01 |
+| Add a custom domain | $10.00 |
+| Everything else, including reads and WebSocket connections | Free |
+
+Free requests run the same challenge and credential loop with an `amount` of `0`. That zero-amount credential is still signed by your wallet, and the signature is how AgentMail knows which wallet is calling.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Send email" icon="paper-plane" href="/core/send">
+    Everything your agent can do when sending from the inbox it just bought.
+  </Card>
+  <Card title="WebSockets" icon="bolt" href="/advanced/websockets">
+    All the events your agent can receive over the connection from step 3.
+  </Card>
+</CardGroup>
+
+</Visibility>
+
+<Visibility for="agents">
+
+# Pay for AgentMail per request over MPP
+
+MPP (Machine Payments Protocol) is an open standard from Stripe and Tempo that lets machines pay for HTTP requests. An agent whose wallet holds USDC.e on the Tempo blockchain buys each AgentMail call with a signed payment, so it needs no API key and no plan.
+
+## Do this
+
+Fund first: the agent needs Node.js, an EVM private key it controls, and a USDC.e balance on Tempo held by that key's address. Onramp with fiat through Tempo Wallet or bridge from another chain, per https://docs.tempo.xyz/guide/getting-funds. USDC bridged over Stargate appears on Tempo as USDC.e. A few dollars covers this path, the inbox create costs $2.00 and every other call here is free.
+
+```bash
+npm install agentmail mppx viem
+export TEMPO_PRIVATE_KEY="0x..."
+```
+
+```typescript
+import { privateKeyToAccount } from "viem/accounts";
+import { Mppx, tempo } from "mppx/client";
+import { AgentMailClient } from "agentmail";
+
+const account = privateKeyToAccount(process.env.TEMPO_PRIVATE_KEY as `0x${string}`);
+const mppx = Mppx.create({ methods: [tempo({ account })] });
+
+const client = new AgentMailClient({ mppx });
+
+// Free call. Proves the challenge and credential loop end to end.
+const inboxes = await client.inboxes.list();
+console.log(inboxes.count); // 0 on a fresh wallet
+
+// Paid call, $2.00 in USDC.e from the wallet.
+const inbox = await client.inboxes.create({ displayName: "Support agent" });
+console.log(inbox.inboxId);
+
+// Free connection, tied to the same wallet.
+const socket = await client.websockets.connect();
+socket.on("message", (event) => {
+  if (event.type === "subscribed") {
+    console.log("Subscribed to", event.inboxIds);
+  } else if (event.type === "event" && event.eventType === "message.received") {
+    console.log("New email from", event.message.from);
+  }
+});
+socket.sendSubscribe({ type: "subscribe", inboxIds: [inbox.inboxId] });
+```
+
+## SDK
+
+```bash
+npm install agentmail mppx viem
+```
+
+- Create the payer: `Mppx.create({ methods: [tempo({ account })] })` with an account from `privateKeyToAccount` in `viem/accounts`.
+- Route every request through it: `new AgentMailClient({ mppx })`.
+- List inboxes, free: `client.inboxes.list()`.
+- Create an inbox, $2.00: `client.inboxes.create({ displayName: "Support agent" })`. Pass `username` to pick the part before `@agentmail.to`.
+- Receive events, free: `client.websockets.connect()`, then `socket.sendSubscribe({ type: "subscribe", inboxIds: [...] })`.
+
+More SDK surface: `/integrations/sdks-and-cli`.
+
+## Facts
+
+- With `mppx` set, API requests go to `https://mpp.api.agentmail.to` and WebSocket connections to `wss://mpp.ws.agentmail.to`. Paths, methods, and responses match the regular API. Only the host and the authentication change.
+- AgentMail charges MPP requests in USDC.e, a bridged form of USDC, on the Tempo blockchain, chain id `4217`.
+- Prices: create an inbox $2.00. Send an email (send, reply, forward, or send a draft) $0.01. Create a draft, webhook, pod, or inbound-control entry $0.01. Add a custom domain $10.00. Everything else, including reads and WebSocket connections, is free.
+- The price of a request is the `amount` in its challenge, in the currency's 6-decimal units, so `2000000` is $2.00. The client reads it before it pays and pays exactly what the challenge asks.
+- The challenge arrives on the first `402` response in a `WWW-Authenticate: Payment` header. Its base64 `request` parameter decodes to `amount`, `currency` (`0x20C000000000000000000000b9537d11c60E8b50`, the USDC.e token address on Tempo), `methodDetails.chainId` `4217`, and `recipient` (`0x6e3184C204e596dED89E8A5693B602097F4Ab687`, AgentMail's wallet).
+- Each request gets its own challenge. A challenge expires five minutes after it is issued.
+- Free requests run the same challenge and credential loop with an `amount` of `0`. The zero-amount credential is still signed by the wallet, and the signature is how AgentMail knows which wallet is calling.
+- The inbox belongs to the wallet that paid for it. An agent run with the same key everywhere sees the same inboxes.
+- The SDK completes the challenge and credential exchange itself, for free requests and WebSocket connects too. Manual challenge handling is only needed when calling the API without the SDK.
+- `username` on create is optional. Omit `username` and AgentMail generates one.
+
+## Not supported
+
+- Wallets on chains like Base or Solana cannot pay over MPP. Use x402 instead: `/integrations/pay-per-use/x402`.
+- No API keys and no plans on the MPP hosts. An application that holds an AgentMail API key should follow `/quickstart` on the regular API instead.
+- The direction is agent pays AgentMail. This page defines no flow where AgentMail pays the agent's wallet.
+- The paying client is TypeScript on Node.js. The page shows no client in any other language.
+
+## Errors
+
+| Error | Status | Cause | Fix |
+| --- | --- | --- | --- |
+| `Proof signature does not match source` | 402 | The payment credential failed verification on the Tempo chain, usually because the key has not yet held funds on Tempo. | Fund the key's address with USDC.e on Tempo, then rerun with the same key in `TEMPO_PRIVATE_KEY`. |
+| `Ownership required` | 403 | The request touches an inbox owned by a different wallet. | Sign with the key that paid for the inbox. |
+| `already_exists` or `resource_taken` | 403 | The requested `username` is taken, by the calling wallet or by another. | Pick one of the up to three available alternatives in `suggestions`, or omit `username`. |
+
+## Verify
+
+Run the free list call with the paying client:
+
+```typescript
+console.log((await client.inboxes.list()).count);
+```
+
+A printed count, `0` on a fresh wallet, means the client completed a full challenge and credential exchange with AgentMail. A `402` even on this free call means the payment credential failed verification on the Tempo chain.
+
+## Related
+
+- `/integrations/pay-per-use/x402` - pay per request from a Base, Polygon, Avalanche C-Chain, X Layer, or Solana wallet instead.
+- `/core/send` - everything the agent can do when sending from the inbox it bought.
+- `/advanced/websockets` - all the events the agent can receive over the connection.
+- `/quickstart` - authenticate with an API key and pay through a plan instead.
+
+</Visibility>

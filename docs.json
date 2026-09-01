@@ -1,16 +1,44 @@
 {
   "$schema": "https://mintlify.com/docs.json",
-  "theme": "mint",
+  "theme": "sequoia",
   "name": "AgentMail",
   "colors": {
-    "primary": "#18181b",
-    "light": "#fafafa",
-    "dark": "#09090b"
+    "primary": "#16A34A",
+    "light": "#4ADE80",
+    "dark": "#15803D"
   },
   "appearance": {
     "default": "dark"
   },
   "favicon": "/favicon.svg",
+  "logo": {
+    "light": "/logo/light.svg",
+    "dark": "/logo/dark.svg"
+  },
+  "fonts": {
+    "family": "Inter"
+  },
+  "navbar": {
+    "links": [
+      {
+        "label": "Discord",
+        "icon": "discord",
+        "href": "https://discord.gg/hTYatWYWBc"
+      }
+    ],
+    "primary": {
+      "type": "button",
+      "label": "Get API Key",
+      "href": "https://console.agentmail.to"
+    }
+  },
+  "footer": {
+    "socials": {
+      "x": "https://x.com/agentmail_to",
+      "github": "https://github.com/agentmail-to",
+      "discord": "https://discord.gg/hTYatWYWBc"
+    }
+  },
   "navigation": {
     "tabs": [
       {
@@ -26,65 +54,543 @@
             "group": "Start here",
             "pages": [
               "introduction",
-              "quickstart"
+              "quickstart",
+              "architecture"
             ]
           },
           {
             "group": "Core tasks",
             "pages": [
-              "tasks/receive",
-              "tasks/send",
-              "tasks/conversations",
-              "tasks/inbound-control"
+              "core/receive",
+              "core/send",
+              "core/conversations",
+              "core/inbound-control",
+              "core/imap-smtp"
             ]
           },
           {
-            "group": "Concepts",
+            "group": "Advanced",
             "pages": [
-              "architecture"
+              "advanced/webhooks",
+              "advanced/websockets",
+              "advanced/safety",
+              "advanced/custom-domains",
+              "advanced/deliverability",
+              "advanced/multi-tenant",
+              "advanced/agentid",
+              "advanced/errors",
+              "advanced/plans-and-usage",
+              "advanced/eu-region"
+            ]
+          },
+          {
+            "group": "Examples",
+            "pages": [
+              "examples/outbound-gtm-sdr-agent",
+              "examples/customer-support-agent",
+              "examples/ai-employee-with-its-own-inbox"
+            ]
+          },
+          {
+            "group": "Extras",
+            "pages": [
+              "extras/labels-and-system-labels",
+              "extras/deliverability-fundamentals",
+              "extras/security-compliance",
+              "extras/account-lifecycle"
             ]
           }
+        ]
+      },
+      {
+        "tab": "Integrations and SDKs",
+        "groups": [
+          {
+            "group": "Integrations and SDKs",
+            "pages": [
+              "integrations/sdks-and-cli",
+              "integrations/mcp-and-skills",
+              {
+                "group": "Agent frameworks",
+                "pages": [
+                  "integrations/frameworks/langchain",
+                  "integrations/frameworks/openai-agents-sdk",
+                  "integrations/frameworks/ai-sdk",
+                  "integrations/frameworks/google-adk",
+                  "integrations/frameworks/mastra",
+                  "integrations/frameworks/eve",
+                  "integrations/frameworks/livekit"
+                ],
+                "expanded": true
+              },
+              {
+                "group": "Agent platforms",
+                "pages": [
+                  "integrations/frameworks/sim",
+                  "integrations/frameworks/replit",
+                  "integrations/frameworks/openclaw",
+                  "integrations/frameworks/grokbot",
+                  "integrations/frameworks/claude-cowork",
+                  "integrations/frameworks/codex",
+                  "integrations/frameworks/hermes",
+                  "integrations/frameworks/cursor",
+                  "integrations/frameworks/windsurf"
+                ],
+                "expanded": true
+              },
+              "integrations/marketplaces",
+              {
+                "group": "Pay per use",
+                "pages": [
+                  "integrations/pay-per-use/x402",
+                  "integrations/pay-per-use/mpp"
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "openapi": "api-reference/openapi.json"
+      },
+      {
+        "tab": "Changelog",
+        "pages": [
+          "resources/changelog"
         ]
       }
     ]
   },
-  "logo": {
-    "light": "/logo/light.svg",
-    "dark": "/logo/dark.svg"
-  },
-  "navbar": {
-    "links": [
-      {
-        "label": "Support",
-        "href": "mailto:support@agentmail.cc"
-      }
-    ],
-    "primary": {
-      "type": "button",
-      "label": "Get API Key",
-      "href": "https://console.agentmail.to"
+  "redirects": [
+    {
+      "source": "/errors",
+      "destination": "/advanced/errors"
+    },
+    {
+      "source": "/welcome",
+      "destination": "/introduction",
+      "permanent": true
+    },
+    {
+      "source": "/inboxes",
+      "destination": "/core/receive",
+      "permanent": true
+    },
+    {
+      "source": "/messages",
+      "destination": "/core/receive",
+      "permanent": true
+    },
+    {
+      "source": "/attachments",
+      "destination": "/core/receive",
+      "permanent": true
+    },
+    {
+      "source": "/threads",
+      "destination": "/core/conversations",
+      "permanent": true
+    },
+    {
+      "source": "/drafts",
+      "destination": "/core/send",
+      "permanent": true
+    },
+    {
+      "source": "/labels",
+      "destination": "/extras/labels-and-system-labels",
+      "permanent": true
+    },
+    {
+      "source": "/lists",
+      "destination": "/core/inbound-control",
+      "permanent": true
+    },
+    {
+      "source": "/permissions",
+      "destination": "/architecture",
+      "permanent": true
+    },
+    {
+      "source": "/agentid-public-key-authentication",
+      "destination": "/advanced/agentid",
+      "permanent": true
+    },
+    {
+      "source": "/agent-onboarding",
+      "destination": "/integrations/mcp-and-skills",
+      "permanent": true
+    },
+    {
+      "source": "/sending-receiving-email",
+      "destination": "/quickstart",
+      "permanent": true
+    },
+    {
+      "source": "/custom-domains",
+      "destination": "/advanced/custom-domains",
+      "permanent": true
+    },
+    {
+      "source": "/managing-domains",
+      "destination": "/advanced/custom-domains",
+      "permanent": true
+    },
+    {
+      "source": "/webhooks-overview",
+      "destination": "/advanced/webhooks",
+      "permanent": true
+    },
+    {
+      "source": "/events",
+      "destination": "/advanced/webhooks#events-reference",
+      "permanent": true
+    },
+    {
+      "source": "/webhook-setup",
+      "destination": "/advanced/webhooks",
+      "permanent": true
+    },
+    {
+      "source": "/webhook-verification",
+      "destination": "/advanced/webhooks#verify-the-signature-on-every-delivery",
+      "permanent": true
+    },
+    {
+      "source": "/webhook-agent",
+      "destination": "/advanced/webhooks",
+      "permanent": true
+    },
+    {
+      "source": "/websockets",
+      "destination": "/advanced/websockets",
+      "permanent": true
+    },
+    {
+      "source": "/websockets/quickstart",
+      "destination": "/advanced/websockets",
+      "permanent": true
+    },
+    {
+      "source": "/examples",
+      "destination": "/examples/outbound-gtm-sdr-agent",
+      "permanent": true
+    },
+    {
+      "source": "/sales-agent-websocket",
+      "destination": "/examples/outbound-gtm-sdr-agent",
+      "permanent": true
+    },
+    {
+      "source": "/email-deliverability",
+      "destination": "/advanced/deliverability",
+      "permanent": true
+    },
+    {
+      "source": "/email-protocols",
+      "destination": "/extras/deliverability-fundamentals",
+      "permanent": true
+    },
+    {
+      "source": "/idempotency",
+      "destination": "/advanced/errors",
+      "permanent": true
+    },
+    {
+      "source": "/talon-reply-extraction",
+      "destination": "/core/receive#read-one-message-in-full",
+      "permanent": true
+    },
+    {
+      "source": "/extras/threads-and-quoted-history",
+      "destination": "/core/receive#read-one-message-in-full",
+      "permanent": true
+    },
+    {
+      "source": "/extras/lists-and-suppression",
+      "destination": "/core/inbound-control#provider-level-suppression",
+      "permanent": true
+    },
+    {
+      "source": "/community",
+      "destination": "/introduction#support",
+      "permanent": true
+    },
+    {
+      "source": "/support",
+      "destination": "/introduction#support",
+      "permanent": true
+    },
+    {
+      "source": "/spam-virus-detection",
+      "destination": "/core/inbound-control",
+      "permanent": true
+    },
+    {
+      "source": "/faq",
+      "destination": "/introduction",
+      "permanent": true
+    },
+    {
+      "source": "/multi-tenancy",
+      "destination": "/advanced/multi-tenant",
+      "permanent": true
+    },
+    {
+      "source": "/imap-smtp",
+      "destination": "/core/imap-smtp",
+      "permanent": true
+    },
+    {
+      "source": "/integrate-livekit-agents",
+      "destination": "/integrations/frameworks/livekit",
+      "permanent": true
+    },
+    {
+      "source": "/changelog",
+      "destination": "/resources/changelog",
+      "permanent": true
+    },
+    {
+      "source": "/openapi.json",
+      "destination": "/api-reference/openapi.json",
+      "permanent": true
+    },
+    {
+      "source": "/openapi.yaml",
+      "destination": "/api-reference/openapi.json",
+      "permanent": true
+    },
+    {
+      "source": "/asyncapi.json",
+      "destination": "/api-reference",
+      "permanent": true
+    },
+    {
+      "source": "/asyncapi.yaml",
+      "destination": "/api-reference",
+      "permanent": true
+    },
+    {
+      "source": "/knowledge-base",
+      "destination": "/introduction",
+      "permanent": true
+    },
+    {
+      "source": "/knowledge-base/allowlists-blocklists",
+      "destination": "/core/inbound-control",
+      "permanent": true
+    },
+    {
+      "source": "/knowledge-base/api-403-error",
+      "destination": "/advanced/errors",
+      "permanent": true
+    },
+    {
+      "source": "/knowledge-base/creating-first-inbox",
+      "destination": "/quickstart",
+      "permanent": true
+    },
+    {
+      "source": "/knowledge-base/custom-domain-setup",
+      "destination": "/advanced/custom-domains",
+      "permanent": true
+    },
+    {
+      "source": "/knowledge-base/dns-cloudflare",
+      "destination": "/advanced/custom-domains",
+      "permanent": true
+    },
+    {
+      "source": "/knowledge-base/dns-godaddy",
+      "destination": "/advanced/custom-domains",
+      "permanent": true
+    },
+    {
+      "source": "/knowledge-base/dns-namecheap",
+      "destination": "/advanced/custom-domains",
+      "permanent": true
+    },
+    {
+      "source": "/knowledge-base/dns-route53",
+      "destination": "/advanced/custom-domains",
+      "permanent": true
+    },
+    {
+      "source": "/knowledge-base/domain-not-verifying",
+      "destination": "/advanced/custom-domains",
+      "permanent": true
+    },
+    {
+      "source": "/knowledge-base/domain-warming",
+      "destination": "/advanced/deliverability",
+      "permanent": true
+    },
+    {
+      "source": "/knowledge-base/emails-bouncing",
+      "destination": "/extras/deliverability-fundamentals",
+      "permanent": true
+    },
+    {
+      "source": "/knowledge-base/emails-going-to-spam",
+      "destination": "/extras/deliverability-fundamentals",
+      "permanent": true
+    },
+    {
+      "source": "/knowledge-base/getting-api-key",
+      "destination": "/quickstart#0-get-an-api-key",
+      "permanent": true
+    },
+    {
+      "source": "/knowledge-base/handling-inbound-emails",
+      "destination": "/core/receive",
+      "permanent": true
+    },
+    {
+      "source": "/knowledge-base/human-in-the-loop",
+      "destination": "/advanced/safety",
+      "permanent": true
+    },
+    {
+      "source": "/knowledge-base/inbound-emails-missing",
+      "destination": "/extras/deliverability-fundamentals",
+      "permanent": true
+    },
+    {
+      "source": "/knowledge-base/inbox-capabilities",
+      "destination": "/core/receive",
+      "permanent": true
+    },
+    {
+      "source": "/knowledge-base/labels-track-state",
+      "destination": "/extras/labels-and-system-labels",
+      "permanent": true
+    },
+    {
+      "source": "/knowledge-base/mx-record-conflicts",
+      "destination": "/advanced/custom-domains#register-a-subdomain",
+      "permanent": true
+    },
+    {
+      "source": "/knowledge-base/pods-multi-tenant",
+      "destination": "/advanced/multi-tenant",
+      "permanent": true
+    },
+    {
+      "source": "/knowledge-base/preventing-duplicate-sends",
+      "destination": "/advanced/errors",
+      "permanent": true
+    },
+    {
+      "source": "/knowledge-base/rate-limits",
+      "destination": "/advanced/plans-and-usage",
+      "permanent": true
+    },
+    {
+      "source": "/knowledge-base/spf-dkim-dmarc",
+      "destination": "/extras/deliverability-fundamentals",
+      "permanent": true
+    },
+    {
+      "source": "/knowledge-base/threaded-conversations",
+      "destination": "/core/conversations",
+      "permanent": true
+    },
+    {
+      "source": "/knowledge-base/what-is-agentmail",
+      "destination": "/introduction",
+      "permanent": true
+    },
+    {
+      "source": "/integrations/cli",
+      "destination": "/integrations/sdks-and-cli",
+      "permanent": true
+    },
+    {
+      "source": "/integrations/mcp",
+      "destination": "/integrations/mcp-and-skills",
+      "permanent": true
+    },
+    {
+      "source": "/integrations/skills",
+      "destination": "/integrations/mcp-and-skills",
+      "permanent": true
+    },
+    {
+      "source": "/integrations/google-adk",
+      "destination": "/integrations/frameworks/google-adk",
+      "permanent": true
+    },
+    {
+      "source": "/integrations/langchain",
+      "destination": "/integrations/frameworks/langchain",
+      "permanent": true
+    },
+    {
+      "source": "/integrations/openclaw",
+      "destination": "/integrations/frameworks/openclaw",
+      "permanent": true
+    },
+    {
+      "source": "/integrations/replit",
+      "destination": "/integrations/frameworks/replit",
+      "permanent": true
+    },
+    {
+      "source": "/integrations/sim",
+      "destination": "/integrations/frameworks/sim",
+      "permanent": true
+    },
+    {
+      "source": "/integrations/x402",
+      "destination": "/integrations/pay-per-use/x402",
+      "permanent": true
+    },
+    {
+      "source": "/integrations/mpp",
+      "destination": "/integrations/pay-per-use/mpp",
+      "permanent": true
+    },
+    {
+      "source": "/documentation/core-concepts/pods",
+      "destination": "/advanced/multi-tenant",
+      "permanent": true
+    },
+    {
+      "source": "/documentation/examples/auto-reply-agent",
+      "destination": "/examples/customer-support-agent",
+      "permanent": true
+    },
+    {
+      "source": "/documentation/examples/smart-labeling-agent",
+      "destination": "/examples/customer-support-agent",
+      "permanent": true
+    },
+    {
+      "source": "/documentation/examples/live-agent-mail-examples",
+      "destination": "/examples/outbound-gtm-sdr-agent",
+      "permanent": true
+    },
+    {
+      "source": "/documentation/resources/security-privacy/soc-2-compliance",
+      "destination": "/extras/security-compliance",
+      "permanent": true
+    },
+    {
+      "source": "/documentation/:slug*",
+      "destination": "/introduction",
+      "permanent": true
+    },
+    {
+      "source": "/api-reference/:slug*",
+      "destination": "/api-reference",
+      "permanent": true
+    },
+    {
+      "source": "/changelog/:slug*",
+      "destination": "/resources/changelog",
+      "permanent": true
     }
-  },
-  "markdown": {
-    "instructions": "Every page ships two renditions at one URL. The HTML page is for humans. The Markdown rendition (append .md to any page URL, or request with Accept: text/markdown) is agent-optimized: a Do this section with runnable commands, SDK signatures, exhaustive Facts, a Not supported section listing shapes that do NOT work, an Errors table, and a Verify command. Prefer the Markdown rendition over scraping HTML, and trust Not supported entries instead of retrying those call shapes."
-  },
-  "contextual": {
-    "options": [
-      "copy",
-      "view",
-      "chatgpt",
-      "claude",
-      "perplexity",
-      "mcp",
-      "cursor",
-      "vscode"
-    ]
-  },
-  "footer": {
-    "socials": {
-      "x": "https://x.com/agentmail_to",
-      "github": "https://github.com/agentmail-to",
-      "discord": "https://discord.gg/hTYatWYWBc"
-    }
-  }
+  ]
 }

@@ -1,0 +1,171 @@
+---
+title: "EU region"
+description: "The EU hosts, how each client selects them, and how an organization's region binds its API keys and data."
+---
+
+<Visibility for="humans">
+
+
+<img src="/images/banners/advanced-eu-region.svg" alt="" noZoom />
+<Info>If you don't have an API key yet, follow the [Quickstart](/quickstart) first.</Info>
+
+## Point your clients at the EU hosts
+
+AgentMail runs a separate deployment in the EU that serves the same API on its own hosts:
+
+| Host | US region | EU region |
+| --- | --- | --- |
+| API | `https://api.agentmail.to` | `https://api.agentmail.eu` |
+| WebSockets | `wss://ws.agentmail.to` | `wss://ws.agentmail.eu` |
+
+Every endpoint path, parameter, and response shape is identical across regions, so everything else in these docs applies unchanged.
+
+API keys carry their region in the prefix, `am_eu_` for EU keys and `am_us_` for US keys. Here is how each surface targets the EU region:
+
+<CodeGroup>
+
+```bash CLI
+# once for the session
+export AGENTMAIL_BASE_URL="https://api.agentmail.eu"
+agentmail inboxes list
+
+# or per command
+agentmail --base-url "https://api.agentmail.eu" inboxes list
+```
+
+```bash API
+curl "https://api.agentmail.eu/v0/inboxes" \
+  -H "Authorization: Bearer $AGENTMAIL_API_KEY"
+```
+
+```typescript TypeScript
+import { AgentMailClient, AgentMailEnvironment } from "agentmail";
+
+// an am_eu_ key routes to the EU host on its own
+const client = new AgentMailClient();
+
+// or pin the region explicitly
+const pinned = new AgentMailClient({ environment: AgentMailEnvironment.EuProd });
+```
+
+```python Python
+from agentmail import AgentMail
+from agentmail.environment import AgentMailEnvironment
+
+client = AgentMail(environment=AgentMailEnvironment.EU_PROD)
+```
+
+</CodeGroup>
+
+Region selection works differently on each surface:
+
+- The TypeScript client reads the key's prefix and picks the region itself, so the no-argument constructor works in either region. Pass `environment` only when you want to pin it.
+- The Python client takes the region through `environment`, and the option covers [WebSocket](/advanced/websockets) connections too, so `EU_PROD` points both at the EU hosts.
+- The [Go SDK](https://github.com/agentmail-to/agentmail-go) reads the same `AGENTMAIL_BASE_URL` variable as the CLI.
+
+A key authenticates only in its own region.
+
+<Accordion title="Troubleshooting">
+
+- **A key you know is valid gets `403` on every call.** Calls that cross regions fail with a `403` (most often an `am_us_` key sent to `api.agentmail.eu`). Check the key's prefix against the host first.
+
+</Accordion>
+
+## Keep your data in the EU
+
+The EU deployment runs on its own infrastructure, where mail that moves through it is processed and stored along with your inboxes, drafts, webhooks, and API keys.
+
+The region is a property of your organization:
+
+- An organization lives in exactly one region, and all of its data stays in that region's deployment.
+- Every API key the organization issues starts with its region's prefix, which is how a key can tell your client where to connect.
+
+The EU region is part of enterprise agreements. Contact [support@agentmail.cc](mailto:support@agentmail.cc) to set up an organization there.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="SDKs and CLI" icon="code" href="/integrations/sdks-and-cli">
+    Client configuration in depth, from base URLs to retries and timeouts.
+  </Card>
+  <Card title="Plans and Usage Tracking" icon="gauge" href="/advanced/plans-and-usage">
+    The full enterprise entitlement list, EU region included.
+  </Card>
+</CardGroup>
+
+</Visibility>
+
+<Visibility for="agents">
+
+# Target the EU region
+
+AgentMail runs a separate EU deployment that serves the same API on its own hosts, and an organization set up there has its mail, inboxes, drafts, webhooks, and API keys processed and stored in the EU. Use the EU hosts whenever the API key starts with `am_eu_`, since a key authenticates only in its own region.
+
+## Do this
+
+Call the EU API host with an EU key (prefix `am_eu_`):
+
+```bash
+curl "https://api.agentmail.eu/v0/inboxes" \
+  -H "Authorization: Bearer $AGENTMAIL_API_KEY"
+```
+
+For the CLI and the Go SDK, set the base URL once per session:
+
+```bash
+export AGENTMAIL_BASE_URL="https://api.agentmail.eu"
+agentmail inboxes list
+```
+
+## SDK
+
+Install: `npm install agentmail` (TypeScript), `pip install agentmail` (Python), `npm install -g agentmail-cli` (CLI).
+
+- TypeScript: `new AgentMailClient()` reads the key's prefix and picks the region itself. Pin explicitly with `new AgentMailClient({ environment: AgentMailEnvironment.EuProd })`.
+- Python: `AgentMail(environment=AgentMailEnvironment.EU_PROD)`. The `environment` option covers WebSocket connections too, so `EU_PROD` points both at the EU hosts.
+- CLI: `export AGENTMAIL_BASE_URL="https://api.agentmail.eu"`, or per command `agentmail --base-url "https://api.agentmail.eu" inboxes list`.
+- Go: reads the same `AGENTMAIL_BASE_URL` variable as the CLI.
+
+Client configuration in depth is on [/integrations/sdks-and-cli](/integrations/sdks-and-cli).
+
+## Facts
+
+- EU API host: `https://api.agentmail.eu`. US API host: `https://api.agentmail.to`.
+- EU WebSocket host: `wss://ws.agentmail.eu`. US WebSocket host: `wss://ws.agentmail.to`.
+- Every endpoint path, parameter, and response shape is identical across the two regions.
+- EU API keys start with `am_eu_`. US API keys start with `am_us_`.
+- An organization lives in exactly one region, and all of its data stays in that region's deployment.
+- The EU deployment runs on its own infrastructure hosted in the EU. Mail that moves through it is processed and stored there, along with inboxes, drafts, webhooks, and API keys.
+- Every API key an organization issues starts with the organization's region prefix, which is how a key can tell a client where to connect.
+- A key authenticates only in its own region. Calls that cross regions fail with a `403`.
+- The EU region is part of enterprise agreements. Contact `support@agentmail.cc` to set up an organization there.
+
+## Not supported
+
+- An `am_us_` key does not authenticate on `api.agentmail.eu`, and an `am_eu_` key does not authenticate on `api.agentmail.to`. Every cross-region call fails with a `403`.
+- An organization cannot span regions. It lives in exactly one region and all of its data stays there.
+- The Python client takes the region through `environment`, not from the key prefix. Pass `environment=AgentMailEnvironment.EU_PROD` for the EU.
+
+## Errors
+
+| Error | Status | Cause | Fix |
+| --- | --- | --- | --- |
+| `403` on every call | 403 | the key was sent to the other region's host, most often an `am_us_` key sent to `api.agentmail.eu` | check the key's prefix against the host, use a key issued by an organization in that region |
+
+## Verify
+
+```bash
+curl "https://api.agentmail.eu/v0/inboxes" \
+  -H "Authorization: Bearer $AGENTMAIL_API_KEY"
+```
+
+A `200` with an inbox list confirms the key and host match. A key known to be valid that gets `403` on every call is pointed at the wrong region's host, check its prefix first.
+
+## Related
+
+- [/integrations/sdks-and-cli](/integrations/sdks-and-cli) for client configuration in depth, from base URLs to retries and timeouts.
+- [/advanced/plans-and-usage](/advanced/plans-and-usage) for the full enterprise entitlement list, EU region included.
+- [/advanced/websockets](/advanced/websockets) for the WebSocket connections the Python `environment` option also routes.
+- [/quickstart](/quickstart) for getting an API key first.
+
+</Visibility>

@@ -1,0 +1,253 @@
+---
+title: OpenAI Agents SDK
+description: Give an OpenAI Agents SDK agent its own inbox to send, receive, and reply to email.
+icon: "/images/logos/openai.svg"
+---
+
+<Visibility for="humans">
+
+
+<img src="/images/banners/integration-openai-agents-sdk.svg" alt="" noZoom />
+With the `agentmail-toolkit` package, an agent built on the [OpenAI Agents SDK](https://openai.github.io/openai-agents-python/) gets a working email address. On this page you will watch it create its own `@agentmail.to` inbox, send a message to you, and reply to one you send back.
+
+## 0. Get API keys
+
+- `AGENTMAIL_API_KEY` authenticates the email tools. Generate one from the [AgentMail Console](https://console.agentmail.to/dashboard/api-keys).
+- `OPENAI_API_KEY` authenticates the model calls the Agents SDK makes. Generate one from the [OpenAI dashboard](https://platform.openai.com/api-keys).
+
+```bash
+export AGENTMAIL_API_KEY="<API_KEY>"
+export OPENAI_API_KEY="<OPENAI_API_KEY>"
+```
+
+## 1. Install and load the tools
+
+Install the toolkit and the Agents SDK. The toolkit needs Python 3.11 or newer.
+
+```bash
+pip install agentmail-toolkit openai-agents
+```
+
+Define your agent in `agent.py`. The toolkit's `get_tools()` returns the email tools as the SDK's own `FunctionTool` type, so the list goes straight into `Agent(tools=...)`:
+
+```python agent.py
+from agents import Agent
+from agentmail_toolkit.openai import AgentMailToolkit
+
+agent = Agent(
+    name="Email Agent",
+    instructions=(
+        "You are an email agent with your own AgentMail inbox. "
+        "You can create inboxes, send email, and read and reply to threads."
+    ),
+    tools=AgentMailToolkit().get_tools(),
+)
+```
+
+`AgentMailToolkit()` picks up `AGENTMAIL_API_KEY` from the environment. To pass credentials some other way, give it a configured client: `AgentMailToolkit(client=AgentMail(api_key="..."))`.
+
+You can also connect through MCP instead of the toolkit, using the hosted server described in [MCP and Skills](/integrations/mcp-and-skills).
+
+## 2. Test sending emails
+
+For the first run, the agent creates an inbox and emails you at an address you already own, in Gmail, Outlook, or wherever you read mail. Save this next to `agent.py` and run it with `python send.py`.
+
+Check that account a moment later. The email arrives from a newly created `@agentmail.to` address.
+
+```python send.py
+from agents import Runner
+from agent import agent
+
+result = Runner.run_sync(
+    agent,
+    "Create an inbox with the display name 'Support agent', then send an email "
+    "from it to you@example.com with the subject 'Hello from my agent' and a "
+    "one-line introduction. When finished, tell me the address of the new inbox.",
+)
+print(result.final_output)
+```
+
+The agent calls the `create_inbox` tool, then `send_message`, and reports back:
+
+```text Sample output
+Email sent successfully.
+
+Sent from: faircost773@agentmail.to
+```
+
+<Frame caption="A real run of send.py, ending with the agent's report of the sending address.">
+  <img src="/images/integrations/openai-agents-runner-send.png" alt="Terminal running python send.py and printing the agent's confirmation that the email was sent from faircost773@agentmail.to" />
+</Frame>
+
+Save the inbox address from the reply. You will email it in the next step.
+
+The prompt above names no username, so AgentMail generates an available one.
+
+<Accordion title="Troubleshooting">
+- **`403` with `resource_taken` or `already_exists` on the create.** Your prompt asked for a specific username that is unavailable: `resource_taken` means it is owned by a different organization than yours, `already_exists` means it is already owned by your own organization. Both responses list up to three available variants of the name in `suggestions`. Prompt again with a different username, or leave the username out.
+- **`403` with `limit_exceeded`.** Creating an inbox past your plan's inbox limit fails this way, whatever the username.
+- **The run ends on a failed tool call.** Whatever the cause, `Runner.run_sync` raises `UserError` with the API's error message:
+
+  ```text
+  agents.exceptions.UserError: Error running tool create_inbox: Inbox limit exceeded (HTTP 403)
+  ```
+</Accordion>
+
+## 3. Test receiving and replying
+
+From your everyday account, send an email to the inbox address from step 2. Give it a subject and a question the agent can answer.
+
+Then ask the agent to read and answer it. You should get the reply in your account, threaded under the message you sent.
+
+```python reply.py
+from agents import Runner
+from agent import agent
+
+result = Runner.run_sync(
+    agent,
+    "Look at <inbox_id>, open the most recent thread, and answer it with a "
+    "brief reply in the same thread.",
+)
+print(result.final_output)
+```
+
+Replace `<inbox_id>` with the address from step 2. The agent has no memory between runs, which is why the prompt spells out which inbox to check.
+
+The agent finds the conversation with `list_threads`, reads it with `get_thread`, and answers with `reply_to_message`. Mail moves in about two seconds each way.
+
+<Accordion title="Troubleshooting">
+- **The agent reports an empty inbox.** The run probably started before your email got there. Run it again.
+</Accordion>
+
+## Scope the agent's tools
+
+`get_tools()` returns the full toolkit. For an agent that should only answer incoming mail, pass `names` to expose exactly what the job needs:
+
+```python
+tools = AgentMailToolkit().get_tools(
+    names=["list_threads", "get_thread", "reply_to_message"]
+)
+```
+
+Scoped this way, the agent can read and reply to mail in inboxes that already exist, and that is all.
+
+<Accordion title="Troubleshooting">
+
+- **Missing `OPENAI_API_KEY`.** The run fails with `openai.OpenAIError: Missing credentials` before any email tool runs. `AGENTMAIL_API_KEY` only covers the email tools, so the model calls still need an OpenAI key.
+- **Calling `Runner.run_sync` inside a running event loop.** In notebooks and async apps it raises `RuntimeError`. Use `await Runner.run(agent, prompt)` there.
+- **Misspelled tool names in `get_tools(names=...)`.** Unknown names are dropped without an error, so the agent runs with fewer tools than you intended. Print the names of the returned tools once to confirm the list.
+
+</Accordion>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="React to incoming email" icon="bolt" href="/advanced/webhooks">
+    Start a run when mail arrives instead of prompting by hand.
+  </Card>
+  <Card title="Set an authorization boundary" icon="shield" href="/advanced/safety">
+    Keep untrusted email content from steering what your agent does.
+  </Card>
+</CardGroup>
+
+</Visibility>
+
+<Visibility for="agents">
+
+# Give an OpenAI Agents SDK agent an email inbox
+
+The `agentmail-toolkit` package exposes AgentMail operations as the Agents SDK's own `FunctionTool` type. Use it when an agent built on the OpenAI Agents SDK needs to create inboxes, send email, and read and reply to threads.
+
+## Do this
+
+Python 3.11 or newer.
+
+```bash
+pip install agentmail-toolkit openai-agents
+export AGENTMAIL_API_KEY="<API_KEY>"
+export OPENAI_API_KEY="<OPENAI_API_KEY>"
+```
+
+```python
+from agents import Agent, Runner
+from agentmail_toolkit.openai import AgentMailToolkit
+
+agent = Agent(
+    name="Email Agent",
+    instructions=(
+        "You are an email agent with your own AgentMail inbox. "
+        "You can create inboxes, send email, and read and reply to threads."
+    ),
+    tools=AgentMailToolkit().get_tools(),
+)
+
+result = Runner.run_sync(
+    agent,
+    "Create an inbox, then send an email from it to you@example.com with the "
+    "subject 'Hello from my agent' and a one-line introduction. "
+    "When finished, tell me the address of the new inbox.",
+)
+print(result.final_output)
+```
+
+## SDK
+
+Install: `pip install agentmail-toolkit openai-agents`
+
+- Build the toolkit: `AgentMailToolkit()` reads `AGENTMAIL_API_KEY` from the environment.
+- Pass credentials another way: `AgentMailToolkit(client=AgentMail(api_key="..."))`.
+- Get every tool as `FunctionTool` objects: `AgentMailToolkit().get_tools()`. The list goes straight into `Agent(tools=...)`.
+- Get a subset: `AgentMailToolkit().get_tools(names=["list_threads", "get_thread", "reply_to_message"])`.
+- Run the agent: `Runner.run_sync(agent, prompt)` in scripts, `await Runner.run(agent, prompt)` inside a running event loop.
+
+Core SDK and CLI installs: /integrations/sdks-and-cli
+
+## Facts
+
+- `AGENTMAIL_API_KEY` authenticates the email tools. `OPENAI_API_KEY` authenticates the model calls the Agents SDK makes. Both must be set.
+- Tools the page exercises: `create_inbox`, `send_message`, `list_threads`, `get_thread`, `reply_to_message`.
+- A reply-only agent needs exactly `list_threads`, `get_thread`, and `reply_to_message`, passed via `get_tools(names=...)`. Scoped this way, the agent can read and reply to mail in inboxes that already exist, and that is all.
+- The agent has no memory between runs. Each prompt must name the inbox to operate on.
+- Mail moves in about two seconds each way. An agent that reports an empty inbox probably ran before the email arrived. Run it again.
+- A prompt that names no username lets AgentMail generate an available one.
+- Creating an inbox with a username owned by a different organization returns `403` with code `resource_taken`. A username already owned by the same organization returns `403` with code `already_exists`. Both list up to 3 available variants in `suggestions`.
+- Creating an inbox past the plan's inbox limit returns `403` with code `limit_exceeded`.
+- A failed tool call ends the run. `Runner.run_sync` raises `agents.exceptions.UserError` carrying the API's error message.
+- The hosted MCP server is an alternative to this toolkit: /integrations/mcp-and-skills.
+
+## Not supported
+
+- A failed email tool call does not return its error to the model. The run ends with `UserError`, so an agent cannot retry a taken username within the same run. Prompt again with a different username, or leave the username out.
+- `Runner.run_sync` does not work inside a running event loop, such as a notebook or an async app. It raises `RuntimeError`. Use `await Runner.run(agent, prompt)` there.
+- Unknown names in `get_tools(names=...)` are dropped without an error, so the agent runs with fewer tools than intended. Print the returned tool names once to confirm the list.
+- `AGENTMAIL_API_KEY` does not cover the model calls. Those need `OPENAI_API_KEY`.
+
+## Errors
+
+| Error | Status | Cause | Fix |
+| --- | --- | --- | --- |
+| `resource_taken` | 403 | Requested inbox username owned by a different organization | Prompt again with a name from `suggestions`, or leave the username out |
+| `already_exists` | 403 | Requested inbox username already owned by the same organization | Prompt again with a name from `suggestions`, or leave the username out |
+| `limit_exceeded` | 403 | Inbox creation past the plan's inbox limit | Run against an inbox that already exists |
+| `agents.exceptions.UserError` | carries the API status | A failed tool call ended the run, for example `Error running tool create_inbox: Inbox limit exceeded (HTTP 403)` | Fix the cause named in the message, then rerun |
+| `openai.OpenAIError: Missing credentials` | none, Python exception | `OPENAI_API_KEY` unset. Fails before any email tool runs | Export `OPENAI_API_KEY` |
+| `RuntimeError` | none, Python exception | `Runner.run_sync` called inside a running event loop | Use `await Runner.run(agent, prompt)` |
+
+## Verify
+
+```bash
+python -c "
+from agentmail_toolkit.openai import AgentMailToolkit
+print([t.name for t in AgentMailToolkit().get_tools()])
+"
+```
+
+Success prints the tool names, including `create_inbox`, `send_message`, `list_threads`, `get_thread`, and `reply_to_message`. This confirms the install, not the key. To confirm the key, run the send flow above and check that the email arrives.
+
+## Related
+
+- /advanced/webhooks - start a run when mail arrives instead of prompting by hand
+- /advanced/safety - keep untrusted email content from steering the agent
+- /integrations/mcp-and-skills - hosted MCP server alternative to the toolkit
+
+</Visibility>

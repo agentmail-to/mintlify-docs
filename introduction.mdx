@@ -1,102 +1,159 @@
 ---
 title: Introduction
-description: What AgentMail is, why agents need their own inboxes, and which surface (CLI, MCP, Console, SDK, or raw HTTP) to start with.
+description: What AgentMail is, why an agent needs its own inbox, and which surface to start with.
 ---
 
 <Visibility for="humans">
 
-AgentMail gives AI agents programmable email inboxes. Create an inbox, receive mail, trigger workflows, and reply through one API.
 
-## Give an agent an inbox
+<img src="/images/banners/start-intro.svg" alt="" noZoom />
+AgentMail is an API platform for giving AI agents their own email inboxes to send, receive, and act on emails. 
 
-Email handles service signups, address confirmation, password resets, verification codes, receipts, and notifications. An agent that completes these flows needs an address that can receive mail.
+## What can you agent do with its own email address
 
-With its own inbox, an agent can register for services, complete verification flows, and maintain correspondence without a human operating an email client.
+- sign up on websites
+- have its own identity with a custom domain
+- reach out to people over email
+- let anybody reach it over email
+- keep your personal inbox separate
 
-<Frame caption="The loop: the agent owns an inbox, incoming mail triggers its workflow, and it replies from the same address.">
-  <img className="block dark:hidden" src="/images/diagrams/intro-agent-inbox-flow.svg" alt="An agent creates and monitors an AgentMail inbox; services and people send email to it; incoming mail triggers the agent's workflow, and the agent sends replies back" />
-  <img className="hidden dark:block" src="/images/diagrams/intro-agent-inbox-flow.dark.svg" alt="An agent creates and monitors an AgentMail inbox; services and people send email to it; incoming mail triggers the agent's workflow, and the agent sends replies back" />
-</Frame>
+## Why AgentMail
 
-## Choose AgentMail instead of an outbound sender
+- simple, agent-friendly APIs
+- webhooks and websockets so that your agent can reply instantly
+- strict boundaries to control who it can send and receive emails from
+- automatic scanning for viruses and prompt injection attempts
+- custom domains and subdomains for high deliverability
+- highly scalable with generous rate limits
 
-AgentMail gives an agent an inbox it can send from and receive into. Other email tools serve different jobs.
+## Examples
 
-| Tool | Who it serves | What it moves |
-| --- | --- | --- |
-| AgentMail | AI agents | An agent's own inbox: send and receive, with workflows on incoming mail |
-| SendGrid / Resend | Your application | Outbound transactional email your app generates |
-| Mailchimp | Marketers | Outbound marketing broadcasts to a subscriber list |
-| Gmail API | A human user | Programmatic access to that person's existing inbox |
+- An [outbound SDR agent](/examples/outbound-gtm-sdr-agent) that researches leads, sends personal first touches from its own inbox, and follows up.
+- A [customer support agent](/examples/customer-support-agent) that answers a support inbox from your docs.
+- An [AI employee](/examples/ai-employee-with-its-own-inbox) with an email address that your employees can CC into threads and forward documents to.
 
-## Start from the surface that fits your workflow
+## Get started
 
-All five surfaces use the same API.
+<Card title="Quickstart" icon="rocket" href="/quickstart" horizontal arrow>
+  Get a key, create an inbox, and send, receive, and reply loop from the CLI, curl, or the SDKs.
+</Card>
 
-<Columns cols="2">
-  <Card title="CLI" icon="terminal">
-    Run calls from a terminal or script one-off checks.
-  </Card>
-  <Card title="MCP" icon="plug">
-    Give an MCP-capable agent or assistant inbox tools.
-  </Card>
-  <Card title="Console" icon="browser">
-    Inspect inboxes and messages in a browser.
-  </Card>
-  <Card title="SDK (TypeScript, Python)" icon="code">
-    Use typed calls in application code.
-  </Card>
+## Connect it to your agent
+
+<Columns cols={4}>
+    <Tile href="/integrations/frameworks/claude-cowork" title="Claude Cowork">
+        <img src="/images/logos/claude.svg" alt="Claude Cowork" className="mx-auto" height="48" />
+    </Tile>
+    <Tile href="/integrations/frameworks/codex" title="OpenAI Codex">
+        <img src="/images/logos/openai.svg" alt="OpenAI Codex" className="mx-auto" height="48" />
+    </Tile>
+    <Tile href="/integrations/frameworks/cursor" title="Cursor">
+        <img src="/images/logos/cursor.svg" alt="Cursor" className="mx-auto" height="48" />
+    </Tile>
+    <Tile href="/integrations/frameworks/windsurf" title="Windsurf">
+        <img src="/images/logos/windsurf.svg" alt="Windsurf" className="mx-auto" height="48" />
+    </Tile>
+    <Tile href="/integrations/frameworks/replit" title="Replit">
+      <img src="/images/logos/replit.svg" alt="Replit" className="mx-auto" height="48" />
+    </Tile>
+    <Tile href="/integrations/frameworks/openclaw" title="OpenClaw">
+      <img src="/images/logos/openclaw.svg" alt="OpenClaw" className="mx-auto" height="48" />
+    </Tile>
+    <Tile href="/integrations/frameworks/grokbot" title="Grok Bot">
+      <img src="/images/logos/grok.svg" alt="Grok Bot" className="mx-auto" height="48" />
+    </Tile>
+    <Tile href="/integrations/frameworks/hermes" title="Hermes">
+      <img src="/images/logos/hermes.png" alt="Hermes" className="mx-auto" height="48" />
+    </Tile>
+  <Tile href="/integrations/frameworks/langchain" title="LangChain">
+    <img src="/images/logos/langchain.svg" alt="LangChain" className="mx-auto" height="48" />
+  </Tile>
+  <Tile href="/integrations/frameworks/openai-agents-sdk" title="OpenAI Agents SDK">
+    <img src="/images/logos/openai.svg" alt="OpenAI Agents SDK" className="mx-auto" height="48" />
+  </Tile>
+  <Tile href="/integrations/frameworks/ai-sdk" title="Vercel AI SDK">
+    <img src="/images/logos/vercel.svg" alt="Vercel AI SDK" className="mx-auto" height="48" />
+  </Tile>
+  <Tile href="/integrations/frameworks/google-adk" title="Google ADK">
+    <img src="/images/logos/google.svg" alt="Google ADK" className="mx-auto" height="48" />
+  </Tile>
+  <Tile href="/integrations/frameworks/mastra" title="Mastra">
+    <img src="/images/logos/mastra.svg" alt="Mastra" className="mx-auto" height="48" />
+  </Tile>
+  <Tile href="/integrations/frameworks/eve" title="eve">
+    <img src="/images/logos/vercel.svg" alt="eve" className="mx-auto" height="48" />
+  </Tile>
+  <Tile href="/integrations/frameworks/livekit" title="LiveKit Agents">
+    <img src="/images/logos/livekit.svg" alt="LiveKit Agents" className="mx-auto" height="48" />
+  </Tile>
+  <Tile href="/integrations/frameworks/sim" title="Sim">
+    <img src="/images/logos/sim.png" alt="Sim" className="mx-auto" height="48" />
+  </Tile>
+  
 </Columns>
 
-Use raw HTTP when you work in a language without an SDK or want no dependency.
+## Support
 
-Whichever surface you pick, the [console](https://console.agentmail.to) shows every inbox and its mail, so you can watch what your agent does as it does it.
+The fastest way to get help is the [AgentMail Discord](https://discord.gg/hTYatWYWBc), where the team answers questions. For anything you'd rather not post publicly, email [support@agentmail.cc](mailto:support@agentmail.cc).
 
-<Frame caption="An agent's inbox in the AgentMail console — each row is a thread of correspondence the agent is holding.">
-  <img className="block dark:hidden" src="/images/screenshots/console-inbox.png" alt="AgentMail console showing an agent's inbox with two received threads in the thread list" />
-  <img className="hidden dark:block" src="/images/screenshots/console-inbox-dark.png" alt="AgentMail console showing an agent's inbox with two received threads in the thread list" />
-</Frame>
+## Next Steps
 
-## Create an account and API key
-
-Every API request authenticates with an API key sent as a bearer token.
-
-1. Sign up or sign in at [console.agentmail.to](https://console.agentmail.to).
-2. Open [**API keys**](https://console.agentmail.to/dashboard/api-keys) in the dashboard and create a key.
-3. Copy the key when it appears. It is shown once and cannot be retrieved later. If you lose it, create a new key.
-
-## Continue with a working inbox
-
-- [Quickstart](/quickstart): create your first inbox and send a message.
-- [Architecture](/architecture): understand inboxes, messages, and workflows.
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Create an inbox and run the send-and-receive loop.
+  </Card>
+  <Card title="Architecture" icon="sitemap" href="/architecture">
+    The organization, pod, and inbox hierarchy, and where every other resource attaches.
+  </Card>
+</CardGroup>
 
 </Visibility>
 
 <Visibility for="agents">
 
-# Understand AgentMail and choose a surface
+# Understand what AgentMail is and where to start
 
-AgentMail gives AI agents programmable email inboxes. Create an inbox, receive mail, trigger workflows on incoming messages, and send replies through one API.
+AgentMail is an email API built for AI agents. An inbox gives an agent a real address it receives mail at and sends from, both directions driven through the API. Read this page to pick a starting surface, then go to `/quickstart` for the runnable loop.
 
 ## Facts
 
-- An AgentMail inbox is a real email address owned by an AI agent. The agent can hand it out, receive mail into it, and send from it.
-- The core workflow is: create an inbox, receive mail, trigger a workflow for incoming mail, and send replies.
-- Email supports service signups, address confirmation, password resets, verification codes, receipts, and notifications. An agent needs its own inbox to complete those flows unattended.
-- AgentMail serves AI agents and moves inbound and outbound mail for the agent's inbox.
-- SendGrid and Resend serve applications and move outbound transactional email. Mailchimp sends marketing broadcasts to subscriber lists. Gmail API gives programmatic access to a human user's existing inbox.
-- AgentMail has five access surfaces: CLI, MCP, Console, SDKs (TypeScript, Python), and raw HTTP. All use the same API.
-- Choose CLI for terminal work or one-off scripts. Choose MCP for an MCP-capable agent or assistant. Choose Console to inspect inboxes and messages in a browser. Choose an SDK for typed application calls. Choose raw HTTP for a language without an SDK or a dependency-free integration.
+- An AgentMail inbox is a real email address. The agent receives mail at the address and sends from the address through the API.
+- The inbox address appears in the From line of the agent's mail and can live on your own domain (see `/advanced/custom-domains`).
+- Mail addressed to the agent's inbox stays out of human mailboxes because the address belongs to the agent.
+- Allow and block lists decide who an inbox can send to and receive from (see `/core/inbound-control`).
+- AgentMail handles the SPF, DKIM, and DMARC authentication that keeps an inbox's mail deliverable (see `/advanced/deliverability`).
+- Inbound mail is screened before the agent sees anything. Viruses are rejected at the gateway. Everything else is labeled on arrival (see `/core/receive`).
+- Labels such as `spam` and `unauthenticated` are hidden from the agent's default view.
+- When a message lands, a webhook (`/advanced/webhooks`) or WebSocket (`/advanced/websockets`) event wakes the agent.
+- The agent reads the whole thread for context (`/core/conversations`), then sends its reply through the same API into the same conversation (`/core/send`).
+- `extracted_text` on a message holds only what the sender just wrote, with quoted history stripped. Attachments such as PDFs, Word documents, and spreadsheets return pre-extracted text via `text_url` (see `/core/receive`).
+- Errors that reach the API return a stable `code` and a `docs` link, plus a `fix` field stating the corrective action when a generic remedy applies. A taken inbox username returns up to three available alternatives in `suggestions` (see `/advanced/errors`).
+- Send endpoints accept an `Idempotency-Key`, so a retried send cannot deliver the same email twice (see `/core/send`).
+- Drafts double as a human-approval gate: the agent writes the draft, a human reviews and sends it (see `/core/send`).
+- Pods isolate tenants inside an organization, and API keys scope to the organization, one pod, or one inbox (see `/advanced/multi-tenant`).
+- Receiving email is free. Plans meter outbound sends (see `/advanced/plans-and-usage`).
+- The Quickstart (`/quickstart`) covers getting a key, creating an inbox, and running the full send, receive, and reply loop from the CLI, curl, or the SDKs.
+- Integration setup pages exist under `/integrations/frameworks/` for LangChain, OpenAI Agents SDK, Vercel AI SDK, Google ADK, Mastra, eve, LiveKit Agents, Sim, Replit, OpenClaw, Grok Bot, Hermes, Claude Cowork, OpenAI Codex, Cursor, and Windsurf.
+- Any MCP-capable client can connect through MCP and Skills (see `/integrations/mcp-and-skills`).
+- The four surfaces: CLI and SDKs (`/integrations/sdks-and-cli`), MCP and Skills (`/integrations/mcp-and-skills`), the Console web dashboard at `https://console.agentmail.to`, and the HTTP API reference (`/api-reference/inboxes/list-inboxes`).
+- Support: the AgentMail Discord at `https://discord.gg/hTYatWYWBc`, or email `support@agentmail.cc` for anything you would rather not post publicly.
 
 ## Not supported
 
-- AgentMail is not a bulk marketing or broadcast tool for subscriber-list campaigns.
-- AgentMail is not an outbound-only transactional sender for application-generated email. AgentMail inboxes receive mail and send it.
-- AgentMail does not provide access to a human user's existing inbox. It creates inboxes owned by the agent.
+- Running email flows through AgentMail requires no person watching an email client.
+- You do not configure SPF, DKIM, or DMARC yourself. AgentMail handles that authentication.
+- A message carrying a virus is rejected at the gateway and does not reach the agent.
+- Mail labeled `spam` or `unauthenticated` does not appear in the agent's default view.
 
 ## Related
 
-- [Quickstart: create your first inbox and send a message](/quickstart)
-- [Architecture: the object model behind inboxes, messages, and workflows](/architecture)
+- [/quickstart](/quickstart) - create an inbox and run the send-and-receive loop.
+- [/architecture](/architecture) - the organization, pod, and inbox hierarchy, and where every other resource attaches.
+- [/core/inbound-control](/core/inbound-control) - allow and block lists for both directions.
+- [/integrations/mcp-and-skills](/integrations/mcp-and-skills) - connect any MCP-capable client.
+- [/examples/outbound-gtm-sdr-agent](/examples/outbound-gtm-sdr-agent) - outbound SDR agent that sends, follows up, and reads replies.
+- [/examples/customer-support-agent](/examples/customer-support-agent) - support agent that answers from docs and past threads.
+- [/examples/ai-employee-with-its-own-inbox](/examples/ai-employee-with-its-own-inbox) - AI employee teammates can CC and forward to.
+- [/advanced/multi-tenant](/advanced/multi-tenant) - isolated inboxes, domains, and keys per customer.
 
 </Visibility>

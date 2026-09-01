@@ -1,0 +1,279 @@
+---
+title: "AgentID public-key authentication"
+description: "Approve AgentID sign-in with a scoped P-256 credential while the private key stays in your own keystore, HSM, or KMS."
+---
+
+<Visibility for="humans">
+
+<Info>If you don't have an API key yet, follow the [Quickstart](/quickstart) first.</Info>
+
+An AgentID public-key credential lets an agent prove possession of a P-256 private key when approving a sign-in, using only a compact signature. Neither the bearer API key nor the private key is ever transmitted.
+
+Generate and use the private key in a keystore, HSM, KMS, or a small trusted signing process: the model gets an opaque signing capability, never the key material: not as a JWK or PEM, not in an environment variable, and not in tool output, logs, prompts, or conversation history.
+
+## Register a public key
+
+1. **Generate a P-256 key pair in trusted code.** Persist the private key in secure storage. Export only the public components: `{ "kty": "EC", "crv": "P-256", "x": ..., "y": ... }`.
+
+2. **Register the public JWK**, authenticated with an existing AgentMail bearer API key:
+
+```bash
+curl -X POST "https://api.agentmail.to/v0/api-keys/public-keys" \
+  -H "Authorization: Bearer $AGENTMAIL_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "public_key": { "kty": "EC", "crv": "P-256", "x": "<base64url>", "y": "<base64url>" },
+    "name": "production signer 2026-08"
+  }'
+```
+
+The server verifies the key and computes its RFC 7638 SHA-256 fingerprint. The response's `api_key_id` is the value you use as the JWS `kid` when signing approvals.
+
+3. **Store the mapping** `{keystore_handle, kid}` in trusted application state before registration completes, so a crash cannot orphan the credential.
+
+<Accordion title="Troubleshooting">
+
+- **Registration rejected.** The server rejects a JWK carrying a private `d` component, unknown JWK members, a curve other than P-256, malformed coordinates, and a point that does not lie on the curve. Export only `kty`, `crv`, `x`, and `y`.
+
+</Accordion>
+
+### Scope and expiry
+
+Omit `scope` to inherit the registering bearer's scope. An explicit scope must be the caller's own scope or a live descendant of it, never an ancestor or sibling:
+
+| Scope | Format |
+| --- | --- |
+| Organization | `{ "type": "organization" }` |
+| Pod | `{ "type": "pod", "id": "<pod_id>" }` |
+| Inbox | `{ "type": "inbox", "id": "agent@example.com" }` |
+
+Omitting `expires_at` inherits the bearer's expiry; if the bearer never expires, neither does the credential. An explicit expiry must be in the future and cannot exceed the creator's expiry.
+
+Scope, key material, AgentID eligibility, and expiry are immutable after registration. Only `name` can be patched.
+
+## Sign and submit an approval
+
+For one pending authorization transaction, sign exactly the claims `jti` and `inbox_id` with ES256:
+
+```json Protected header
+{
+  "alg": "ES256",
+  "typ": "agentid-approval+jwt",
+  "kid": "<api_key_id returned by registration>"
+}
+```
+
+```json Signed payload
+{ "jti": "<transaction challenge>", "inbox_id": "agent@example.com" }
+```
+
+Do not add `aud`, `iat`, `exp`, `nonce`, `scope`, or any other claims, and do not include `jwk`, `jku`, `x5u`, `x5c`, or `crit` in the header. The assertion must be a three-segment compact JWS of at most 2 KiB. `jti` is 1 to 128 characters and `inbox_id` is 1 to 254 characters.
+
+The signing itself is standard ES256: `jose` in TypeScript, or `PyJWT` with `cryptography` in Python, plus `httpx` to submit.
+
+Submit the assertion to the AgentID issuer. This endpoint is served by the issuer, not the AgentMail REST API or the generated SDKs, so call it directly:
+
+```bash
+curl -X POST "https://auth.agentid.com/authorize/approve" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "assertion": "<compact.jws.string>",
+    "inbox_id": "agent@example.com"
+  }'
+```
+
+Send no bearer authorization and no browser cookies. The unsigned `inbox_id` in the JSON body must be byte-for-byte identical to the signed claim. Success is `204 No Content`. The server resolves `kid` against the stored credential, verifies the signature, validates the transaction, and rechecks key, organization, scope, inbox, generation, and expiry. Concurrent or repeated submissions have one winner.
+
+<Warning>
+The approval assertion proves that the key holder approved the server-created transaction identified by `jti` for one inbox. It does not prove that the key holder initiated the transaction, controls the browser session, inspected the relying party, or intended the relying party's action. If your product requires intent assurance, bind the displayed relying party and transaction to an authenticated, trusted out-of-band instruction before calling the signing helper. Do not claim that signature validity alone verifies user intent.
+</Warning>
+
+## Manage credentials
+
+List public-key credentials. Results never include bearer credentials:
+
+<CodeGroup>
+
+```bash API
+curl "https://api.agentmail.to/v0/api-keys/public-keys?limit=20" \
+  -H "Authorization: Bearer $AGENTMAIL_API_KEY"
+```
+
+```typescript TypeScript
+const page = await client.apiKeys.listPublicKeys({ limit: 20 });
+```
+
+```python Python
+page = client.api_keys.list_public_keys(limit=20)
+```
+
+</CodeGroup>
+
+Rename one. `name` is the only mutable property:
+
+<CodeGroup>
+
+```bash API
+curl -X PATCH "https://api.agentmail.to/v0/api-keys/public-keys/<api_key_id>" \
+  -H "Authorization: Bearer $AGENTMAIL_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{ "name": "production signer 2026-08" }'
+```
+
+```typescript TypeScript
+const renamed = await client.apiKeys.updatePublicKeyName("<api_key_id>", {
+  name: "production signer 2026-08",
+});
+```
+
+```python Python
+renamed = client.api_keys.update_public_key_name(
+    api_key_id="<api_key_id>",
+    name="production signer 2026-08",
+)
+```
+
+</CodeGroup>
+
+### Rotate
+
+Rotation is create new, deploy new, then delete old:
+
+1. Register the replacement public key with the [same call as above](#register-a-public-key). Even identical JWK coordinates return a new `api_key_id`.
+2. Deploy the new `kid` and its keystore handle to your signer.
+3. Revoke the old credential. Never reuse an old `kid` for new key material:
+
+<CodeGroup>
+
+```bash API
+curl -X DELETE "https://api.agentmail.to/v0/api-keys/public-keys/<api_key_id>" \
+  -H "Authorization: Bearer $AGENTMAIL_API_KEY"
+```
+
+```typescript TypeScript
+await client.apiKeys.revokePublicKey("<api_key_id>");
+```
+
+```python Python
+client.api_keys.revoke_public_key(api_key_id="<api_key_id>")
+```
+
+</CodeGroup>
+
+### Emergency revoke-all
+
+One call idempotently invalidates every current AgentID sign-in key in the organization. It requires an organization-scoped bearer credential and a UUID `Idempotency-Key` header, and takes no request body:
+
+<CodeGroup>
+
+```bash API
+curl -X POST "https://api.agentmail.to/v0/api-keys/public-keys/agentid-sign-in/revoke-all" \
+  -H "Authorization: Bearer $AGENTMAIL_API_KEY" \
+  -H "Idempotency-Key: <uuid>"
+```
+
+```typescript TypeScript
+import { randomUUID } from "node:crypto";
+
+const receipt = await client.apiKeys.revokeAllAgentIdSignInKeys({
+  idempotencyKey: randomUUID(),
+});
+console.log(receipt.previousGeneration, receipt.currentGeneration);
+```
+
+```python Python
+import uuid
+
+receipt = client.api_keys.revoke_all_agent_id_sign_in_keys(
+    idempotency_key=str(uuid.uuid4()),
+)
+print(receipt.previous_generation, receipt.current_generation)
+```
+
+</CodeGroup>
+
+The response returns `previous_generation`, `current_generation`, and `revoked_at`. Repeating the call with the same UUID returns the original receipt; a different UUID advances the generation again. Individually revoked keys are deleted, while rows revoked by revoke-all remain visible with `revoked_at` for audit.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Multi-tenant and API keys" icon="key" href="/advanced/multi-tenant">
+    Scoped keys, pods, and the permission model these credentials inherit from.
+  </Card>
+  <Card title="Security and compliance" icon="shield" href="/extras/security-compliance">
+    How AgentMail handles authentication and key material platform-wide.
+  </Card>
+</CardGroup>
+
+</Visibility>
+
+<Visibility for="agents">
+
+# Approve AgentID sign-in with a registered P-256 public key
+
+Register the public half of a P-256 key pair to get an `api_key_id`, then approve individual sign-in transactions by submitting a strict ES256 assertion. The private key stays in a keystore, HSM, KMS, or a small trusted signing process, never in model context, tool output, logs, prompts, or conversation history.
+
+## Do this
+
+1. In trusted code, generate a P-256 key pair, persist the private key in secure storage, and export only the public JWK components `kty`, `crv`, `x`, `y`.
+
+2. Register the public key with an existing bearer key. Save the returned `api_key_id`; it is your JWS `kid`:
+
+```bash
+curl -X POST "https://api.agentmail.to/v0/api-keys/public-keys" \
+  -H "Authorization: Bearer $AGENTMAIL_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{ "public_key": { "kty": "EC", "crv": "P-256", "x": "<base64url>", "y": "<base64url>" } }'
+```
+
+3. Persist `{keystore_handle, kid}` in trusted application state before continuing.
+
+4. To approve one sign-in transaction, sign exactly `{ "jti": "<challenge>", "inbox_id": "<inbox>" }` with ES256 under the protected header `{ "alg": "ES256", "typ": "agentid-approval+jwt", "kid": "<api_key_id>" }`, then submit without bearer auth or cookies:
+
+```bash
+curl -X POST "https://auth.agentid.com/authorize/approve" \
+  -H "Content-Type: application/json" \
+  -d '{ "assertion": "<compact.jws>", "inbox_id": "<inbox>" }'
+```
+
+Success is `204 No Content`.
+
+## SDK
+
+- List: TypeScript `client.apiKeys.listPublicKeys({ limit: 20 })`, Python `client.api_keys.list_public_keys(limit=20)`. Results never include bearer credentials.
+- Rename: TypeScript `client.apiKeys.updatePublicKeyName(apiKeyId, { name })`, Python `client.api_keys.update_public_key_name(api_key_id, name=...)`.
+- Revoke one: TypeScript `client.apiKeys.revokePublicKey(apiKeyId)`, Python `client.api_keys.revoke_public_key(api_key_id)`.
+- Revoke all sign-in keys: TypeScript `client.apiKeys.revokeAllAgentIdSignInKeys({ idempotencyKey })`, Python `client.api_keys.revoke_all_agent_id_sign_in_keys(idempotency_key=...)`.
+- Dependencies for signing helpers: `agentmail` + `jose` (TypeScript), `agentmail` + `cryptography` + `PyJWT` + `httpx` (Python).
+
+## Facts
+
+- Credential lifecycle endpoints: `GET /v0/api-keys/public-keys` lists (never mixing in bearer credentials), `PATCH /v0/api-keys/public-keys/{api_key_id}` renames, `DELETE /v0/api-keys/public-keys/{api_key_id}` revokes one.
+- `POST /v0/api-keys/public-keys` registers a public P-256 JWK and returns the server-owned `api_key_id` used as the JWS `kid`. The server rejects a private `d` member, unknown JWK members, and non-P-256 curves, verifies the point lies on the curve, and computes the RFC 7638 SHA-256 fingerprint.
+- Registering identical JWK coordinates again returns a new `api_key_id`. Rotation is create new, deploy new `kid`, then delete old. Never reuse an old `kid` for new key material.
+- Omitted `scope` inherits the registering bearer's scope. An explicit scope must be the caller's scope or a live descendant. Formats: `{"type": "organization"}`, `{"type": "pod", "id": "<pod_id>"}`, `{"type": "inbox", "id": "<inbox_id>"}`.
+- Omitted `expires_at` inherits the bearer's expiry; a never-expiring bearer yields a never-expiring credential. An explicit expiry must be future and cannot exceed the creator's expiry.
+- Scope, key material, AgentID eligibility, and expiry are immutable. Only `name` is patchable.
+- The approval assertion signs exactly `jti` (1-128 chars) and `inbox_id` (1-254 chars), header `{"alg": "ES256", "typ": "agentid-approval+jwt", "kid": ...}`, as a three-segment compact JWS of at most 2 KiB.
+- `POST https://auth.agentid.com/authorize/approve` is served by the AgentID issuer, not the AgentMail REST API or the generated SDKs. Body: `{"assertion", "inbox_id"}`. No bearer authorization, no cookies. The unsigned `inbox_id` must be byte-for-byte identical to the signed claim. Success is `204`.
+- The issuer resolves `kid`, verifies the signature, validates the transaction, and rechecks key, organization, scope, inbox, generation, and expiry. Concurrent or repeated submissions have one winner.
+- `POST /v0/api-keys/public-keys/agentid-sign-in/revoke-all` needs an organization-scoped bearer and a UUID `Idempotency-Key` header, takes no body, and returns `previous_generation`, `current_generation`, `revoked_at`. The same UUID returns the original receipt; a different UUID advances the generation. Rows revoked by revoke-all stay visible with `revoked_at` for audit; individually revoked keys are deleted.
+
+## Not supported
+
+- Extra JWT claims (`aud`, `iat`, `exp`, `nonce`, `scope`) or header members (`jwk`, `jku`, `x5u`, `x5c`, `crit`) on the approval assertion.
+- Widening a credential: explicit scope can never be an ancestor or sibling of the caller's scope, and expiry can never exceed the creator's.
+- Editing anything but `name` after registration.
+- Proving user intent by signature validity alone. The assertion proves the key holder approved the transaction `jti` for one inbox, not that the key holder initiated it, controls the browser session, inspected the relying party, or intended the relying party's action. Bind intent to an authenticated out-of-band instruction if your product requires it.
+
+## Verify
+
+A successful registration returns an `api_key_id`, and `GET /v0/api-keys/public-keys` lists the credential. A successful approval submission returns `204 No Content`.
+
+## Related
+
+- `/advanced/multi-tenant` - pods, scoped API keys, and the scope hierarchy credentials inherit.
+- `/extras/security-compliance` - platform-wide authentication and key handling.
+- `/resources/changelog` - the release entry introducing these endpoints.
+
+</Visibility>

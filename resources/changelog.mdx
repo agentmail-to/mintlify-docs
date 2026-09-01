@@ -1,0 +1,1074 @@
+---
+title: "Changelog and releases"
+description: "Latest AgentMail API and SDK updates."
+mode: "center"
+rss: true
+---
+
+<Visibility for="humans">
+
+Latest API and SDK updates, newest first. [Subscribe via RSS](/resources/changelog/rss.xml) · [Discord](https://discord.gg/hTYatWYWBc)
+
+<Update label="July 20, 2026" tags={["api-keys", "agentid", "new-feature", "sdk"]}>
+
+Build AgentID sign-in flows with a scoped P-256 credential while keeping private
+key material in your own keystore. The API reference now defines a dedicated
+public-key lifecycle for generated SDKs, and the new guide provides strict Python
+and TypeScript approval helpers.
+
+### What's new?
+
+**New endpoints:**
+
+- `POST /v0/api-keys/public-keys` - Register only a public P-256 JWK and receive the server-owned `api_key_id` used as `kid`
+- `GET /v0/api-keys/public-keys` - List public-key credentials without mixing in bearer credentials
+- `PATCH /v0/api-keys/public-keys/{api_key_id}` - Rename a credential without mutating security-relevant fields
+- `DELETE /v0/api-keys/public-keys/{api_key_id}` - Revoke one public-key credential
+- `POST /v0/api-keys/public-keys/agentid-sign-in/revoke-all` - Idempotently invalidate every current AgentID sign-in key in an organization
+
+**New AgentID endpoint** (served by the AgentID issuer, not part of the AgentMail REST API or generated SDKs; call it directly as shown in the guide):
+
+- `POST https://auth.agentid.com/authorize/approve` - Submit one strict ES256 approval assertion without a bearer credential
+
+**New features:**
+
+- **Scoped credentials**: Register organization-, pod-, or inbox-scoped keys with inherited scope and expiry defaults.
+- **Generated SDK contract**: Generate P-256 keys, register only public coordinates, pin the approval header and claims, and keep private keys below model context once corresponding SDK releases are published.
+
+### Use cases
+
+Build agents that:
+
+- Approve AgentID sign-in while the private key stays in a keystore or HSM
+- Delegate sign-in authority to one organization, pod, or inbox
+- Rotate credentials with a create-new, deploy-new, delete-old sequence
+- Fence every active AgentID sign-in key with an idempotent emergency operation
+
+<Note>
+  Follow the [AgentID public-key authentication guide](/advanced/agentid) for complete Python and TypeScript helpers, lifecycle rules, and the accepted browser-session intent limitation.
+</Note>
+
+</Update>
+
+<Update label="June 25, 2026" tags={["drafts-api", "messages-api", "new-feature"]}>
+
+Agents can now create reply, reply-all, and forward drafts directly from a message, instead of rebuilding the subject and threading (and, for replies, the recipients) by hand. The draft is saved rather than sent, so a human can review it before it goes out, then send it with `Send Draft`. This makes human-in-the-loop review and scheduled follow-ups a first-class part of the reply flow.
+
+### What's new?
+
+**Create Draft now builds replies and forwards.** Pass a source message to `inboxes.drafts.create` and AgentMail carries over the subject and threading (and, for replies, the recipients):
+- `in_reply_to` — create a draft replying to the sender. Add `reply_all` to address the whole thread.
+- `forward_of` — create a draft forwarding the message. Recipients stay caller-supplied.
+
+`in_reply_to` and `forward_of` are mutually exclusive, and reading the referenced message requires the `message_read` permission.
+
+**New features:**
+- **Replies**: recipients, subject, and threading (`in_reply_to` / `references`) are taken from the original message, so you only supply your note.
+- **Forwards**: the subject, threading, and forwarded body and attachments come from the source (the body and attachments are merged in at send time); recipients are caller-supplied and optional, so a forward draft can be saved now and addressed later.
+- **Composable**: pass `send_at` to schedule the draft, or review and send it later with `inboxes.drafts.send`.
+
+**Changes:**
+- Draft responses now include `forward_of`, the ID of the message a forward draft was created from.
+
+### Use cases
+
+Build agents that:
+- Draft a reply for human approval before anything leaves the inbox
+- Forward a flagged message to a teammate, then send once reviewed
+- Schedule a reply-all for the recipient's business hours
+- Prepare a response while still gathering data, and finalize it later
+
+<CodeGroup>
+
+```python Python
+from agentmail import AgentMail
+
+client = AgentMail(api_key="your-api-key")
+
+# create a reply draft from a received message
+draft = client.inboxes.drafts.create(
+    inbox_id="agent@agentmail.to",
+    in_reply_to="<message-id@agentmail.to>",
+    text="Thanks — looping in my manager for approval.",
+)
+
+# review, then send when ready
+client.inboxes.drafts.send(inbox_id="agent@agentmail.to", draft_id=draft.draft_id)
+```
+
+```typescript TypeScript
+import { AgentMailClient } from "agentmail";
+
+const client = new AgentMailClient({ apiKey: "your-api-key" });
+
+// create a reply draft from a received message
+const draft = await client.inboxes.drafts.create("agent@agentmail.to", {
+  inReplyTo: "<message-id@agentmail.to>",
+  text: "Thanks — looping in my manager for approval.",
+});
+
+// review, then send when ready
+await client.inboxes.drafts.send("agent@agentmail.to", draft.draftId);
+```
+
+</CodeGroup>
+
+<Note>
+  See the [Drafts guide](/core/send#schedule-an-email-with-a-draft) for the full reply and forward flow.
+</Note>
+
+</Update>
+
+<Update label="June 25, 2026" tags={["webhooks", "pods-api", "new-feature"]}>
+
+You can now create and manage webhooks scoped to a single pod or inbox from dedicated endpoints, instead of only filtering an organization-level webhook with `pod_ids` / `inbox_ids`. The scope comes from the path, so pod- and inbox-scoped API keys can manage just their own webhooks.
+
+### What's new?
+
+**New endpoints:**
+- `GET|POST /v0/pods/:pod_id/webhooks` and `GET|PATCH|DELETE /v0/pods/:pod_id/webhooks/:webhook_id` - Manage webhooks scoped to a pod.
+- `GET|POST /v0/inboxes/:inbox_id/webhooks` and `GET|PATCH|DELETE /v0/inboxes/:inbox_id/webhooks/:webhook_id` - Manage webhooks scoped to an inbox.
+
+**Behavior:**
+- A **pod-scoped** webhook receives events for the whole pod, and can be narrowed to specific inboxes in the pod with `inbox_ids`. You don't pass `pod_ids`; the pod is the path.
+- An **inbox-scoped** webhook is fixed to that inbox; only its `event_types` can be changed.
+- A scoped webhook must always keep at least one pod or inbox subscription.
+
+### Use cases
+
+Build agents that:
+- Give each tenant's pod-scoped API key its own webhook, isolated from other tenants
+- Register a webhook for a single high-volume inbox without touching org-wide delivery
+- Let an inbox-scoped key manage only its own event subscriptions
+
+<CodeGroup>
+
+```python Python
+from agentmail import AgentMail
+
+client = AgentMail(api_key="your-api-key")
+
+# webhook scoped to a single pod
+client.pods.webhooks.create(
+    pod_id="pod_abc123",
+    url="https://your-server.com/webhooks",
+    event_types=["message.received"],
+)
+```
+
+```typescript TypeScript
+import { AgentMailClient } from "agentmail";
+
+const client = new AgentMailClient({ apiKey: "your-api-key" });
+
+// webhook scoped to a single pod
+await client.pods.webhooks.create("pod_abc123", {
+  url: "https://your-server.com/webhooks",
+  eventTypes: ["message.received"],
+});
+```
+
+</CodeGroup>
+
+<Note>
+  See [Scoping a webhook to a pod or inbox](/advanced/webhooks#scope-a-webhook-to-a-pod-or-inbox) for details.
+</Note>
+
+</Update>
+
+<Update label="June 12, 2026" tags={["metrics-api", "new-feature"]}>
+
+You can now track cumulative usage over time. The new usage endpoint returns running totals of storage, messages, threads, inboxes, domains, and pods, for your whole organization, a single pod, or a single inbox. Event counts also move to a dedicated `/metrics/events` path, so the metrics API now cleanly separates "what happened" (events) from "what you have" (usage).
+
+### What's new?
+
+**New endpoints:**
+- `GET /v0/metrics/usage` - Cumulative usage series for the organization.
+- `GET /v0/pods/:pod_id/metrics/usage` - Cumulative usage series for a pod.
+- `GET /v0/inboxes/:inbox_id/metrics/usage` - Cumulative usage series for an inbox.
+- `GET /v0/metrics/events` (and pod/inbox variants) - The canonical path for event counts, replacing bare `GET /v0/metrics`.
+
+**New features:**
+- **Usage series**: Each point is the running total of a usage type at that timestamp, not the change within the bucket. An idle scope renders a flat line at its current level, so charts stay meaningful even with no activity in the window.
+- **Usage types**: `storage_bytes`, `message_count`, `thread_count`, `inbox_count`, `domain_count`, and `pod_count`. Filter with the `usage_types` query parameter, or omit it to get every type the scope carries. Inboxes carry the first three; pods add `inbox_count` and `domain_count`; organizations add `pod_count`.
+- **Bucketing**: `period` sets the bucket size in seconds. The range divided by `period` must not exceed 1000 buckets; narrow the range or coarsen the period for fine-grained series.
+
+**Changes:**
+- `GET /v0/metrics` (and its pod/inbox variants) is replaced by `/metrics/events`. The old path still responds, so existing clients keep working, but it's removed from the docs and SDKs; use `client.metrics.queryEvents()` in place of `client.metrics.query()`.
+- Metric queries now clamp a future `end` to the current time instead of returning phantom future points, and `period`/`limit` must be whole numbers.
+- The documented metric event types now match what the API accepts: added `message.received.spam`, `message.received.blocked`, `message.received.unauthenticated`, and `domain.verified`; removed `message.delayed`, which the API never accepted.
+
+### Use cases
+
+Build agents that:
+- Chart storage growth over time and archive old threads before hitting quota
+- Monitor message and thread volume per inbox to spot runaway automations
+- Verify cleanup actually happened by watching usage drop after bulk deletes
+- Compare pods by inbox and domain footprint to balance workloads
+
+<CodeGroup>
+
+```python Python
+from agentmail import AgentMail
+
+client = AgentMail(api_key="your-api-key")
+
+# storage growth for the last week, one point per hour
+usage = client.metrics.query_usage(
+    usage_types=["storage_bytes"],
+    start="2026-06-05T00:00:00Z",
+    period=3600,
+)
+
+for point in usage["storage_bytes"]:
+    print(point.timestamp, point.value)
+
+# usage for a single inbox (storage, messages, threads)
+inbox_usage = client.inboxes.metrics.query_usage(inbox_id="support@agentmail.to")
+
+# event counts now live at /metrics/events
+events = client.metrics.query_events(
+    event_types=["message.sent", "message.bounced"],
+    period=3600,
+)
+```
+
+```typescript TypeScript
+import { AgentMailClient } from "agentmail";
+
+const client = new AgentMailClient({ apiKey: "your-api-key" });
+
+// storage growth for the last week, one point per hour
+const usage = await client.metrics.queryUsage({
+  usageTypes: ["storage_bytes"],
+  start: "2026-06-05T00:00:00Z",
+  period: 3600,
+});
+
+for (const point of usage["storage_bytes"] ?? []) {
+  console.log(point.timestamp, point.value);
+}
+
+// usage for a single inbox (storage, messages, threads)
+const inboxUsage = await client.inboxes.metrics.queryUsage("support@agentmail.to");
+
+// event counts now live at /metrics/events
+const events = await client.metrics.queryEvents({
+  eventTypes: ["message.sent", "message.bounced"],
+  period: 3600,
+});
+```
+
+</CodeGroup>
+
+<Note>
+  Check out the [Metrics API reference](/advanced/plans-and-usage#measure-your-usage) for full parameter details.
+</Note>
+
+</Update>
+
+<Update label="June 8, 2026" tags={["domains-api", "inboxes-api", "new-feature"]}>
+
+You can now create inboxes on any subdomain of a verified domain without registering each subdomain separately. Enable `subdomains_enabled` on a domain, publish the single wildcard MX record it returns, and create inboxes on any subdomain on demand. Build agents that spin up addresses like `agent@bot.example.com` or `support@team1.example.com` the moment you need them.
+
+### What's new?
+
+**New features:**
+- **Subdomains**: Opt in per domain with `subdomains_enabled`. When enabled, the domain's verification records include a wildcard MX record (`*.<domain>`) to publish on the top-level domain. Once it is published and verified, inboxes can be created on any subdomain of that domain.
+
+**Changes:**
+- `POST /v0/domains` accepts an optional `subdomains_enabled` flag (defaults to `false`).
+- `PATCH /v0/domains/:domain_id` now accepts `subdomains_enabled` and applies partial updates: send at least one of `feedback_enabled` or `subdomains_enabled`, and omitted fields are left unchanged. Enabling subdomains on an already-verified domain returns it to `pending` until the new wildcard MX record is published; sending is not interrupted.
+- Domain responses now include the `subdomains_enabled` field.
+- Creating an inbox on a subdomain of a domain that does not have subdomains enabled returns a `422` error.
+
+### Use cases
+
+Build agents that:
+- Provision a dedicated inbox per customer or workspace under one verified domain (`support@acme.example.com`)
+- Separate agent traffic onto purpose-named subdomains (`billing.`, `outreach.`, `support.`) without registering each one
+- Stand up short-lived inboxes on fresh subdomains for one-off tasks, then tear them down
+- Keep all agent addresses under a single domain you verify and manage once
+
+<CodeGroup>
+
+```python Python
+from agentmail import AgentMail
+
+client = AgentMail(api_key="your-api-key")
+
+# Enable subdomains on a verified domain
+domain = client.domains.update("example.com", subdomains_enabled=True)
+
+# Publish the new wildcard MX record, then create inboxes on any subdomain
+inbox = client.inboxes.create(username="agent", domain="bot.example.com")
+print(inbox.inbox_id)  # agent@bot.example.com
+```
+
+```typescript TypeScript
+import { AgentMailClient } from "agentmail";
+
+const client = new AgentMailClient({ apiKey: "your-api-key" });
+
+// Enable subdomains on a verified domain
+const domain = await client.domains.update("example.com", { subdomainsEnabled: true });
+
+// Publish the new wildcard MX record, then create inboxes on any subdomain
+const inbox = await client.inboxes.create({ username: "agent", domain: "bot.example.com" });
+console.log(inbox.inboxId); // agent@bot.example.com
+```
+
+</CodeGroup>
+
+<Note>
+  Learn more in the [Setting Up Subdomains](/advanced/custom-domains#register-a-subdomain) guide.
+</Note>
+
+</Update>
+
+<Update label="June 3, 2026" tags={["messages-api", "threads-api", "new-feature"]}>
+
+You can now search messages and threads by keyword. Full-text search ranks results by relevance across the sender, recipients, subject, and message body, and works per-inbox or across your entire organization. List endpoints also gained substring filters, so you can narrow a list to a specific sender, recipient, or subject without paging through everything. Build agents that find the right conversation instead of scanning every thread.
+
+### What's new?
+
+**New endpoints:**
+- `GET /v0/inboxes/:inbox_id/messages/search` - Full-text search of messages in an inbox, ranked by relevance.
+- `GET /v0/threads/search` - Org-wide full-text search across threads in every inbox.
+- `GET /v0/inboxes/:inbox_id/threads/search` - Full-text search of threads in a single inbox.
+- `GET /v0/pods/:pod_id/threads/search` - Full-text search of threads in a pod.
+
+**New features:**
+- **Full-text search**: A `q` query matches against the sender, recipients, and subject (substring) and the message body (tokenized full text). Results are ordered by relevance. Spam, trash, blocked, and unauthenticated items are always excluded, and `limit` is capped at 100.
+- **Match highlights**: Each search result includes an optional `highlights` object with the matched fragments per field, with matched terms wrapped in `**`. A field appears only when it matched, so the present keys also tell you which fields produced the hit.
+
+**Changes:**
+- `GET /v0/inboxes/:inbox_id/messages` now accepts `from`, `to`, and `subject` substring filters. `to` matches the `to`, `cc`, or `bcc` fields.
+- `GET /v0/threads`, `GET /v0/inboxes/:inbox_id/threads`, and `GET /v0/pods/:pod_id/threads` now accept `senders`, `recipients`, and `subject` substring filters.
+- Filtered list requests are served by search and cap `limit` at 100; results keep the usual newest-first ordering.
+
+### Use cases
+
+Build agents that:
+- Pull up every thread mentioning an order number, invoice, or customer name across all of your inboxes
+- Find the conversation a reply belongs to by searching the subject or body, instead of paging through history
+- Narrow a list to a single sender or recipient before processing, using the new substring filters
+- Surface the matched snippet to a human reviewer using per-field `highlights`
+
+<CodeGroup>
+
+```python Python
+from agentmail import AgentMail
+
+client = AgentMail(api_key="your-api-key")
+
+# org-wide full-text search across every inbox
+results = client.threads.search(q="invoice overdue")
+
+for thread in results.threads:
+    print(thread.thread_id, thread.subject)
+    # highlights tells you which fields matched
+    if thread.highlights:
+        print(thread.highlights)
+
+# scope a search to one inbox's messages
+inbox_results = client.inboxes.messages.search(
+    inbox_id="support@agentmail.to",
+    q="refund requested",
+)
+
+# or just filter a list by subject, no relevance ranking
+filtered = client.inboxes.messages.list(
+    inbox_id="support@agentmail.to",
+    subject=["invoice"],
+)
+```
+
+```typescript TypeScript
+import { AgentMailClient } from "agentmail";
+
+const client = new AgentMailClient({ apiKey: "your-api-key" });
+
+// org-wide full-text search across every inbox
+const results = await client.threads.search({ q: "invoice overdue" });
+
+for (const thread of results.threads) {
+  console.log(thread.threadId, thread.subject);
+  // highlights tells you which fields matched
+  if (thread.highlights) console.log(thread.highlights);
+}
+
+// scope a search to one inbox's messages
+const inboxResults = await client.inboxes.messages.search("support@agentmail.to", {
+  q: "refund requested",
+});
+
+// or just filter a list by subject, no relevance ranking
+const filtered = await client.inboxes.messages.list("support@agentmail.to", {
+  subject: ["invoice"],
+});
+```
+
+</CodeGroup>
+
+<Note>
+  Learn more in the [Messages](/core/receive) and [Threads](/core/conversations) guides.
+</Note>
+
+</Update>
+
+<Update label="May 28, 2026" tags={["inboxes-api", "new-feature"]}>
+
+Inboxes now support custom `metadata`: your own key-value data attached to any inbox. Link an inbox to records in your own system, such as a tenant ID, user ID, or feature flags, and read it back on every inbox response. Build agents that carry your application's context wherever an inbox goes.
+
+### What's new?
+
+**New features:**
+- **Inbox metadata**: Attach custom key-value pairs to an inbox. Values may be a string, number, or boolean, with up to 256 keys per inbox.
+
+**Changes:**
+- The `Inbox` object now includes an optional `metadata` field, returned on get, list, and create responses.
+- `POST /v0/inboxes` accepts a `metadata` field to set metadata at creation time.
+- `PATCH /v0/inboxes/:inbox_id` accepts a `metadata` field. Updates merge into existing metadata: keys you include are added or overwritten, and keys you omit are preserved. Send a key with a null value to remove it, or set `metadata` to null to clear everything. Each update must include at least one of `display_name` or `metadata`.
+
+### Use cases
+
+Build agents that:
+- Tag each inbox with a tenant or customer ID so you can map inboxes back to your own data model
+- Store per-inbox feature flags or routing hints that your agent reads at runtime
+- Track lifecycle state, such as an onboarding step or campaign name, directly on the inbox
+- Filter and organize a large fleet of inboxes by the attributes that matter to your application
+
+<CodeGroup>
+
+```python Python
+from agentmail import AgentMail
+
+client = AgentMail(api_key="your-api-key")
+
+# attach metadata when creating an inbox
+inbox = client.inboxes.create(
+    username="support-agent",
+    metadata={"tenant_id": "acme", "tier": "pro", "active": True},
+)
+
+# merge in a change; omitted keys are preserved
+client.inboxes.update(
+    inbox_id=inbox.inbox_id,
+    metadata={"tier": "enterprise"},
+)
+```
+
+```typescript TypeScript
+import { AgentMailClient } from "agentmail";
+
+const client = new AgentMailClient({ apiKey: "your-api-key" });
+
+// attach metadata when creating an inbox
+const inbox = await client.inboxes.create({
+  username: "support-agent",
+  metadata: { tenant_id: "acme", tier: "pro", active: true },
+});
+
+// merge in a change; omitted keys are preserved
+await client.inboxes.update(inbox.inboxId, {
+  metadata: { tier: "enterprise" },
+});
+```
+
+</CodeGroup>
+
+<Note>
+  Learn more about attaching and updating inbox data in the [Inboxes metadata guide](/core/receive).
+</Note>
+
+</Update>
+
+<Update label="March 18, 2026" tags={["inboxes-api", "new-feature"]}>
+
+Inbox-scoped API keys let you generate credentials that are restricted to a single inbox. This gives agents and integrations the minimum access they need, reducing the blast radius if a key is compromised.
+
+### What's new?
+
+**New endpoints:**
+- `GET /v0/inboxes/:inbox_id/api-keys` - List all API keys scoped to an inbox
+- `POST /v0/inboxes/:inbox_id/api-keys` - Create an API key scoped to an inbox
+- `DELETE /v0/inboxes/:inbox_id/api-keys/:api_key` - Delete an inbox-scoped API key
+
+**Updated types:**
+- `ApiKey` and `CreateApiKeyResponse` now include an optional `inbox_id` field when the key is scoped to an inbox
+
+### Use cases
+
+Build agents that:
+- Operate with least-privilege access to a single inbox rather than an entire pod or organization
+- Issue short-lived, narrowly scoped keys to third-party integrations that only need access to one address
+- Rotate credentials per inbox without affecting other inboxes or pods
+
+<CodeGroup>
+```python Python
+from agentmail import AgentMail
+
+client = AgentMail(api_key="your-api-key")
+
+# create an api key scoped to a single inbox
+key = client.inboxes.api_keys.create(
+    inbox_id="user@example.com",
+    name="integration-key"
+)
+
+print(key.api_key)
+```
+
+```typescript TypeScript
+import { AgentMail } from "agentmail";
+
+const client = new AgentMail({ apiKey: "your-api-key" });
+
+// create an api key scoped to a single inbox
+const key = await client.inboxes.apiKeys.create("user@example.com", {
+  name: "integration-key",
+});
+
+console.log(key.apiKey);
+```
+</CodeGroup>
+
+<Note>
+  Learn more about API key scoping in the [API Keys reference](/advanced/multi-tenant).
+</Note>
+
+</Update>
+
+<Update label="December 22, 2025" tags={["webhooks", "new-feature", "sdk"]}>
+
+**Webhooks & Events** – receive email and domain events via HTTP callbacks. Subscribe to message lifecycle events (received, sent, delivered, bounced, complained, rejected) and domain verification. Use Svix headers for verification and filter by inbox or pod. Perfect for agents that need reliable, async notifications without keeping a WebSocket open.
+
+### What's new?
+
+**Webhook events:**
+- `message.received` - New inbound email
+- `message.sent` - Outbound message sent
+- `message.delivered` - Delivery confirmed
+- `message.bounced` - Bounce (with type and recipients)
+- `message.complained` - Spam complaint
+- `message.rejected` - Rejection (e.g. validation)
+- `domain.verified` - Domain verification succeeded
+
+**Delivery & verification:**
+- Svix-style headers: `svix-id`, `svix-signature`, `svix-timestamp` for verification
+- Filter by inbox or pod (up to 10 per webhook)
+- Payloads include inbox_id, thread_id, message_id, timestamps, and event-specific data
+
+### Use cases
+
+Build agents that:
+- React to new emails, bounces, and complaints via HTTP
+- Sync email state to your database or queue
+- Trigger workflows on domain verification
+- Verify webhook signatures for security
+
+<CodeGroup>
+```python Python
+from agentmail import AgentMail
+
+client = AgentMail(api_key="your-api-key")
+
+# in your webhook handler: verify signature and handle event
+# (use Svix or the raw headers for verification)
+def handle_webhook(request):
+    event_id = request.headers.get("svix-id")
+    signature = request.headers.get("svix-signature")
+    payload = request.json()
+    if payload.get("event_type") == "message.received":
+        message = payload.get("message")
+        # process new email
+    elif payload.get("event_type") == "domain.verified":
+        domain = payload.get("domain")
+        # domain is verified
+```
+
+```typescript TypeScript
+import { AgentMail } from "agentmail";
+
+const client = new AgentMail({ apiKey: "your-api-key" });
+
+// in your webhook handler: verify signature and handle event
+// (use Svix or the raw headers for verification)
+function handleWebhook(request: Request) {
+  const eventId = request.headers.get("svix-id");
+  const signature = request.headers.get("svix-signature");
+  const payload = request.json();
+  if (payload.event_type === "message.received") {
+    const message = payload.message;
+    // process new email
+  } else if (payload.event_type === "domain.verified") {
+    const domain = payload.domain;
+    // domain is verified
+  }
+}
+```
+</CodeGroup>
+
+<Note>
+  Set up and verify webhooks in our [Webhooks](/advanced/webhooks) documentation.
+</Note>
+
+</Update>
+
+<Update label="October 28, 2025" tags={["domains-api", "new-feature", "sdk", "custom-domains"]}>
+
+Introducing **Custom Domains** – add and verify your own domains for sending and receiving email. Use DNS verification (TXT, MX), export zone files for easy DNS setup, and control feedback (bounce and complaint) delivery. Perfect for agents that need to send from your brand's domain with full control over deliverability.
+
+### What's new?
+
+**New endpoints:**
+- `GET /domains` - List all domains
+- `GET /domains/{domain_id}` - Get domain details and verification records
+- `POST /domains` - Create (add) a domain
+- `DELETE /domains/{domain_id}` - Remove a domain
+- `GET /domains/{domain_id}/zone-file` - Download zone file for DNS setup
+- `POST /domains/{domain_id}/verify` - Trigger domain verification
+
+**Domain features:**
+- DNS verification with TXT and MX records
+- Verification status: NOT_STARTED, PENDING, VERIFYING, VERIFIED, FAILED, INVALID
+- Per-record status (MISSING, INVALID, VALID) for targeted fixes
+- Zone file export for quick import at your DNS provider
+- Optional feedback (bounce/complaint) delivery per domain
+
+### Use cases
+
+Build systems where:
+- Agents send from your verified custom domain
+- You manage DNS in one place and sync via zone file
+- Verification status drives onboarding or monitoring
+- Bounce and complaint handling is configured per domain
+
+<CodeGroup>
+```python Python
+from agentmail import AgentMail
+
+client = AgentMail(api_key="your-api-key")
+
+# create a domain
+domain = client.domains.create(
+    domain="mail.example.com",
+    feedback_enabled=True
+)
+
+# get verification records and status
+domain = client.domains.get(domain_id=domain.domain_id)
+for record in domain.records:
+    print(f"{record.type} {record.name}: {record.status}")
+
+# trigger verification after updating DNS
+client.domains.verify(domain_id=domain.domain_id)
+```
+
+```typescript TypeScript
+import { AgentMail } from "agentmail";
+
+const client = new AgentMail({ apiKey: "your-api-key" });
+
+// create a domain
+const domain = await client.domains.create({
+  domain: "mail.example.com",
+  feedbackEnabled: true,
+});
+
+// get verification records and status
+const domainDetails = await client.domains.get(domain.domainId);
+for (const record of domainDetails.records) {
+  console.log(`${record.type} ${record.name}: ${record.status}`);
+}
+
+// trigger verification after updating DNS
+await client.domains.verify(domain.domainId);
+```
+</CodeGroup>
+
+<Note>
+  Learn more in our [Custom Domains](/advanced/custom-domains) and [Managing Domains](/advanced/custom-domains#domain-settings) guides.
+</Note>
+
+</Update>
+
+<Update label="October 25, 2025" tags={["drafts-api", "new-feature", "sdk"]}>
+
+Introducing the **Drafts API** – compose and manage email drafts before sending. Create drafts, update them over time, schedule send times, and send when ready. Perfect for agents that need to build messages incrementally, support reply threading, or queue emails for later delivery.
+
+### What's new?
+
+**New endpoints:**
+- `GET /drafts` - List all drafts (with optional filters)
+- `GET /drafts/{draft_id}` - Get a draft
+- `POST /inboxes/{inbox_id}/drafts` - Create a draft in an inbox
+- `PATCH /inboxes/{inbox_id}/drafts/{draft_id}` - Update a draft
+- `POST /inboxes/{inbox_id}/drafts/{draft_id}/send` - Send a draft
+- `DELETE /inboxes/{inbox_id}/drafts/{draft_id}` - Delete a draft
+
+**Draft features:**
+- Compose with to, cc, bcc, subject, plain text, and HTML body
+- Reply threading via `in_reply_to` and `references`
+- Schedule send with `send_at` for delayed delivery
+- Attachments and labels
+- List and filter drafts by inbox, labels, or time range
+
+### Use cases
+
+Build agents that:
+- Compose multi-step replies before sending
+- Schedule follow-up emails for optimal delivery
+- Queue outbound messages and send in batches
+- Edit drafts based on new context or user feedback
+- Maintain proper email threads with `in_reply_to`
+
+<CodeGroup>
+```python Python
+from agentmail import AgentMail
+
+client = AgentMail(api_key="your-api-key")
+
+# create a draft in an inbox
+draft = client.inboxes.drafts.create(
+    inbox_id="support@example.com",
+    to=["user@example.com"],
+    subject="Re: Your request",
+    text="We're looking into it.",
+    in_reply_to="<message-id@example.com>"
+)
+
+# update the draft
+client.inboxes.drafts.update(
+    inbox_id="support@example.com",
+    draft_id=draft.draft_id,
+    text="We've resolved your request."
+)
+
+# send the draft
+client.inboxes.drafts.send(
+    inbox_id="support@example.com",
+    draft_id=draft.draft_id
+)
+```
+
+```typescript TypeScript
+import { AgentMail } from "agentmail";
+
+const client = new AgentMail({ apiKey: "your-api-key" });
+
+// create a draft in an inbox
+const draft = await client.inboxes.drafts.create("support@example.com", {
+  to: ["user@example.com"],
+  subject: "Re: Your request",
+  text: "We're looking into it.",
+  inReplyTo: "<message-id@example.com>",
+});
+
+// update the draft
+await client.inboxes.drafts.update(
+  "support@example.com",
+  draft.draftId,
+  { text: "We've resolved your request." }
+);
+
+// send the draft
+await client.inboxes.drafts.send("support@example.com", draft.draftId);
+```
+</CodeGroup>
+
+<Note>
+  Learn more about composing and sending in our [Drafts](/core/send#schedule-an-email-with-a-draft) documentation.
+</Note>
+
+</Update>
+
+<Update label="August 13, 2025" tags={["metrics-api", "new-feature", "sdk"]}>
+
+We're excited to introduce **Metrics Endpoints** - two new powerful endpoints that give you deep insights into your email deliverability and agent performance. Track critical events like bounces, deliveries, rejections, and complaints with detailed timestamps to build smarter, self-optimizing email agents.
+
+### What's new?
+
+**New endpoints:**
+- `GET /metrics` - Get comprehensive metrics across all your inboxes
+- `GET /inboxes/{inbox_id}/metrics` - Get metrics for a specific inbox
+
+**Metrics tracked:**
+- Delivery events: sent, delivered, bounced, rejected
+- Error tracking: complaints, spam reports
+- Time-series data with detailed timestamps
+
+### Use cases
+
+Build agents that:
+- Monitor their own bounce rates in real-time
+- Optimize send timing based on historical performance
+- Automatically adjust behavior based on deliverability metrics
+- Pause campaigns when performance drops below thresholds
+- Implement intelligent retry strategies for better inbox placement
+
+<Note>
+  Ready to build smarter agents? Check out our [Metrics API documentation](/advanced/plans-and-usage#measure-your-usage) to get started.
+</Note>
+
+</Update>
+
+<Update label="July 20, 2025" tags={["websockets", "new-feature", "sdk"]}>
+
+Introducing **WebSocket Streaming** - receive email events in real-time as they happen. Build reactive agents that respond instantly to new messages, deliveries, and bounces without polling. Perfect for building interactive, event-driven email experiences.
+
+### What's new?
+
+**WebSocket endpoint:**
+- `wss://ws.agentmail.to/v0` - Real-time event streaming
+
+**Events streamed:**
+- `message.received` - New inbound email detected
+- `message.sent` - Outbound email sent successfully
+- `message.delivered` - Delivery confirmed by recipient server
+- `message.bounced` - Bounce detected (permanent or temporary)
+- `message.complained` - Spam complaint received
+
+**Connection features:**
+- JWT-based authentication for secure connections
+- Automatic reconnection with exponential backoff
+- Event filtering by inbox for targeted subscriptions
+- Low-latency delivery (typically under 100ms)
+- Support for thousands of concurrent connections
+
+### Use cases
+
+Build agents that:
+- Respond to emails within seconds of receipt
+- Monitor deliverability in real-time across all inboxes
+- Trigger workflows instantly on specific events
+- Build interactive conversational email experiences
+- Scale to handle high-volume email operations
+- React to bounces and complaints immediately
+
+<CodeGroup>
+```python Python
+from agentmail import AgentMail
+
+client = AgentMail(api_key="your-api-key")
+
+# subscribe to events for an inbox
+async with client.websockets.subscribe(
+    inbox_id="support@example.com"
+) as ws:
+    async for event in ws:
+        if event.type == "message.received":
+            print(f"New email from: {event.data.from_}")
+            response = await generate_response(event.data.text)
+            await client.messages.reply(
+                message_id=event.data.message_id,
+                text=response
+            )
+```
+
+```typescript TypeScript
+import { AgentMail } from "agentmail";
+
+const client = new AgentMail({ apiKey: "your-api-key" });
+
+// subscribe to events for an inbox
+for await (const event of client.websockets.subscribe("support@example.com")) {
+  if (event.type === "message.received") {
+    console.log("New email from:", event.data.from);
+    const response = await generateResponse(event.data.text);
+    await client.messages.reply(event.data.messageId, response);
+  }
+}
+```
+</CodeGroup>
+
+<Note>
+  Get started with [WebSocket Streaming](/advanced/websockets) to build real-time email agents.
+</Note>
+
+</Update>
+
+<Update label="June 15, 2025" tags={["pods-api", "new-feature", "sdk", "collaboration"]}>
+
+Introducing **Pods** - team collaboration spaces for AgentMail. Share inboxes, domains, and resources across your organization while maintaining granular control. Perfect for teams building multi-agent email systems that need organized resource management.
+
+### What's new?
+
+**New endpoints:**
+- `POST /pods` - Create a new pod (team workspace)
+- `GET /pods` - List all pods in your organization
+- `GET /pods/{pod_id}` - Get pod details
+- `DELETE /pods/{pod_id}` - Delete a pod
+- `POST /pods/{pod_id}/inboxes` - Create inbox within a pod
+- `POST /pods/{pod_id}/domains` - Add custom domain to a pod
+- `GET /pods/{pod_id}/threads` - List threads within a pod
+- `GET /pods/{pod_id}/metrics` - Get metrics for a pod
+
+**Pod features:**
+- Shared inbox access across team members
+- Per-pod domain configuration
+- Isolated metrics and analytics per pod
+- Organized resource hierarchy
+
+### Use cases
+
+Build systems where:
+- Multiple agents share email infrastructure
+- Different teams manage their own inboxes independently
+- Resources are organized by department or project
+- Analytics are tracked per team workspace
+- Billing and usage can be attributed to specific teams
+
+<CodeGroup>
+```python Python
+from agentmail import AgentMail
+
+client = AgentMail(api_key="your-api-key")
+
+# create a pod for your sales team
+pod = client.pods.create(
+    name="Sales Team",
+    description="Shared resources for sales agents"
+)
+
+# create an inbox in the pod
+inbox = client.pods.inboxes.create(
+    pod_id=pod.pod_id,
+    inbox_id="sales@example.com"
+)
+
+# list all pods
+pods = client.pods.list()
+for pod in pods.pods:
+    print(f"Pod: {pod.name} ({len(pod.inbox_ids)} inboxes)")
+```
+
+```typescript TypeScript
+import { AgentMail } from "agentmail";
+
+const client = new AgentMail({ apiKey: "your-api-key" });
+
+// create a pod for your sales team
+const pod = await client.pods.create({
+  name: "Sales Team",
+  description: "Shared resources for sales agents",
+});
+
+// create an inbox in the pod
+await client.pods.inboxes.create(pod.podId, "sales@example.com");
+
+// list all pods
+const { pods } = await client.pods.list();
+for (const p of pods) {
+  console.log(`Pod: ${p.name} (${p.inboxIds?.length ?? 0} inboxes)`);
+}
+```
+</CodeGroup>
+
+<Note>
+  Learn more about organizing teams with [Pods](/advanced/multi-tenant) in our documentation.
+</Note>
+
+</Update>
+
+</Visibility>
+
+<Visibility for="agents">
+
+# Track AgentMail platform changes and their dates
+
+This page lists every AgentMail platform change with its release date, newest first. Use it to check whether a feature, endpoint, or behavior existed at a point in time, or to catch changes that replaced, renamed, or removed a surface you depend on.
+
+## 2026-07-20 AgentID public-key API credentials
+
+- Added `POST /v0/api-keys/public-keys` (register a public P-256 JWK, receive the server-owned `api_key_id` used as `kid`), `GET /v0/api-keys/public-keys`, `PATCH /v0/api-keys/public-keys/{api_key_id}` (rename only), `DELETE /v0/api-keys/public-keys/{api_key_id}`, and `POST /v0/api-keys/public-keys/agentid-sign-in/revoke-all` (idempotently invalidates every current AgentID sign-in key in an organization).
+- Added `POST https://auth.agentid.com/authorize/approve` on the AgentID issuer for one strict ES256 approval assertion without a bearer credential. Served by the AgentID issuer, not part of the AgentMail REST API or generated SDKs.
+- Public-key credentials can be organization-, pod-, or inbox-scoped with inherited scope and expiry defaults. Private key material stays in your own keystore.
+
+## 2026-06-25 Reply and forward drafts
+
+- `inboxes.drafts.create` accepts `in_reply_to` (reply to the sender, add `reply_all` to address the whole thread) and `forward_of` (forward the message, recipients caller-supplied). The two parameters are mutually exclusive, and reading the referenced message requires the `message_read` permission.
+- Replies carry over recipients, subject, and threading (`in_reply_to` / `references`) from the original. Forwards carry over subject, threading, and the forwarded body and attachments (merged in at send time), with recipients optional so the draft can be addressed later.
+- Draft responses now include `forward_of`, the ID of the message a forward draft was created from. Combine with `send_at` to schedule, or send later with `inboxes.drafts.send`.
+
+## 2026-06-25 Pod- and inbox-scoped webhooks
+
+- Added `GET|POST /v0/pods/:pod_id/webhooks`, `GET|PATCH|DELETE /v0/pods/:pod_id/webhooks/:webhook_id`, `GET|POST /v0/inboxes/:inbox_id/webhooks`, and `GET|PATCH|DELETE /v0/inboxes/:inbox_id/webhooks/:webhook_id`. Scope comes from the path, so pod- and inbox-scoped API keys can manage their own webhooks.
+- A pod-scoped webhook receives events for the whole pod and can be narrowed with `inbox_ids`. `pod_ids` is not passed. An inbox-scoped webhook is fixed to that inbox, only its `event_types` can be changed.
+- A scoped webhook must always keep at least one pod or inbox subscription.
+
+## 2026-06-12 Usage metrics and the events path
+
+- Added `GET /v0/metrics/usage`, `GET /v0/pods/:pod_id/metrics/usage`, and `GET /v0/inboxes/:inbox_id/metrics/usage`. Each point is the running total at that timestamp. Usage types: `storage_bytes`, `message_count`, `thread_count`, `inbox_count`, `domain_count`, `pod_count` (inboxes carry the first three, pods add `inbox_count` and `domain_count`, organizations add `pod_count`). Filter with `usage_types`. Range divided by `period` (bucket size in seconds) must not exceed 1000 buckets.
+- Event counts moved to `GET /v0/metrics/events` (and pod/inbox variants), replacing bare `GET /v0/metrics`. The old path still responds but is removed from docs and SDKs. Use `client.metrics.queryEvents()` in place of `client.metrics.query()`.
+- Documented event types now match the API: added `message.received.spam`, `message.received.blocked`, `message.received.unauthenticated`, `domain.verified`. Removed `message.delayed`, which the API never accepted. A future `end` clamps to the current time, and `period`/`limit` must be whole numbers.
+
+## 2026-06-08 Subdomains on verified domains
+
+- `POST /v0/domains` accepts optional `subdomains_enabled` (defaults to `false`). When enabled, verification records include a wildcard MX record (`*.<domain>`) to publish on the top-level domain. Once verified, inboxes can be created on any subdomain of that domain.
+- `PATCH /v0/domains/:domain_id` accepts `subdomains_enabled` with partial updates: send at least one of `feedback_enabled` or `subdomains_enabled`, omitted fields are unchanged. Enabling on an already-verified domain returns it to `pending` until the wildcard MX record is published. Sending is not interrupted. Domain responses now include `subdomains_enabled`.
+- Creating an inbox on a subdomain of a domain without subdomains enabled returns a `422` error.
+
+## 2026-06-03 Full-text search for messages and threads
+
+- Added `GET /v0/inboxes/:inbox_id/messages/search`, `GET /v0/threads/search` (org-wide), `GET /v0/inboxes/:inbox_id/threads/search`, and `GET /v0/pods/:pod_id/threads/search`. A `q` query matches sender, recipients, and subject (substring) and the message body (tokenized full text), ranked by relevance. Spam, trash, blocked, and unauthenticated items are always excluded. `limit` is capped at 100.
+- Each search result includes an optional `highlights` object with matched fragments per field, matched terms wrapped in `**`. A field appears only when it matched.
+- `GET /v0/inboxes/:inbox_id/messages` now accepts `from`, `to`, `subject` substring filters (`to` matches `to`, `cc`, or `bcc`). `GET /v0/threads`, `GET /v0/inboxes/:inbox_id/threads`, and `GET /v0/pods/:pod_id/threads` accept `senders`, `recipients`, `subject`. Filtered list requests are served by search, cap `limit` at 100, and keep newest-first ordering.
+
+## 2026-05-28 Inbox metadata
+
+- Inboxes support custom `metadata` key-value pairs. Values may be a string, number, or boolean, with up to 256 keys per inbox. The `Inbox` object includes an optional `metadata` field on get, list, and create responses.
+- `POST /v0/inboxes` accepts `metadata` at creation. `PATCH /v0/inboxes/:inbox_id` merges `metadata`: included keys are added or overwritten, omitted keys are preserved, a key with a null value is removed, and `metadata` set to null clears everything.
+- Each `PATCH /v0/inboxes/:inbox_id` update must include at least one of `display_name` or `metadata`.
+
+## 2026-03-18 Inbox-scoped API keys
+
+- Added `GET /v0/inboxes/:inbox_id/api-keys`, `POST /v0/inboxes/:inbox_id/api-keys`, and `DELETE /v0/inboxes/:inbox_id/api-keys/:api_key` for credentials restricted to a single inbox.
+- `ApiKey` and `CreateApiKeyResponse` now include an optional `inbox_id` field when the key is scoped to an inbox.
+
+## 2025-12-22 Webhooks and events
+
+- Webhooks launched: HTTP callbacks for `message.received`, `message.sent`, `message.delivered`, `message.bounced` (with type and recipients), `message.complained`, `message.rejected`, and `domain.verified`.
+- Verification via Svix-style headers `svix-id`, `svix-signature`, `svix-timestamp`. Filter by inbox or pod, up to 10 per webhook.
+- Payloads include `inbox_id`, `thread_id`, `message_id`, timestamps, and event-specific data.
+
+## 2025-10-28 Custom domains
+
+- Added `GET /domains`, `GET /domains/{domain_id}`, `POST /domains`, `DELETE /domains/{domain_id}`, `GET /domains/{domain_id}/zone-file`, and `POST /domains/{domain_id}/verify`.
+- DNS verification with TXT and MX records. Verification statuses: `NOT_STARTED`, `PENDING`, `VERIFYING`, `VERIFIED`, `FAILED`, `INVALID`. Per-record statuses: `MISSING`, `INVALID`, `VALID`.
+- Zone file export for DNS import, plus optional per-domain feedback (bounce and complaint) delivery via `feedback_enabled`.
+
+## 2025-10-25 Drafts API
+
+- Added `GET /drafts`, `GET /drafts/{draft_id}`, `POST /inboxes/{inbox_id}/drafts`, `PATCH /inboxes/{inbox_id}/drafts/{draft_id}`, `POST /inboxes/{inbox_id}/drafts/{draft_id}/send`, and `DELETE /inboxes/{inbox_id}/drafts/{draft_id}`.
+- Compose with `to`, `cc`, `bcc`, `subject`, plain text, HTML body, attachments, and labels. Reply threading via `in_reply_to` and `references`. Scheduled send via `send_at`.
+- List and filter drafts by inbox, labels, or time range.
+
+## 2025-08-13 Metrics endpoints
+
+- Added `GET /metrics` (all inboxes) and `GET /inboxes/{inbox_id}/metrics` (single inbox).
+- Tracks delivery events (sent, delivered, bounced, rejected) and error events (complaints, spam reports) as time-series data with timestamps.
+
+## 2025-07-20 WebSocket streaming
+
+- Added `wss://ws.agentmail.to/v0` for real-time event streaming: `message.received`, `message.sent`, `message.delivered`, `message.bounced`, `message.complained`.
+- JWT-based authentication, event filtering by inbox, automatic reconnection with exponential backoff, typical latency under 100ms.
+
+## 2025-06-15 Pods
+
+- Added `POST /pods`, `GET /pods`, `GET /pods/{pod_id}`, `DELETE /pods/{pod_id}`, `POST /pods/{pod_id}/inboxes`, `POST /pods/{pod_id}/domains`, `GET /pods/{pod_id}/threads`, and `GET /pods/{pod_id}/metrics`.
+- Team workspaces with shared inbox access, per-pod domain configuration, and isolated per-pod metrics.
+
+## Related
+
+- `/core/send` - drafts, reply and forward flow, scheduled send
+- `/core/receive` - messages, list filters, inbox metadata
+- `/core/conversations` - threads and thread search
+- `/advanced/webhooks` - webhook setup, verification, and scoping
+- `/advanced/websockets` - WebSocket streaming
+- `/advanced/custom-domains` - domain verification and subdomains
+- `/advanced/plans-and-usage` - metrics and usage measurement
+- `/advanced/multi-tenant` - pods and API key scoping
+
+</Visibility>

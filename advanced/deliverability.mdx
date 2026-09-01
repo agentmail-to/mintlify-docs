@@ -1,0 +1,217 @@
+---
+title: "Deliverability and warmup"
+description: "What AgentMail handles automatically, the warmup schedule for a new domain, and the bounce and complaint thresholds that keep your mail in the inbox."
+---
+
+<Visibility for="humans">
+
+
+<img src="/images/banners/advanced-deliverability.svg" alt="" noZoom />
+
+## What AgentMail handles for you
+
+### Domain Authentication
+Before showing your mail to anyone, receiving providers like Gmail, Outlook, and Yahoo check that it really came from the domain in its `From` address. Three DNS-published checks carry that proof, and AgentMail sets up all three.
+
+On shared `@agentmail.to` addresses its records already pass, so there is nothing to configure. On a [custom domain](/advanced/custom-domains), you publish the records AgentMail generates at registration:
+
+- **SPF** lists the servers allowed to send for the domain, and receivers check the delivering server against it. A domain can hold only one SPF record, so merge AgentMail's mechanism into an existing record instead of adding a second one.
+- **DKIM** signs every outgoing message. AgentMail holds the private signing key for your domain, and receivers verify the signature against the public key you publish. A valid signature proves the mail came from your domain and was not altered in transit.
+- **DMARC** tells receivers what to do with mail that claims your domain but fails authentication. AgentMail's record uses `p=reject`, the strictest policy, which blocks spoofing of your domain and earns receiver trust. [Customize DMARC policy](/advanced/custom-domains#customize-dmarc-policy) shows how to soften it.
+
+### Suppression
+If you send an email to an address that hard bounces, files a spam complaint, or unsubscribes, that email address is blocked from future sends automatically.
+
+Sends to it fail with a `403` `message_rejected`, the entry is read-only, and only support can remove it. Do not reintroduce a suppressed address through another list. [Control who can email your agent](/core/inbound-control) shows how these entries appear when you list them.
+
+### Content Spam Screening
+Outbound content is scored for spam patterns. A message classified as spam can be rejected with a `403` `message_rejected` that names the reason, and content that passes keeps sending normally.
+
+### Warning and Suspension
+We send you a warning email if in the last 1,000 sends in the trailing 24 hours, we notice a 10 percent bounce rate or a 0.5 percent complaint rate.
+
+We send you a suspension notice if there's a 20 percent bounce rate or a 1 percent complaint rate.
+
+This ensures safe IP reputation for all customers. You can appeal by writing [support@agentmail.cc](mailto:support@agentmail.cc) to get reinstated.
+
+We recommend following a warmup ramp before cold sending from a new domain.
+
+## Recommended warmup ramp
+
+Mailbox providers track sender reputation per domain, and a brand-new domain has none. Send thousands of emails on day one and providers flag the domain as suspicious and route your mail to spam. Warming up means increasing volume gradually, which signals a legitimate sender with engaged recipients:
+
+| Day | Daily volume | What to send |
+| --- | --- | --- |
+| 1 to 3 | 10 to 20 | Your most engaged recipients, the people likely to open and reply |
+| 4 to 7 | 50 to 100 | Known, verified addresses |
+| 8 to 14 | 200 to 500 | A broader audience. Watch bounce rates closely |
+| 15 to 21 | 500 to 1,000 | Keep scaling. Watch for spam complaints |
+| 22 to 30 | 1,000 to 5,000 | Approaching full volume |
+| 30+ | Full volume | Maintain healthy engagement metrics |
+
+Treat each stage as a checkpoint, not a schedule to race through:
+
+- Hold volume until the current stage's bounce and complaint numbers come back healthy, then make the next increase. Never use a new domain to absorb a sudden full-volume campaign.
+- Send only to validated addresses during warmup, never to purchased or scraped lists. Those lists bounce heavily at exactly the moment the domain can least afford it.
+- Let your agent answer inbound mail first when possible. Replies build reputation faster than cold sends because they demonstrate two-way engagement.
+
+On the Free plan, AgentMail adds a recipient ramp of its own on top of this schedule: an organization can email at most 5 distinct recipients in its first 24 hours and 10 distinct recipients, cumulative, in its first week. Senders who emailed you first are exempt. [Plans and usage](/advanced/plans-and-usage) has the full entitlement list.
+
+## Monitoring bounce and complaint rates
+
+Two rates, tracked through every phase of the ramp, decide whether the next increase is safe:
+
+| Metric | Healthy range | If it moves outside |
+| --- | --- | --- |
+| Bounce rate | Under 2% | Pause and clean the recipient list |
+| Spam complaint rate | Under 0.1% | Reduce volume and review the content |
+
+If the bounce rate passes 5 percent or spam complaints spike at any stage, slow down immediately. Sending at high volume through bad metrics damages the domain's reputation. AgentMail watches the same signals: across at least 50 recent sends, a bounce rate above 10 percent flags the account for review, and so does nearly every message going to a different address, which reads as a cold blast.
+
+For the rates themselves, query the metrics endpoint. It returns event counts per time bucket, so your agent can compute the bounce rate over any window and gate the next ramp increase on it. Every parameter is optional:
+
+<CodeGroup>
+
+```bash API
+curl "https://api.agentmail.to/v0/metrics/events?event_types=message.sent&event_types=message.bounced&period=86400" \
+  -H "Authorization: Bearer $AGENTMAIL_API_KEY"
+```
+
+```typescript TypeScript
+const events = await client.metrics.queryEvents({
+  eventTypes: ["message.sent", "message.bounced"],
+  start: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
+  period: 86400,
+});
+
+const count = (type: string) =>
+  (events[type] ?? []).reduce((sum, bucket) => sum + bucket.count, 0);
+console.log(`bounce rate: ${(100 * count("message.bounced")) / Math.max(count("message.sent"), 1)}%`);
+```
+
+```python Python
+from datetime import datetime, timedelta, timezone
+
+events = client.metrics.query_events(
+    event_types=["message.sent", "message.bounced"],
+    start=datetime.now(timezone.utc) - timedelta(days=7),
+    period=86400,
+)
+
+sent = sum(bucket.count for bucket in events.get("message.sent", []))
+bounced = sum(bucket.count for bucket in events.get("message.bounced", []))
+print(f"bounce rate: {bounced / max(sent, 1):.2%}")
+```
+
+</CodeGroup>
+
+An event type with no events in the window comes back as an empty array, so the rate math works from day one. The same counters are charted on the Metrics page in the [AgentMail Console](https://console.agentmail.to).
+
+For placement at Gmail specifically, use [Google Postmaster Tools](https://postmaster.google.com). It shows your domain's reputation and spam rate as Gmail measures them.
+
+## Deliverability best practices
+
+- **Build reputation on domains you own.** The shared `@agentmail.to` domain is fine for testing, but its sending reputation is shared across every AgentMail user. Move production traffic to your own verified domain, and split outreach across [separately registered subdomains](/advanced/custom-domains#scale-across-multiple-domains) like `mail.example.com` and `outreach.example.com`, each warmed on its own, so a damaged reputation can be cycled out without touching the others.
+- **Keep the first touch personal and plain.** The first message to a new contact shapes how providers score the rest of the conversation:
+  - Open with a short plain-text message focused on one reason to reply, personalized with the recipient's name and the data points you have. Generic mass blasts are a red flag for spam filters.
+  - Avoid trigger words like "free", "buy now", and "urgent", along with all-caps subjects and stacked exclamation marks.
+  - Keep images out of the body and leave open tracking off, because open tracking works by embedding a tiny image.
+  - Hold links back until the recipient replies, then send the call-to-action link. URL shorteners hurt at any stage.
+  - Reserve HTML for when its formatting helps the recipient, such as a receipt, and pair it with a meaningful plain-text version.
+- **Spread volume across inboxes and domains.** Ten emails each from 10 inboxes on a domain warm it faster and look more natural to providers than 100 emails from one inbox. Inboxes are cheap to create programmatically, so round-robin outreach across a pool of them, and split high volume across several domains the same way.
+- **Use a warmup service before cold outreach.** Platforms like Instantly and Smartlead build a new inbox's reputation by exchanging mail with a network of real inboxes before your first cold send. Transactional mail and replies to inbound messages do not need this. Connect the inbox over [IMAP and SMTP](/core/imap-smtp) with the standard server settings, and keep warmup and live outreach in separate inboxes so warmup traffic stays out of campaign results.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Build a multi-tenant platform" icon="building" href="/advanced/multi-tenant">
+    Give every customer their own pod, domain, and scoped key.
+  </Card>
+  <Card title="Deliverability fundamentals" icon="book" href="/extras/deliverability-fundamentals">
+    How authentication, reputation, and recipient feedback interact behind these practices.
+  </Card>
+</CardGroup>
+
+</Visibility>
+
+<Visibility for="agents">
+
+# Keep agent mail out of spam
+
+AgentMail authenticates your sending domain, suppresses addresses that bounce or complain, screens outbound content, and monitors bounce and complaint rates automatically. Use the warmup ramp and the metrics endpoint when sending from a new domain or scaling cold outreach.
+
+## Do this
+
+Compute the bounce rate over a window and gate each ramp increase on it. Every parameter of the metrics endpoint is optional:
+
+```bash
+curl "https://api.agentmail.to/v0/metrics/events?event_types=message.sent&event_types=message.bounced&period=86400" \
+  -H "Authorization: Bearer $AGENTMAIL_API_KEY"
+```
+
+The response holds event counts per time bucket for each requested event type. Divide total `message.bounced` count by total `message.sent` count. Hold volume at the current warmup stage until the bounce rate is under 2 percent and the complaint rate is under 0.1 percent, then make the next increase.
+
+## SDK
+
+Install: `npm install agentmail` (TypeScript), `pip install agentmail` (Python).
+
+- Query event counts: `client.metrics.queryEvents({ eventTypes, start, period })` (TypeScript), `client.metrics.query_events(event_types=..., start=..., period=...)` (Python).
+
+Full reference: [/integrations/sdks-and-cli](/integrations/sdks-and-cli).
+
+## Facts
+
+- AgentMail sets up SPF, DKIM, and DMARC. Shared `@agentmail.to` addresses already pass with nothing to configure. A custom domain publishes the records AgentMail generates at registration.
+- A domain can hold only one SPF record. Merge AgentMail's mechanism into an existing SPF record instead of adding a second one.
+- AgentMail holds the private DKIM signing key for a custom domain. Receivers verify signatures against the public key published in DNS.
+- AgentMail's DMARC record uses `p=reject`, the strictest policy.
+- An address that hard bounces, files a spam complaint, or unsubscribes is suppressed automatically. Sends to it fail with `403` `message_rejected`. The suppression entry is read-only and only support can remove it.
+- Outbound content is scored for spam patterns. A message classified as spam can be rejected with `403` `message_rejected` that names the reason.
+- Warning email threshold: a 10 percent bounce rate or a 0.5 percent complaint rate in the last 1,000 sends in the trailing 24 hours.
+- Suspension threshold: a 20 percent bounce rate or a 1 percent complaint rate. Appeal by writing support@agentmail.cc.
+- Warmup ramp for a new domain: days 1 to 3 send 10 to 20 daily to the most engaged recipients, days 4 to 7 send 50 to 100 to known verified addresses, days 8 to 14 send 200 to 500 while watching bounce rates, days 15 to 21 send 500 to 1,000 while watching complaints, days 22 to 30 send 1,000 to 5,000, day 30 onward full volume.
+- Each warmup stage is a checkpoint. Hold volume until the stage's bounce and complaint numbers come back healthy before increasing. Send only to validated addresses during warmup.
+- Healthy bounce rate: under 2 percent. Outside it, pause and clean the recipient list.
+- Healthy spam complaint rate: under 0.1 percent. Outside it, reduce volume and review the content.
+- A bounce rate past 5 percent or a spam complaint spike at any stage means slow down immediately.
+- AgentMail flags an account for review when, across at least 50 recent sends, the bounce rate exceeds 10 percent, or when nearly every message goes to a different address, which reads as a cold blast.
+- Free plan recipient ramp: an organization can email at most 5 distinct recipients in its first 24 hours and 10 distinct recipients, cumulative, in its first week. Senders who emailed the organization first are exempt.
+- `GET /v0/metrics/events` returns event counts per time bucket. An event type with no events in the window comes back as an empty array.
+- The same counters are charted on the Metrics page in the AgentMail Console at console.agentmail.to. Google Postmaster Tools at postmaster.google.com shows Gmail's own reputation and spam-rate measurements for a domain.
+- Replies to inbound mail build reputation faster than cold sends because they demonstrate two-way engagement.
+- Ten emails each from 10 inboxes on a domain warm it faster than 100 emails from one inbox. Split high volume across separately registered subdomains, each warmed on its own, so a damaged reputation can be cycled out.
+- First-touch content guidance: short plain text, one reason to reply, personalized. Avoid trigger words like "free", "buy now", and "urgent", all-caps subjects, and stacked exclamation marks. Keep images and open tracking out (open tracking embeds a tiny image). Hold links until the recipient replies and never use URL shorteners.
+- Warmup services such as Instantly and Smartlead connect over IMAP and SMTP with the standard server settings. Keep warmup and live outreach in separate inboxes. Transactional mail and replies to inbound messages do not need a warmup service.
+
+## Not supported
+
+- There is no API call to remove an automatic suppression entry. The entry is read-only and only support can remove it.
+- Do not reintroduce a suppressed address through another list.
+- The shared `@agentmail.to` domain is not a foundation for production sending. Its reputation is shared across every AgentMail user.
+- Never use a new domain to absorb a sudden full-volume campaign, and never send to purchased or scraped lists during warmup.
+
+## Errors
+
+| Error | HTTP | Cause | Fix |
+| --- | --- | --- | --- |
+| `message_rejected` | 403 | The recipient is suppressed after a hard bounce, spam complaint, or unsubscribe. | The entry is read-only. Correct the cause, and email support@agentmail.cc if the entry genuinely needs review. |
+| `message_rejected` | 403 | Outbound content was classified as spam. The message names the reason. | Revise the content and resend. |
+
+## Verify
+
+```bash
+curl "https://api.agentmail.to/v0/metrics/events?event_types=message.sent&event_types=message.bounced&period=86400" \
+  -H "Authorization: Bearer $AGENTMAIL_API_KEY"
+```
+
+Success returns per-bucket counts for each requested event type, with an empty array for a type that has no events in the window, so rate math works from day one.
+
+## Related
+
+- [/extras/deliverability-fundamentals](/extras/deliverability-fundamentals) - how authentication, reputation, and recipient feedback interact behind these practices.
+- [/advanced/multi-tenant](/advanced/multi-tenant) - give every customer their own pod, domain, and scoped key.
+- [/advanced/custom-domains](/advanced/custom-domains) - register your own domain, customize DMARC policy, scale across multiple domains.
+- [/advanced/plans-and-usage](/advanced/plans-and-usage) - full entitlement list including the Free plan recipient ramp.
+- [/core/imap-smtp](/core/imap-smtp) - server settings for connecting warmup services.
+
+</Visibility>

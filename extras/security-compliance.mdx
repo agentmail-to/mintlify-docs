@@ -1,0 +1,311 @@
+---
+title: "Security and compliance"
+description: "AgentMail's SOC 2 compliance, email authentication, and spam and virus protection."
+icon: "shield-check"
+---
+
+<Visibility for="humans">
+
+How AgentMail protects your data and your mail: SOC 2 Type I and Type II compliance, the email authentication protocols behind every domain, and the automatic scanning applied to every inbound message. For procurement, legal, or security-review requests, see [Requesting documents](#requesting-documents) at the end of this page.
+
+## SOC 2 compliance
+
+> AgentMail has achieved **SOC 2 Type I** (July 2025) and **Type II** (Q1 2026) compliance.
+
+### Current status
+
+<CardGroup cols={2}>
+  <Card title="Type I Achieved" icon="circle-check">
+    **Completed July 2025** - Controls properly designed and in place
+  </Card>
+  <Card title="Type II Achieved" icon="circle-check">
+    **Completed Q1 2026** - Operational effectiveness validated over time
+  </Card>
+</CardGroup>
+
+| Phase | Period | Status |
+|-------|--------|--------|
+| **Type I Preparation** | June 2025 | Completed |
+| **Type I Assessment** | July 2025 | Completed |
+| **Type II Observation Period** | Aug 2025 - Dec 2025 | Completed |
+| **Type II Certification** | Q1 2026 | Completed |
+
+### What is SOC 2?
+
+**SOC 2** is an attestation standard by **AICPA** (The American Institute of Certified Public Accountants) evaluating controls over:
+
+1. **Security** - Protection against unauthorized access, both physical and logical
+2. **Availability** - System accessibility and operational performance as committed
+3. **Processing Integrity** - System processing is complete, valid, accurate, timely, and authorized
+4. **Confidentiality** - Information designated as confidential is protected
+5. **Privacy** - Personal information is collected, used, retained, disclosed, and disposed per privacy commitments
+
+There are two report types:
+
+- **Type I**: Verifies that security controls are properly **designed** at a point in time.
+- **Type II**: Validates that controls **operate effectively** over a period (typically 6–12 months).
+
+<Check>
+  AgentMail's SOC 2 Type I and Type II reports confirm that our security infrastructure is properly designed, implemented, and operates effectively over time.
+</Check>
+
+### Security controls implemented
+
+The following controls have been audited and verified as part of our SOC 2 Type I & Type II compliance:
+
+**Access control**
+
+- Role-based access; **least privilege** enforced
+- **MFA** (Multi-Factor Authentication) for administrative access and sensitive operations
+- Quarterly access reviews and revocation upon role change
+
+**Encryption & key management**
+
+- **TLS 1.2+** for all service/API communications
+- Data at rest encrypted using industry-standard ciphers
+- Centralized **KMS** (Key Management Service) for key generation, rotation, and revocation
+- **Encrypted point-in-time backups** with 30-day retention
+
+See [Security Overview](https://agentmail.to/security) for more details.
+
+**Email authentication & anti-abuse**
+
+- **SPF, DKIM, DMARC** configured across all sending domains
+- Real-time scanning of inbound/outbound messages for malware/phishing
+- IP-based **rate limiting** and behavioral abuse detection
+
+See [Email authentication](#email-authentication-spf-dkim-dmarc) below for technical details.
+
+**Monitoring & incident response**
+
+- Centralized logging and anomaly detection with alerting
+- Documented incident response process: detect → triage → contain → eradicate → recover → post-incident review
+- Responsible disclosure channel for external security researchers
+
+**Resilience, backup & recovery**
+
+- Daily encrypted backups with **30-day retention**
+- Regular **restore tests** to validate RTO/RPO targets
+- Multi-AZ/high-availability architecture for critical components
+
+### SOC 2 control mapping
+
+| Control Area | Implementation | SOC 2 Criteria |
+| --- | --- | --- |
+| Access Control | RBAC, MFA, quarterly reviews | CC6.1–CC6.7 |
+| Encryption & KMS | TLS 1.2+, at-rest encryption, key rotation | CC6.8–CC6.9 |
+| Email Authentication | SPF/DKIM/DMARC, anti-abuse filters | CC7.1–CC7.4 |
+| Threat Monitoring | Centralized logs, alerts, malware scanning | CC7.2–CC7.4 |
+| Backup & Recovery | Daily backups, 30-day retention, restore tests | CC7.3 |
+| Incident Response | Runbooks, post-mortems, disclosure program | CC7.4–CC7.5 |
+| Workforce Security | Security training, NDAs, background checks | CC5.3–CC5.4 |
+
+> The above mappings reflect our audited Type I and Type II controls.
+
+### Type II certification
+
+AgentMail completed the **Type II observation period** (August 2025 - December 2025) and received full **SOC 2 Type II certification** in Q1 2026 from an independent CPA firm.
+
+What was validated:
+
+- **Continuous Operation**: Controls functioned consistently without gaps
+- **Change Management**: Security maintained through system updates and changes
+- **Evidence Collection**: Logs, tickets, training records, access reviews
+- **Incident Handling**: Real-world response to security events
+
+SOC 2 Type II certification provides the highest level of assurance that AgentMail's security controls are not only well-designed but also operate effectively over time.
+
+## Email authentication (SPF, DKIM, DMARC)
+
+When you add a custom domain to AgentMail, we ask you to add several records to your DNS settings. We understand that this can seem daunting, and we want to be completely transparent about what these records are and why they are necessary.
+
+In short, by adding these records, you are giving AgentMail **permission** to do two things:
+
+1. **Send emails on your behalf** that are trusted and pass spam filters.
+2. **Receive emails for you** so your agents can process them.
+
+This process is standard practice for any third-party email service, and it does **not** give us control over your website or any other part of your domain. Let's break down what each piece does.
+
+To prevent spam and phishing, the modern email ecosystem relies on these three core technologies. Our goal is to handle all the complexity of these protocols for you. Your DNS records are simply the way you tell the world that you've authorized us to do so.
+
+### SPF: Sender Policy Framework
+
+- **What it is:** Think of SPF as a public list of all the servers that are allowed to send email for your domain.
+- **How it works:** You add a `TXT` record to your DNS that lists the approved IP addresses or domains. When an email server receives a message from `you@your-domain.com`, it checks the SPF record for `your-domain.com`. If the server that sent the email is on that list, the check passes.
+- **Your Record:**
+  ```text
+  TXT | mail.domain.com | v=spf1 include:amazonses.com -all
+  ```
+  This record tells the world that AgentMail is an authorized sender for the `mail.domain.com` subdomain. AgentMail sends through Amazon SES, which is why the record authorizes `amazonses.com` rather than an AgentMail hostname. The `-all` part suggests that any server _not_ on this list should be considered unauthorized.
+
+### DKIM: DomainKeys Identified Mail
+
+- **What it is:** DKIM is like a digital signature for your emails. This signature proves two things: that the email actually came from your domain and that its content hasn't been messed with in transit from you to who you are trying to send to.
+- **How it works:** We generate a unique, secure key for your domain. When we send an email, we "sign" it with this key. The public part of that key is published in your DNS. Receiving servers use this public key to verify the signature.
+- **Your Records:**
+  ```text
+  TXT | agentmail._domainkey.example.com | v=DKIM1; k=rsa; p=MIIB...
+  ```
+  AgentMail gives you a custom DKIM selector host and TXT value. Publishing the key directly at that selector gives receiving servers a precise public key to verify signatures from your domain.
+
+<Note>
+Legacy orgs should keep existing working DNS records in place. For new domain setup, add the TXT selector records AgentMail returns.
+</Note>
+
+### DMARC: Domain-based Message Authentication, Reporting, and Conformance
+
+- **What it is:** DMARC is the policy that ties SPF and DKIM together. It tells receiving email servers what to do if an email claims to be from you but fails the SPF or DKIM checks (or both).
+- **How it works:** You publish a `TXT` record that specifies your policy. You can tell servers to `reject` the message, quarantine it (mark as spam), or do nothing. It also allows you to get reports on which emails are passing and failing these checks.
+
+We typically tell servers to reject the message as this increases deliverability.
+
+- **Your Record:**
+  ```text
+  TXT | _dmarc.domain.com | v=DMARC1; p=reject; rua=mailto:dmarc@agentmail.to
+  ```
+  This policy tells servers to `reject` any email that fails authentication. The `rua` tag specifies that aggregate reports about these failures should be sent to `dmarc@agentmail.to`, allowing us to monitor your domain's health and deliverability on your behalf.
+
+### Receiving mail: the MX records
+
+Finally, **MX (Mail Exchange)** records tell the internet where to deliver your agents' email.
+
+- **What they are:** MX records are the post office address for your domain's email.
+- **How they work:** When someone sends an email to `your-agent@your-domain.com`, their mail server looks up the MX record for `your-domain.com` to find out where to send it.
+- **Your Records:**
+  ```text
+  MX | domain.com | 10 inbound-smtp.us-east-1.amazonaws.com
+  MX | mail.domain.com | 10 feedback-smtp.us-east-1.amazonses.com
+  ```
+  The hostnames are AWS ones because AgentMail's mail infrastructure runs on Amazon SES. The first record directs all incoming mail for your domain to our servers, so we can ingest it and trigger your agents. The second `feedback-smtp` record is specifically for routing automated feedback, like bounce and complaint notifications from other mail servers, which is crucial for maintaining a healthy sender reputation.
+
+## Spam and virus detection
+
+AgentMail automatically scans every inbound message for spam and viruses before it reaches your inbox. This happens transparently; there is nothing you need to configure.
+
+### Virus detection
+
+Emails that contain viruses or malware are **rejected at the gateway** and are never stored. Your inboxes will never contain a message flagged as infected. This protects your agents from processing potentially dangerous content.
+
+### Spam detection
+
+Emails identified as spam are still **stored** in your inbox so you never lose a message that might be a false positive. However, they are **excluded from API results by default** to keep your agent's workflow clean.
+
+When you call the [List Threads](/core/conversations#list-the-threads-in-an-inbox) or [List Messages](/core/receive#list-all-messages-in-an-inbox) endpoint, spam messages are filtered out unless you explicitly request them.
+
+### Accessing spam threads
+
+To include spam in your results, pass the `include_spam` (`includeSpam` in TypeScript) parameter when listing threads.
+
+<CodeGroup>
+```bash CLI
+# list threads including spam
+agentmail inboxes:threads list \
+  --inbox-id <id> \
+  --include-spam
+```
+```typescript TypeScript
+const threads = await client.threads.list({
+    includeSpam: true,
+});
+```
+```python Python
+threads = client.threads.list(
+    include_spam=True,
+)
+```
+</CodeGroup>
+
+Each thread object includes a `spam` label indicating whether it was flagged as spam, so you can handle flagged threads differently in your application logic.
+
+```json Example spam thread
+{
+  "thread_id": "thread_abc123",
+  "subject": "You have won a prize!",
+  "labels": ["spam"],
+  "from": "suspicious@example.com",
+  "to": ["your-agent@your-domain.com"]
+}
+```
+
+## Requesting documents
+
+Organizations evaluating AgentMail can request compliance and legal documentation:
+
+- **SOC 2 reports** — [request SOC 2 documentation](mailto:security@agentmail.to)
+- **Subprocessors** — the current list is published at [agentmail.to/legal/subprocessors](https://www.agentmail.to/legal/subprocessors)
+- **Privacy policy** — [agentmail.to/legal/privacy-policy](https://www.agentmail.to/legal/privacy-policy)
+- **Security overview** — [agentmail.to/security](https://agentmail.to/security)
+
+</Visibility>
+
+<Visibility for="agents">
+
+# Assess AgentMail security and compliance and read spam-flagged mail
+
+AgentMail holds SOC 2 Type I and Type II attestations, authenticates every sending domain with SPF, DKIM, and DMARC, and scans every inbound message for viruses and spam before it reaches an inbox. Use this page for security reviews, for understanding the DNS records a custom domain requires, and for reading spam-flagged threads that the list endpoints hide by default.
+
+## Do this
+
+Spam-flagged threads are stored but excluded from list results by default. Pass the include-spam flag to read them:
+
+```bash
+agentmail inboxes:threads list \
+  --inbox-id <id> \
+  --include-spam
+```
+
+A flagged thread carries `spam` in its `labels` array. Branch on that label to handle flagged threads differently in application logic.
+
+## SDK
+
+Install: `npm install -g agentmail-cli` (CLI), `npm install agentmail` (TypeScript), `pip install agentmail` (Python).
+
+- List threads including spam: CLI `agentmail inboxes:threads list --inbox-id <id> --include-spam`, TypeScript `client.threads.list({ includeSpam: true })`, Python `client.threads.list(include_spam=True)`
+
+Full reference: `/integrations/sdks-and-cli`.
+
+## Facts
+
+- SOC 2 Type I attestation completed July 2025. SOC 2 Type II certification completed Q1 2026, issued by an independent CPA firm after an observation period from August 2025 to December 2025.
+- SOC 2 is an AICPA attestation standard covering security, availability, processing integrity, confidentiality, and privacy. Type I verifies control design at a point in time. Type II validates operating effectiveness over a period, typically 6 to 12 months.
+- Audited SOC 2 control mapping: access control CC6.1-CC6.7, encryption and KMS CC6.8-CC6.9, email authentication CC7.1-CC7.4, threat monitoring CC7.2-CC7.4, backup and recovery CC7.3, incident response CC7.4-CC7.5, workforce security CC5.3-CC5.4.
+- Transport encryption is TLS 1.2 or higher for all service and API communications. Data at rest is encrypted with industry-standard ciphers. A centralized KMS handles key generation, rotation, and revocation.
+- Backups are daily, encrypted, and point-in-time, with 30-day retention. Restore tests validate RTO and RPO targets. Critical components run on a multi-AZ high-availability architecture.
+- Access control is role-based with least privilege enforced. MFA is required for administrative access and sensitive operations. Access reviews run quarterly, with revocation on role change.
+- Inbound and outbound messages are scanned in real time for malware and phishing. IP-based rate limiting and behavioral abuse detection are in place.
+- SPF, DKIM, and DMARC are configured across all sending domains.
+- SPF record: `TXT` at `mail.domain.com` with value `v=spf1 include:amazonses.com -all`, marking AgentMail (which sends through Amazon SES) as an authorized sender for that subdomain and any other server as unauthorized.
+- DKIM: AgentMail returns a custom selector host and `TXT` value (`v=DKIM1; k=rsa; p=...`) per domain. Publish the key at that selector so receiving servers can verify signatures. Legacy orgs keep existing working DNS records in place, new domain setups add the returned `TXT` selector records.
+- DMARC record: `TXT` at `_dmarc.domain.com` with value `v=DMARC1; p=reject; rua=mailto:dmarc@agentmail.to`. The `p=reject` policy tells receiving servers to reject mail that fails authentication, which increases deliverability. The `rua` tag sends aggregate failure reports to `dmarc@agentmail.to` so AgentMail can monitor domain health.
+- MX records: `domain.com` uses `10 inbound-smtp.us-east-1.amazonaws.com` to route inbound mail to AgentMail, and `mail.domain.com` uses `10 feedback-smtp.us-east-1.amazonses.com` to route bounce and complaint notifications. The hostnames are AWS ones because AgentMail's mail infrastructure runs on Amazon SES.
+- Adding these DNS records authorizes AgentMail to send trusted mail on the domain's behalf and to receive mail for it.
+- Every inbound message is scanned for spam and viruses automatically. There is nothing to configure.
+- Messages containing viruses or malware are rejected at the gateway and never stored. An inbox never contains a message flagged as infected.
+- Spam-flagged messages are stored in the inbox but excluded by default from List Threads and List Messages results.
+- The include parameter is `include_spam` in Python and on the CLI (`--include-spam`), and `includeSpam` in TypeScript.
+- Document requests: SOC 2 reports by email to `security@agentmail.to`, subprocessor list at `https://www.agentmail.to/legal/subprocessors`, privacy policy at `https://www.agentmail.to/legal/privacy-policy`, security overview at `https://agentmail.to/security`.
+
+## Not supported
+
+- Spam and virus scanning cannot be disabled or configured.
+- Virus-flagged messages cannot be retrieved by any API call. They are rejected before storage.
+- List Threads and List Messages do not return spam-flagged mail unless the request passes `include_spam`.
+- The requested DNS records do not give AgentMail control over the website or any other part of the domain.
+- SOC 2 reports are not self-serve downloads. Request them by email to `security@agentmail.to`.
+
+## Verify
+
+```bash
+agentmail inboxes:threads list --inbox-id <id> --include-spam
+```
+
+Success returns the inbox's threads with spam-flagged ones included. A flagged thread shows `spam` inside its `labels` array.
+
+## Related
+
+- `/core/conversations` - the List Threads endpoint that accepts `include_spam`.
+- `/core/receive` - the List Messages endpoint that also filters spam by default.
+- `/extras/deliverability-fundamentals` - how SPF, DKIM, and DMARC affect deliverability.
+- `/extras/account-lifecycle` - deletion, retention windows, and offboarding.
+
+</Visibility>
