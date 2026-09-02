@@ -16,7 +16,7 @@ export const LandingCta = () => {
     { name: "OpenAI Agents SDK", href: "/integrations/frameworks/openai-agents-sdk", logo: "/images/logos/openai.svg" },
     { name: "OpenAI Codex", href: "/integrations/frameworks/codex", logo: "/images/logos/openai.svg" },
     { name: "OpenClaw", href: "/integrations/frameworks/openclaw", logo: "/images/logos/openclaw.svg" },
-    { name: "Grok Bot", href: "/integrations/frameworks/grokbot", logo: "/images/logos/grok.svg" },
+    { name: "Grok", href: "/integrations/frameworks/grok", logo: "/images/logos/grok.svg" },
     { name: "Cursor", href: "/integrations/frameworks/cursor", logo: "/images/logos/cursor.svg" },
     { name: "Devin", href: "/integrations/frameworks/devin", logo: "/images/logos/devin.svg" },
     { name: "Hermes", href: "/integrations/frameworks/hermes", logo: "/images/logos/hermes.png" },

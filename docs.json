@@ -129,7 +129,7 @@
                   "integrations/frameworks/sim",
                   "integrations/frameworks/replit",
                   "integrations/frameworks/openclaw",
-                  "integrations/frameworks/grokbot",
+                  "integrations/frameworks/grok",
                   "integrations/frameworks/claude-cowork",
                   "integrations/frameworks/codex",
                   "integrations/frameworks/hermes",
@@ -595,6 +595,11 @@
     {
       "source": "/integrations/frameworks/windsurf",
       "destination": "/integrations/frameworks/devin",
+      "permanent": true
+    },
+    {
+      "source": "/integrations/frameworks/grokbot",
+      "destination": "/integrations/frameworks/grok",
       "permanent": true
     }
   ]

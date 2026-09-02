@@ -8,146 +8,41 @@ icon: "/images/logos/replit.svg"
 
 
 <img src="/images/banners/integration-replit.svg" alt="" noZoom />
-[Replit](https://replit.com) builds and deploys apps and agents from natural language prompts. AgentMail is a native Replit connector, so Replit's Agent can give anything it builds a real email inbox without you writing wiring code. On this page you will watch your app send email from its own `@agentmail.to` address, answer a reply, and get called the moment new mail arrives.
+[Replit](https://replit.com) builds apps and agents from natural-language prompts. Enable the AgentMail integration and anything it builds gets an email inbox of its own to send, receive, and reply from.
 
-## 0. Get an API key and a Replit app
+## What you will need
 
-Generate the API key from the [AgentMail Console](https://console.agentmail.to/dashboard/api-keys). A fresh Replit app or an existing project both work as the app to connect it to.
+- A Replit account.
+- An AgentMail API key. [Generate one here](https://console.agentmail.to/dashboard/api-keys).
 
-## 1. Connect AgentMail to your app
+<Steps>
 
-Open your app in the Project Editor and select **Connectors** from the sidebar. Choose **Add new integration**, find AgentMail, and select **Connect**. Provide your API key when Replit prompts for it. Replit stores the key in your app's Secrets, so it stays out of your code.
+<Step title="Enable the AgentMail integration">
+Open **Settings > Integrations**, search `AgentMail`, and click **Enable**. Paste your API key and click **Configure**.
 
-AgentMail now shows as connected, and you can ask the Agent for email features in plain language.
+<img src="/images/integrations/replit-connect.png" alt="Replit's Enable AgentMail integration panel with the API key field" />
+</Step>
 
-## 2. Test sending emails
+<Step title="Send a test email">
+In a chat, paste:
 
-Ask the Agent to create an inbox and send a test email to an email account you already have, whether that is Gmail, Outlook, or any other client.
-
-Moments later the message arrives in that account, from a brand-new `@agentmail.to` address.
-
-```text Prompt
-Create an AgentMail inbox for this app, then send an email from it to
-you@example.com with the subject "Hello from my Replit agent" and a one-line
-introduction. Report the inbox address back to me.
+```text
+Create an AgentMail inbox and send a hi email from it to you@example.com.
 ```
 
-The Agent reports the new address back, for example `faircost773@agentmail.to`. Save it. You will email it in the next step.
+<img src="/images/integrations/replit-send.png" alt="Replit confirming a sent email from an @agentmail.to inbox" />
+</Step>
 
-This prompt leaves the username to AgentMail, which generates an available one.
-
-Behind the chat, Replit builds agents on [Mastra](https://mastra.ai), a TypeScript agent framework. It generates Mastra tools over the AgentMail TypeScript SDK for your project, matched to what you ask it to build. Tools like these ran the create and the send above:
-
-```typescript
-import { createTool } from "@mastra/core/tools";
-import { AgentMailClient } from "agentmail";
-import { z } from "zod";
-
-const createInboxTool = createTool({
-  id: "create-inbox",
-  description: "Create inbox",
-  inputSchema: z.object({
-    username: z.string().optional().describe("Username"),
-    domain: z.string().optional().describe("Domain"),
-    displayName: z.string().optional().describe("Display name"),
-  }),
-  execute: async (input) => {
-    const client = new AgentMailClient();
-    return await client.inboxes.create(input);
-  },
-});
-
-const sendMessageTool = createTool({
-  id: "send-message",
-  description: "Send message",
-  inputSchema: z.object({
-    inboxId: z.string().describe("ID of inbox"),
-    to: z.union([z.string(), z.array(z.string())]).describe("To recipients"),
-    subject: z.string().optional().describe("Subject"),
-    text: z.string().optional().describe("Plain text body"),
-    html: z.string().optional().describe("HTML body"),
-  }),
-  execute: async ({ inboxId, ...message }) => {
-    const client = new AgentMailClient();
-    return await client.inboxes.messages.send(inboxId, message);
-  },
-});
-```
-
-`new AgentMailClient()` with no arguments reads `AGENTMAIL_API_KEY` from the environment, so none of these tools handle the key themselves. To author or extend a tool set like this in your own code, see [Mastra](/integrations/frameworks/mastra).
-
-<Accordion title="Troubleshooting">
-- **`403` on the create when you ask for a specific username.** The name is taken, and the error lists up to three available alternatives in `suggestions`, so the Agent can retry with one of those.
-</Accordion>
-
-## 3. Test receiving and replying
-
-Send an email from your own account to the inbox address from step 2, with a subject and a question the Agent can answer. Then ask it to check the mail and reply.
-
-You should get the reply in your account, threaded under the message you sent.
-
-```text Prompt
-Look at <inbox_id> for new mail, open the latest thread, and send a short
-reply in that thread.
-```
-
-Replace `<inbox_id>` with the address from step 2. Mail typically takes about two seconds each way.
-
-The received message and the reply share one thread, so the conversation keeps its history on both sides.
-
-<Accordion title="Troubleshooting">
-- **The Agent reports an empty inbox.** Your email may not have arrived yet. Ask again.
-</Accordion>
-
-## 4. Trigger your app when email arrives
-
-Prompting the Agent to check mail works while you build. A published app has a public HTTPS URL at `https://<subdomain>.replit.app`, and AgentMail can send a signed `POST` request to that URL the moment a message arrives.
-
-Add a route that accepts `POST` requests, publish the app, then register the URL as a webhook for the `message.received` event. `url` and `event_types` are required. Run the call from any terminal that has `AGENTMAIL_API_KEY` exported, the workspace Shell included:
-
-```bash
-curl -X POST "https://api.agentmail.to/v0/webhooks" \
-  -H "Authorization: Bearer $AGENTMAIL_API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "url": "https://my-agent.replit.app/webhooks",
-    "event_types": ["message.received"],
-    "inbox_ids": ["faircost773@agentmail.to"]
-  }'
-```
-
-`inbox_ids` limits deliveries to the inboxes you list, up to 10. Omit it to receive events for every inbox in your organization. The `url` must be a public HTTPS endpoint.
-
-The response is the webhook object:
-
-```json Sample response
-{
-  "organization_id": "1a2b3c4d-5e6f-4a1b-8c2d-3e4f5a6b7c8d",
-  "webhook_id": "ep_1a2b3c4d5e6f7a8b9c0d1e2f3a4",
-  "url": "https://my-agent.replit.app/webhooks",
-  "event_types": ["message.received"],
-  "inbox_ids": ["faircost773@agentmail.to"],
-  "secret": "whsec_1a2b...c6d",
-  "enabled": true,
-  "created_at": "2026-08-25T09:00:00Z",
-  "updated_at": "2026-08-25T09:00:00Z"
-}
-```
-
-Store the `secret` in your app's Secrets as `AGENTMAIL_WEBHOOK_SECRET`. Every delivery is signed with it, and your route should verify that signature before acting. Email the inbox again and your app receives the event within seconds.
-
-<Accordion title="Troubleshooting">
-- **`400 validation_error` on the webhook create.** The `url` is a plain `http` URL. Only public HTTPS endpoints are accepted.
-</Accordion>
+</Steps>
 
 ## Next Steps
 
 <CardGroup cols={2}>
-  <Card title="Handle webhook deliveries" icon="bolt" href="/advanced/webhooks">
-    Build the receiver route: verify signatures, read payloads, survive retries.
+  <Card title="Use a custom domain" icon="globe" href="/advanced/custom-domains">
+    Give your app an address on your own domain instead of `@agentmail.to`.
   </Card>
-  <Card title="Work with conversations" icon="comments" href="/core/conversations">
-    How threads group the mail your app sends, receives, and replies to.
+  <Card title="Set an authorization boundary" icon="shield" href="/advanced/safety">
+    Guardrails for an app that reads untrusted mail and acts on its own.
   </Card>
 </CardGroup>
 
@@ -155,85 +50,46 @@ Store the `secret` in your app's Secrets as `AGENTMAIL_WEBHOOK_SECRET`. Every de
 
 <Visibility for="agents">
 
-# Connect AgentMail to a Replit app
+# Connect AgentMail to Replit
 
-AgentMail is a native Replit connector, so Replit's Agent can give any app it builds a real email inbox without hand-written wiring. Use this to let a Replit app send from its own `@agentmail.to` address, reply in threads, and react to inbound mail through a webhook once published.
+Enable the AgentMail integration in Replit and the apps and agents you build get `@agentmail.to` inboxes to send, receive, and reply from. Authentication is an AgentMail API key stored by Replit.
 
 ## Do this
 
-1. Generate an AgentMail API key at `https://console.agentmail.to/dashboard/api-keys`.
-2. Open the app in the Replit Project Editor, select Connectors in the sidebar, choose Add new integration, find AgentMail, and select Connect. Provide the API key when Replit prompts for it. Replit stores the key in the app's Secrets.
-3. Prompt Replit's Agent in plain language to create an inbox and send a test email:
+1. Generate an API key at `https://console.agentmail.to/dashboard/api-keys`.
+2. In Replit, open **Settings > Integrations**, search `AgentMail`, and click **Enable**.
+3. Paste the API key and click **Configure**.
+4. In a chat, prompt:
 
 ```text
-Create an AgentMail inbox for this app, then send an email from it to
-you@example.com with the subject "Hello from my Replit agent" and a one-line
-introduction. Report the inbox address back to me.
+Create an AgentMail inbox and send a hi email from it to you@example.com.
 ```
-
-4. Save the reported address, for example `faircost773@agentmail.to`. Email it from another account, then prompt the Agent to open the latest thread in that inbox and send a short reply in the same thread.
-5. To trigger the app on inbound mail, add a route that accepts `POST` requests, publish the app to get its public URL at `https://<subdomain>.replit.app`, then register the webhook from any terminal with `AGENTMAIL_API_KEY` exported (the workspace Shell qualifies):
-
-```bash
-curl -X POST "https://api.agentmail.to/v0/webhooks" \
-  -H "Authorization: Bearer $AGENTMAIL_API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "url": "https://my-agent.replit.app/webhooks",
-    "event_types": ["message.received"],
-    "inbox_ids": ["faircost773@agentmail.to"]
-  }'
-```
-
-6. Store the `secret` from the response in the app's Secrets as `AGENTMAIL_WEBHOOK_SECRET` and verify the signature on every delivery before acting on it.
-
-## SDK
-
-Replit builds agents on Mastra, a TypeScript agent framework, and generates Mastra tools over the AgentMail TypeScript SDK for the project.
-
-```bash
-npm install agentmail
-```
-
-- Create an inbox: `client.inboxes.create({ username, domain, displayName })`, all fields optional.
-- Send a message: `client.inboxes.messages.send(inboxId, { to, subject, text, html })`.
-
-`new AgentMailClient()` with no arguments reads `AGENTMAIL_API_KEY` from the environment, so generated tools never handle the key. Full surface: [SDKs and CLI](/integrations/sdks-and-cli).
 
 ## Facts
 
-- Connection path in Replit: Project Editor, Connectors sidebar item, Add new integration, AgentMail, Connect, then provide the API key. Replit stores it in the app's Secrets, out of the code.
-- Webhook registration: `POST https://api.agentmail.to/v0/webhooks` with header `Authorization: Bearer $AGENTMAIL_API_KEY`. Required body fields: `url` and `event_types`.
-- `inbox_ids` on `POST /v0/webhooks` limits deliveries to the listed inboxes, up to 10. Omitting `inbox_ids` delivers events for every inbox in the organization.
-- The webhook `url` must be a public HTTPS endpoint. A published Replit app has one at `https://<subdomain>.replit.app`.
-- The `POST /v0/webhooks` response is the webhook object: `webhook_id`, `url`, `event_types`, `inbox_ids`, `secret`, `enabled`, `organization_id`, `created_at`, `updated_at`.
-- Every webhook delivery is signed with the webhook's `secret`. Store it as `AGENTMAIL_WEBHOOK_SECRET` and verify the signature before acting.
-- Creating an inbox without a username lets AgentMail generate an available one. Requesting a taken username fails with HTTP `403` and up to 3 available alternatives in `suggestions`, so the Agent can retry with one of those.
-- Mail typically takes about 2 seconds each way. An empty-inbox report right after sending means the mail has not arrived yet, so ask again.
-- A received message and its reply share one thread on both sides.
+- The AgentMail integration is enabled from **Settings > Integrations** and authenticates with an AgentMail API key. Keys are prefixed `am_` and are sent as a bearer token on every request.
+- Replit stores the key with the integration, so it stays out of your app's code.
+- Once configured, the connector is available to the apps and agents you build on Replit.
+- Creating an inbox without a username lets AgentMail generate an available one. A taken username makes `create_inbox` return `403` with up to 3 available variants in `suggestions`.
 
 ## Not supported
 
-- A plain `http` webhook URL does not register. It is rejected with `400 validation_error`.
-- `inbox_ids` does not accept more than 10 inboxes on one webhook.
-- The generated Mastra tools do not take the API key as input. `new AgentMailClient()` reads `AGENTMAIL_API_KEY` from the environment.
+- The integration needs a valid API key. Without one, its tools cannot authenticate.
 
 ## Errors
 
 | Error | Status | Cause | Fix |
 | --- | --- | --- | --- |
-| `validation_error` | 400 | The webhook `url` is plain `http`. | Register a public `https` URL. |
-| `resource_taken` | 403 | The requested inbox username belongs to another organization. | Retry with one of the up to 3 alternatives in `suggestions`. |
-| `already_exists` | 403 | An inbox with the requested username already exists in the organization. | Retry with a username from `suggestions`, or use the existing inbox. |
+| `resource_taken` | 403 | The requested inbox username belongs to another organization | Retry with one of the up to 3 variants in `suggestions` |
+| `already_exists` | 403 | An inbox with the requested username already exists in the organization | Retry with a username from `suggestions`, or use the existing inbox |
 
 ## Verify
 
-A successful `POST https://api.agentmail.to/v0/webhooks` returns the webhook object with a `webhook_id`, a `secret`, and `"enabled": true`. Then email the connected inbox: the app's route receives the signed `POST` within seconds.
+Ask a Replit chat to create an inbox and send a test email. Success is the app reporting a new `@agentmail.to` address with the email delivered.
 
 ## Related
 
-- [Webhooks](/advanced/webhooks): build the receiver route, verify signatures, read payloads, survive retries.
-- [Conversations](/core/conversations): how threads group the mail the app sends, receives, and replies to.
-- [Mastra](/integrations/frameworks/mastra): author or extend Mastra tool sets over the AgentMail SDK in your own code.
+- [Custom domains](/advanced/custom-domains): an address on your own domain instead of `@agentmail.to`.
+- [Agent safety](/advanced/safety): guardrails for an app that reads untrusted mail and acts on its own.
 
 </Visibility>

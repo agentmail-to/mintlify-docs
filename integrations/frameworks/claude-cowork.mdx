@@ -8,61 +8,48 @@ icon: "/images/logos/claude.svg"
 
 
 <img src="/images/banners/integration-claude-cowork.svg" alt="" noZoom />
-[Claude Cowork](https://claude.com/docs/cowork/overview) is Anthropic's agentic workspace in the Claude Desktop app. It takes an outcome you describe and works through the steps on its own. The AgentMail connector gives it an email inbox of its own, authenticated by an AgentMail sign-in instead of an API key. Add it once and Cowork can send, receive, and triage email from its own `@agentmail.to` address.
+[Claude Cowork](https://claude.com/docs/cowork/overview) is Anthropic's agentic workspace in the Claude desktop and web apps. It takes an outcome you describe and works through the steps on its own. 
 
-## 0. Set up Claude and AgentMail
+Use AgentMail's official connector to give it an email inbox of its own. 
 
-You need two things:
+## What you will need
 
-- Claude Desktop with the Cowork tab.
-- An AgentMail account. [Sign up at the Console](https://console.agentmail.to) if you are new. The sign-in in step 1 uses this account.
+- A Claude account.
+- An AgentMail account. [Sign up here](https://console.agentmail.to).
 
-There is no environment variable or key to set. The connector signs you in through your browser.
+<Steps>
 
-## 1. Connect AgentMail
+<Step title="Open Settings">
+Click your name in the bottom-left, then **Settings**.
 
-Open **Customize** in the Claude Desktop sidebar, go to **Connectors**, and search for `AgentMail`. On the **AgentMail** card (the verified one, "Email inboxes for AI agents"), select **+**.
+<img src="/images/integrations/cowork-settings.png" alt="Claude account menu with Settings" />
+</Step>
 
-<Frame caption="The AgentMail connector in the Claude directory.">
-  <img src="/images/integrations/cowork-connect.png" alt="Claude Desktop's connector directory with AgentMail found by search" />
-</Frame>
+<Step title="Add the AgentMail connector">
+Under **Customize**, open **Connectors** and search `AgentMail`. Click **+** on the verified listing.
 
-A browser tab opens the AgentMail sign-in. Sign in, then **Allow** to grant Claude access to your AgentMail account.
+<img src="/images/integrations/cowork-connect.png" alt="AgentMail in the Claude connector directory" />
+</Step>
 
-<Frame caption="The AgentMail authorization page for Claude.">
-  <img src="/images/integrations/cowork-authorize.png" alt="The AgentMail OAuth consent screen granting Claude access" />
-</Frame>
+<Step title="Sign in and allow">
+Sign in to AgentMail and click **Allow** to grant Claude access.
 
-The tab returns you to Claude, and the connector shows a green check.
+<img src="/images/integrations/cowork-authorize.png" alt="AgentMail authorization screen for Claude" />
+</Step>
 
-<Frame caption="AgentMail connected.">
-  <img src="/images/integrations/cowork-connected.png" alt="The AgentMail connector showing a connected checkmark in Claude" />
-</Frame>
+<Step title="Send a test email">
+In a **Cowork** chat, paste:
 
-## 2. Test sending an email
-
-Switch the composer to **Cowork**, then ask it to send a test email to an account you already check, whether that is Gmail, Outlook, or another client:
-
-```text Prompt
+```text
 Create an AgentMail inbox and send a hi email from it to you@example.com.
 ```
 
-The first time Cowork reaches for an AgentMail tool, it asks to use it. Choose **Allow once**, or **Always allow** to stop the prompts for that tool. Cowork then creates the inbox, sends the email, and reports the `@agentmail.to` address it sent from. The email arrives in that account a moment or two later.
+Approve the tool call. Cowork sends from its new `@agentmail.to` inbox.
 
-<Frame caption="Cowork sends from its own AgentMail inbox and reports the address.">
-  <img src="/images/integrations/cowork-send.png" alt="A Cowork session confirming a sent email from an @agentmail.to inbox, with the AgentMail connector in the context panel" />
-</Frame>
+<img src="/images/integrations/cowork-send.png" alt="Cowork confirming the sent email" />
+</Step>
 
-To have Cowork answer incoming mail, reply to that email from your account and ask it to check the inbox and respond. It reads the thread and replies in the same conversation.
-
-Cowork asks before each AgentMail tool call, so a request that arrives inside an inbound email cannot act on its own. [Agent safety](/advanced/safety) covers treating inbound mail as untrusted and applying the same boundary to agents you build.
-
-<Accordion title="Troubleshooting">
-
-- **The AgentMail tools are missing from a session.** The connector loads when a session starts. Start a new session after connecting.
-- **`403` when you ask for a specific inbox name.** A taken username fails with a `403` that lists up to three available alternatives in `suggestions`, so Cowork can retry with one you approve. Leaving the name out always works.
-
-</Accordion>
+</Steps>
 
 ## Next Steps
 

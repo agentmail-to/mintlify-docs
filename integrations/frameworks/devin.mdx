@@ -8,86 +8,32 @@ icon: "/images/logos/devin.svg"
 
 Devin, Cognition's hosted software engineering agent, connects to AgentMail through its MCP Marketplace. One custom MCP entry gives every Devin session `@agentmail.to` inboxes to list, create, and send from, driven by plain instructions.
 
-## 0. Before you start
+## What you will need
 
-You need two things:
+- A Devin account.
+- An AgentMail API key. [Get it here](https://console.agentmail.to/dashboard/api-keys).
 
-- A Devin account where you hold the **Manage MCP Servers** admin permission. Without it, use **Suggest MCP Integration** to ask an admin to add the server.
-- An AgentMail API key. Generate one in the [AgentMail Console](https://console.agentmail.to/dashboard/api-keys) and keep it at hand: you will paste it into Devin's form.
+<Steps>
 
-## 1. Add the AgentMail MCP server
+<Step title="Add the AgentMail MCP server">
+In Devin, open **Settings > Connections > MCP servers** and click **Add a custom MCP**. Use **HTTP** transport, `https://mcp.agentmail.to/mcp`, and an `x-api-key` header with your API key, then **Install and enable**.
 
-In Devin, open **Settings > Connections**, switch to the **MCP servers** tab, and click **Add a custom MCP**. Fill the form:
+<img src="/images/integrations/devin-add-custom-mcp.png" alt="Devin's Add a custom MCP form filled in for AgentMail" />
+</Step>
 
-| Field | Value |
-| --- | --- |
-| Server name | `AgentMail` |
-| Short description | `Email inboxes the agent can create, send from, and reply from.` |
-| Transport type | `HTTP` |
-| Server URL | `https://mcp.agentmail.to/mcp` |
-| Authentication | `Authorization header`, with header key `x-api-key` and your API key as the value |
+<Step title="Test the tools">
+Click **Test tools**. Devin validates the connection and enables the AgentMail tools for every session.
 
-<Frame caption="The AgentMail entry filled in: HTTP transport, the hosted server URL, and the x-api-key authorization header.">
-  <img src="/images/integrations/devin-add-custom-mcp.png" alt="Devin's Add a custom MCP form filled in for AgentMail" />
-</Frame>
+<img src="/images/integrations/devin-test-tools.png" alt="Devin reporting MCP server validation successful with the AgentMail tool list" />
+</Step>
 
-The form's **Import JSON** button accepts the equivalent JSON:
+</Steps>
 
-```json
-{
-  "transport": "HTTP",
-  "url": "https://mcp.agentmail.to/mcp",
-  "auth_method": "auth_header",
-  "headers": { "x-api-key": "<API_KEY>" }
-}
-```
-
-AgentMail's server also supports OAuth: choose `OAuth` as the authentication method instead and Devin walks you through the flow. [MCP and Skills](/integrations/mcp-and-skills) covers both options and the full tool catalog.
-
-Click **Install and enable** and confirm the security notice. On the server's page, click **Test tools**: Devin validates the connection in an isolated environment and lists the AgentMail tools on success, with **Enable in sessions** switched on.
-
-<Frame caption="A successful validation: the AgentMail tools discovered and enabled for sessions.">
-  <img src="/images/integrations/devin-test-tools.png" alt="Devin reporting MCP server validation successful with the AgentMail tool list" />
-</Frame>
-
-<Accordion title="Troubleshooting">
-
-- **Test tools fails.** The Server URL must be exactly `https://mcp.agentmail.to/mcp`, and the header key must be `x-api-key`. A `401` means the key value is missing or invalid.
-- **There is no "Add a custom MCP" button.** Your account lacks the **Manage MCP Servers** permission. Use **Suggest MCP Integration**, or ask an organization admin.
-
-</Accordion>
-
-## 2. Test sending emails
-
-Start a new Devin session and give it the job in plain language. Put your everyday address in place of `you@example.com`:
+Any Devin session can now use the tools. For example:
 
 ```text
-Create an AgentMail inbox with the display name "Support agent" and send an
-email from it to you@example.com with the subject "Hello from Devin".
-Report the inbox address back to me.
+Create an AgentMail inbox and send a hi email from it to you@example.com.
 ```
-
-The email reaches that account within moments. Devin makes two tool calls, `create_inbox` and then `send_message`, and reports the new address back. Save the address: you will email it in the next step.
-
-<Accordion title="Troubleshooting">
-
-- **`403` when your prompt asks for a taken username.** The error lists up to three available variants in `suggestions`, and it reaches Devin as a tool result, so it can pick one and retry. Asking for an inbox without naming a username always works.
-- **`403` `limit_exceeded` at your plan's inbox cap.** The create returns this instead, before any name check.
-
-</Accordion>
-
-## 3. Test receiving and replying
-
-From your own account, reply to the email, then tell the session:
-
-```text
-Check the inbox you created for new mail and reply to the latest message
-with a short acknowledgment.
-```
-
-Devin lists the inbox's threads, reads your reply, and answers in the same thread with `reply_to_message`. The reply lands in your mailbox, threaded under your message.
-
-Delivery takes about two seconds in each direction, so a session that reports an empty inbox has probably checked before your email arrived. Ask it to check again.
 
 ## Next Steps
 
