@@ -10,6 +10,10 @@ icon: "/images/logos/windsurf.svg"
 <img src="/images/banners/integration-windsurf.svg" alt="" noZoom />
 Cascade, the Windsurf agent, comes out of this setup with `@agentmail.to` inboxes of its own to list, create, and send from, all without leaving the editor.
 
+<Note>
+Windsurf is now **Devin Desktop**: Cognition, the company behind Devin, acquired Windsurf and has rebranded the editor, so `windsurf.com` redirects to [devin.ai/desktop](https://devin.ai/desktop). The setup below still works unchanged, including the pre-rebrand MCP config path.
+</Note>
+
 ## 0. Before you start
 
 You need two things:
@@ -118,6 +122,7 @@ Adding the hosted AgentMail MCP server to Windsurf gives Cascade, the Windsurf a
 
 ## Facts
 
+- Windsurf was rebranded Devin Desktop after Cognition, the company behind Devin, acquired it. The editor and this setup are unchanged, and the MCP config keeps the pre-rebrand path.
 - Windsurf reads MCP servers from `~/.codeium/windsurf/mcp_config.json`. The URL key in this file is `serverUrl`, value `https://mcp.agentmail.to/mcp`.
 - Windsurf fills `${env:AGENTMAIL_API_KEY}` from the environment it started from and sends the value as the `x-api-key` header on every call.
 - Pasting the key in place of the `${env:...}` reference also works. Keep the file out of version control in that case.
