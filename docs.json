@@ -134,7 +134,7 @@
                   "integrations/frameworks/codex",
                   "integrations/frameworks/hermes",
                   "integrations/frameworks/cursor",
-                  "integrations/frameworks/windsurf"
+                  "integrations/frameworks/devin"
                 ],
                 "expanded": true
               },
@@ -590,6 +590,11 @@
     {
       "source": "/api-reference",
       "destination": "/api-reference/inboxes/list-inboxes",
+      "permanent": true
+    },
+    {
+      "source": "/integrations/frameworks/windsurf",
+      "destination": "/integrations/frameworks/devin",
       "permanent": true
     }
   ]
