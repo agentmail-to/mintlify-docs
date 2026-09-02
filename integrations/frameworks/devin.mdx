@@ -17,17 +17,21 @@ You need two things:
 
 ## 1. Add the AgentMail MCP server
 
-In Devin, open **Settings > Connections > MCP servers** and click **Add a custom MCP**. Fill the form:
+In Devin, open **Settings > Connections**, switch to the **MCP servers** tab, and click **Add a custom MCP**. Fill the form:
 
 | Field | Value |
 | --- | --- |
-| Server Name | `AgentMail` |
-| Short Description | `Email inboxes the agent can create, send from, and reply from.` |
+| Server name | `AgentMail` |
+| Short description | `Email inboxes the agent can create, send from, and reply from.` |
 | Transport type | `HTTP` |
 | Server URL | `https://mcp.agentmail.to/mcp` |
-| Authentication method | `Auth Header`, header key `x-api-key`, your API key as the value |
+| Authentication | `Authorization header`, with header key `x-api-key` and your API key as the value |
 
-Devin shows the equivalent JSON for reference:
+<Frame caption="The AgentMail entry filled in: HTTP transport, the hosted server URL, and the x-api-key authorization header.">
+  <img src="/images/integrations/devin-add-custom-mcp.png" alt="Devin's Add a custom MCP form filled in for AgentMail" />
+</Frame>
+
+The form's **Import JSON** button accepts the equivalent JSON:
 
 ```json
 {
@@ -40,11 +44,15 @@ Devin shows the equivalent JSON for reference:
 
 AgentMail's server also supports OAuth: choose `OAuth` as the authentication method instead and Devin walks you through the flow. [MCP and Skills](/integrations/mcp-and-skills) covers both options and the full tool catalog.
 
-Save, then click **Test listing tools**. Devin validates the connection in an isolated environment and lists the AgentMail tools on success.
+Click **Install and enable** and confirm the security notice. On the server's page, click **Test tools**: Devin validates the connection in an isolated environment and lists the AgentMail tools on success, with **Enable in sessions** switched on.
+
+<Frame caption="A successful validation: the AgentMail tools discovered and enabled for sessions.">
+  <img src="/images/integrations/devin-test-tools.png" alt="Devin reporting MCP server validation successful with the AgentMail tool list" />
+</Frame>
 
 <Accordion title="Troubleshooting">
 
-- **Test listing tools fails.** The Server URL must be exactly `https://mcp.agentmail.to/mcp`, and the auth header key must be `x-api-key`. A `401` means the key value is missing or invalid.
+- **Test tools fails.** The Server URL must be exactly `https://mcp.agentmail.to/mcp`, and the header key must be `x-api-key`. A `401` means the key value is missing or invalid.
 - **There is no "Add a custom MCP" button.** Your account lacks the **Manage MCP Servers** permission. Use **Suggest MCP Integration**, or ask an organization admin.
 
 </Accordion>
@@ -104,7 +112,7 @@ Add AgentMail's hosted MCP server as a custom MCP in Devin's marketplace and eve
 
 1. Generate an API key at `https://console.agentmail.to/dashboard/api-keys`.
 
-2. In Devin, open **Settings > Connections > MCP servers**, click **Add a custom MCP**, and configure:
+2. In Devin, open **Settings > Connections**, switch to the **MCP servers** tab, click **Add a custom MCP**, and configure:
 
 ```json
 {
@@ -115,27 +123,27 @@ Add AgentMail's hosted MCP server as a custom MCP in Devin's marketplace and eve
 }
 ```
 
-3. Click **Test listing tools** to validate the connection. On success the AgentMail tools are available in every session, invoked by natural-language instruction.
+3. Click **Install and enable**, confirm the security notice, then click **Test tools** on the server page. On success the AgentMail tools are listed, **Enable in sessions** is on, and every session can invoke them by natural-language instruction.
 
 ## Facts
 
 - Adding a custom MCP server requires Devin's **Manage MCP Servers** admin permission. Non-admins request one with **Suggest MCP Integration**.
-- The AgentMail server URL is `https://mcp.agentmail.to/mcp`, transport `HTTP`, auth header key `x-api-key`.
+- The AgentMail server URL is `https://mcp.agentmail.to/mcp`, transport `HTTP`, authentication `Authorization header` with key `x-api-key`.
 - The server also supports OAuth. Devin's OAuth callback URL is `https://api.devin.ai/mcp/oauth/callback`.
-- **Test listing tools** validates the connection in an isolated environment before any session uses it.
+- **Test tools** validates the connection in an isolated environment before any session uses it. Success reads "MCP server validation successful" with the tool list alongside.
 - Full tool catalog, OAuth details, and configs for other MCP clients: `/integrations/mcp-and-skills`.
 
 ## Errors
 
 | Error | Cause | Fix |
 | --- | --- | --- |
-| Test listing tools fails, `401` | Wrong Server URL, or the `x-api-key` header value is missing or invalid | Set the URL to exactly `https://mcp.agentmail.to/mcp` and paste a valid API key |
+| Test tools fails, `401` | Wrong Server URL, or the `x-api-key` header value is missing or invalid | Set the URL to exactly `https://mcp.agentmail.to/mcp` and paste a valid API key |
 | `403` `resource_taken` or `already_exists` on `create_inbox` | The requested username is taken | Retry with one of the up to 3 names in `suggestions`, or omit `username` |
 | `403` `limit_exceeded` on `create_inbox` | The plan's inbox cap is reached; this fires before the name check | Delete an inbox or raise the cap as the error's `fix` directs |
 
 ## Verify
 
-**Test listing tools** succeeds, and a session instructed to create an inbox and send an email reports back the new `@agentmail.to` address with the message delivered.
+**Test tools** succeeds, and a session instructed to create an inbox and send an email reports back the new `@agentmail.to` address with the message delivered.
 
 ## Related
 
