@@ -21,7 +21,17 @@ There is no environment variable or key to set. Cowork opens the AgentMail sign-
 
 ## 1. Install the AgentMail plugin
 
-Open the **Cowork** tab in Claude Desktop, then open **Customize** in the sidebar and go to the **Plugins** tab. Under **Personal plugins**, select **+**, choose **Add marketplace**, then **Add from a repository**, and enter `https://github.com/agentmail-to/agentmail-plugins`. Once the marketplace syncs, select **Browse plugins** and install **AgentMail**.
+Open **Customize** in the Claude Desktop sidebar and go to **Plugins**. Choose **Add > Add marketplace**, enter `https://github.com/agentmail-to/agentmail-plugins`, and click **Sync**.
+
+<Frame caption="The Add marketplace dialog with the AgentMail plugins repository.">
+  <img src="/images/integrations/cowork-add-marketplace.png" alt="Claude Desktop's Add marketplace dialog with the agentmail-to/agentmail-plugins repository URL" />
+</Frame>
+
+The plugin directory opens on the new `agentmail` source. Select **+** on the **AgentMail** card, and a toast confirms the install.
+
+<Frame caption="The AgentMail plugin installed from the synced marketplace.">
+  <img src="/images/integrations/cowork-install.png" alt="Claude Desktop's plugin directory showing the AgentMail plugin with the installed confirmation" />
+</Frame>
 
 The plugin bundles its connection to AgentMail's hosted email tools, so this install is the whole setup. It also installs these skills:
 
@@ -48,7 +58,11 @@ Start a new Cowork session and give it its first email task:
 List my AgentMail inboxes
 ```
 
-The first AgentMail tool call opens the AgentMail sign-in in your browser. Sign in, and pick an organization if you belong to more than one. Cowork then calls the `list_inboxes` tool and answers with your inbox addresses. An empty list is fine. You create an inbox in the next step.
+The first AgentMail tool call opens the AgentMail sign-in in your browser. Sign in, approve the access it lists, and the page ends on "Authentication Successful". Cowork then calls the `list_inboxes` tool and answers with your inbox addresses. An empty list is fine. You create an inbox in the next step.
+
+<Frame caption="The first email task: the browser sign-in, then the inbox list.">
+  <img src="/images/integrations/cowork-sign-in.png" alt="A Cowork session running the AgentMail sign-in and then listing two inboxes in a table" />
+</Frame>
 
 Cowork loads plugins when a session starts. If the AgentMail tools are missing, the session predates the install. Start a new session and ask again.
 
@@ -63,6 +77,10 @@ introduction. Let me know the inbox address once it is sent.
 ```
 
 Cowork writes the introduction itself, so expect a preview: the complete email, with a request to confirm before it sends. Approve it, and the email arrives in that account a moment or two later, from a newly created `@agentmail.to` address such as `faircost773@agentmail.to`. Cowork reports the address and the send's message and thread IDs. Save the address. You will email it in the next step.
+
+<Frame caption="The send test: a fresh inbox, then the email delivered with its thread id.">
+  <img src="/images/integrations/cowork-send.png" alt="A Cowork session creating an inbox and reporting the sent email with its thread id" />
+</Frame>
 
 Asking Cowork to "write", "compose", or "prepare" an email creates a draft instead of sending one.
 
