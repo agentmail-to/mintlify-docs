@@ -111,6 +111,24 @@
               "integrations/sdks-and-cli",
               "integrations/mcp-and-skills",
               {
+                "group": "Agent platforms",
+                "pages": [
+                  "integrations/frameworks/claude-cowork",
+                  "integrations/frameworks/claude-code",
+                  "integrations/frameworks/codex",
+                  "integrations/frameworks/openclaw",
+                  "integrations/frameworks/grok",
+                  "integrations/frameworks/manus",
+                  "integrations/frameworks/cursor",
+                  "integrations/frameworks/devin",
+                  "integrations/frameworks/opencode",
+                  "integrations/frameworks/replit",
+                  "integrations/frameworks/sim",
+                  "integrations/frameworks/hermes"
+                ],
+                "expanded": true
+              },
+              {
                 "group": "Agent frameworks",
                 "pages": [
                   "integrations/frameworks/langchain",
@@ -120,22 +138,6 @@
                   "integrations/frameworks/mastra",
                   "integrations/frameworks/eve",
                   "integrations/frameworks/livekit"
-                ],
-                "expanded": true
-              },
-              {
-                "group": "Agent platforms",
-                "pages": [
-                  "integrations/frameworks/sim",
-                  "integrations/frameworks/replit",
-                  "integrations/frameworks/openclaw",
-                  "integrations/frameworks/grok",
-                  "integrations/frameworks/claude-cowork",
-                  "integrations/frameworks/claude-code",
-                  "integrations/frameworks/codex",
-                  "integrations/frameworks/hermes",
-                  "integrations/frameworks/cursor",
-                  "integrations/frameworks/devin"
                 ],
                 "expanded": true
               },

@@ -14,10 +14,12 @@ export const LandingCta = () => {
     // the household names
     { name: "Claude Cowork", href: "/integrations/frameworks/claude-cowork", logo: "/images/logos/claude.svg" },
     { name: "Claude Code", href: "/integrations/frameworks/claude-code", logo: "/images/logos/claude.svg" },
+    { name: "opencode", href: "/integrations/frameworks/opencode", logo: "/images/logos/opencode.svg" },
     { name: "OpenAI Agents SDK", href: "/integrations/frameworks/openai-agents-sdk", logo: "/images/logos/openai.svg" },
     { name: "OpenAI Codex", href: "/integrations/frameworks/codex", logo: "/images/logos/openai.svg" },
     { name: "OpenClaw", href: "/integrations/frameworks/openclaw", logo: "/images/logos/openclaw.svg" },
     { name: "Grok", href: "/integrations/frameworks/grok", logo: "/images/logos/grok.svg" },
+    { name: "Manus", href: "/integrations/frameworks/manus", logo: "/images/logos/manus.svg" },
     { name: "Cursor", href: "/integrations/frameworks/cursor", logo: "/images/logos/cursor.svg" },
     { name: "Devin", href: "/integrations/frameworks/devin", logo: "/images/logos/devin.svg" },
     { name: "Hermes", href: "/integrations/frameworks/hermes", logo: "/images/logos/hermes.png" },

@@ -1,0 +1,109 @@
+---
+title: "Send & Receive Emails with Manus"
+sidebarTitle: "Manus"
+description: Use the AgentMail connector directly on manus.im to send and receive emails
+icon: "/images/logos/manus.svg"
+---
+
+<Visibility for="humans">
+
+
+<img src="/images/banners/integration-manus.svg" alt="" noZoom />
+[Manus](https://manus.im) is a general AI agent that takes a task and works through it on its own. Connect the AgentMail plugin and it gets an email inbox of its own to send, receive, and reply from.
+
+## What you will need
+
+- A Manus account.
+- An AgentMail account. [Sign up here](https://console.agentmail.to).
+
+<Steps>
+
+<Step title="Find the AgentMail plugin">
+In Manus, open **Plugins** from the sidebar and search `AgentMail`.
+
+<img src="/images/integrations/manus-plugins.png" alt="The AgentMail connector in Manus's plugin directory" />
+</Step>
+
+<Step title="Connect">
+Open the **AgentMail** connector and click **Connect**.
+
+<img src="/images/integrations/manus-connect.png" alt="The AgentMail connector card in Manus with a Connect button" />
+</Step>
+
+<Step title="Sign in and allow">
+Sign in to AgentMail, pick your organization, and click **Allow**.
+
+<img src="/images/integrations/manus-allow.png" alt="AgentMail authorization screen for Manus" />
+</Step>
+
+<Step title="Send a test email">
+In a new task, paste:
+
+```text
+Create an AgentMail inbox and send a hi email from it to you@example.com.
+```
+
+<img src="/images/integrations/manus-send.png" alt="Manus confirming a sent email from an @agentmail.to inbox" />
+</Step>
+
+</Steps>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="MCP tool reference" icon="plug" href="/integrations/mcp-and-skills#mcp-tool-reference">
+    Every email tool behind this integration, with what each one does.
+  </Card>
+  <Card title="Agent safety" icon="shield" href="/advanced/safety">
+    Treat inbound mail as untrusted and confirm sends before the agent acts.
+  </Card>
+</CardGroup>
+
+</Visibility>
+
+<Visibility for="agents">
+
+# Connect Manus to AgentMail
+
+The AgentMail connector in Manus's plugin directory gives its tasks `@agentmail.to` inboxes to send, receive, and reply from. Authentication is an AgentMail browser sign-in; no API key.
+
+## Do this
+
+1. In Manus, open **Plugins** from the sidebar and search `AgentMail`.
+2. Open the **AgentMail** connector and click **Connect**.
+3. Sign in to AgentMail, pick your organization, and click **Allow**.
+4. In a new task, prompt:
+
+```text
+Create an AgentMail inbox and send a hi email from it to you@example.com.
+```
+
+## Facts
+
+- AgentMail is a first-party connector in Manus's plugin directory (Plugins > search AgentMail), authored by AgentMail, connector type MCP.
+- Authentication is an AgentMail browser sign-in with an organization picker and an OAuth Allow. No API key.
+- The connector card ships example prompts, including creating an inbox, listing inboxes, replying with attachments, and scheduling drafts.
+- Full tool catalog and OAuth details: [MCP and Skills](/integrations/mcp-and-skills).
+- Creating an inbox without a username lets AgentMail generate an available one. A taken username makes `create_inbox` return `403` with up to 3 available variants in `suggestions`.
+
+## Not supported
+
+- There is no API key to paste. Authorization happens in the browser when you connect.
+
+## Errors
+
+| Error | Status | Cause | Fix |
+| --- | --- | --- | --- |
+| `resource_taken` | 403 | The requested inbox username belongs to another organization | Retry with one of the up to 3 variants in `suggestions` |
+| `already_exists` | 403 | An inbox with the requested username already exists in the organization | Retry with a username from `suggestions`, or use the existing inbox |
+
+## Verify
+
+With the connector connected, prompt `List my AgentMail inboxes` in a new task. Success is Manus calling `list_inboxes` and returning the addresses. An empty list is a valid answer.
+
+## Related
+
+- [MCP and Skills](/integrations/mcp-and-skills): the full tool catalog, OAuth details, and other MCP clients.
+- [Agent safety](/advanced/safety): treat inbound mail as untrusted and confirm sends before the agent acts.
+
+</Visibility>
