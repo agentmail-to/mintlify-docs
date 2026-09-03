@@ -102,9 +102,7 @@ from it to you@example.com with the subject "Hello from Hermes".
 
 The message reaches that account within moments. Hermes makes two tool calls: `create_inbox` returns the new address, and `send_message` sends from it. The send returns the message's `message_id` and the `thread_id` of the conversation it starts, which Hermes uses to keep any follow-up in the same thread.
 
-<Frame caption="Hermes resolves the inbox, calls send_message, and reports the thread id.">
-  <img src="/images/integrations/hermes-send.png" alt="A Hermes chat turn sending an email through the AgentMail MCP tools" />
-</Frame>
+<img src="/images/integrations/hermes-send.png" alt="A Hermes chat turn sending an email through the AgentMail MCP tools" />
 
 Asking for an inbox without naming a username always works, because AgentMail generates the address.
 
@@ -155,9 +153,7 @@ inbox, sign up for <service> with that address, wait for the verification
 email, extract the code, complete the signup, report back, and delete its inbox.
 ```
 
-<Frame caption="A two-subagent fanout running in parallel, each with the inherited AgentMail toolset.">
-  <img src="/images/integrations/hermes-fanout.png" alt="Hermes delegating two parallel subagents that use AgentMail tools and report back" />
-</Frame>
+<img src="/images/integrations/hermes-fanout.png" alt="Hermes delegating two parallel subagents that use AgentMail tools and report back" />
 
 Each subagent sends only its final summary back to the parent, so the parent's context stays small while the inbox work runs in parallel. Hermes runs up to three subagents at once by default. A larger batch returns a tool error instead of queueing, so raise `delegation.max_concurrent_children` in `config.yaml` before asking for a wider fanout. When you narrow a subagent's toolsets, the parent's MCP toolsets are kept by default. Set `inherit_mcp_toolsets: false` for a strict intersection.
 

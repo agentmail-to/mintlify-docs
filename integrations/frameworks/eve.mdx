@@ -109,9 +109,7 @@ The helpers come from `eve/tools/approval`:
 
 A gated call pauses the session on an approval prompt. Approve and the run resumes from that exact step. Deny and eve skips the tool and tells the model why.
 
-<Frame caption="The dev session pauses on the approval prompt before an AgentMail tool call runs.">
-  <img src="/images/integrations/eve-approval.png" alt="eve dev session paused on an approval prompt for the agentmail__list_inboxes tool call" />
-</Frame>
+<img src="/images/integrations/eve-approval.png" alt="eve dev session paused on an approval prompt for the agentmail__list_inboxes tool call" />
 
 An `approval` policy covers every tool the connection serves. To shrink what the model can discover in the first place, set `tools: { allow: [...] }` on the connection with the tool names you allow, or write your own typed tools in `agent/tools/` with the [AgentMail SDKs](/integrations/sdks-and-cli).
 

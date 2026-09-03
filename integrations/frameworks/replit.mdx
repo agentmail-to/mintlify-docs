@@ -13,17 +13,19 @@ icon: "/images/logos/replit.svg"
 ## What you will need
 
 - A Replit account.
-- An AgentMail API key. [Generate one here](https://console.agentmail.to/dashboard/api-keys).
+- An AgentMail API key, if you connect with a key. [Generate one here](https://console.agentmail.to/dashboard/api-keys).
 
-<Steps>
+## Connect AgentMail
 
-<Step title="Enable the AgentMail integration">
-Open **Settings > Integrations**, search `AgentMail`, and click **Enable**. Paste your API key and click **Configure**.
+Open **Settings** from the workspace menu (bottom-left), go to **Integrations**, and search `AgentMail`. Pick how you want to authenticate:
 
-<img src="/images/integrations/replit-connect.png" alt="Replit's Enable AgentMail integration panel with the API key field" />
-</Step>
+- **Use an API key** — enable the **AgentMail** integration (the first result), paste your API key, and click **Configure**.
+- **Use OAuth sign-in** — choose the **MCP** option instead and sign in to AgentMail when prompted. No API key needed.
 
-<Step title="Send a test email">
+<img src="/images/integrations/replit-connect.png" alt="Replit's Integrations settings with the AgentMail connector and its API key field" />
+
+## Send a test email
+
 In a chat, paste:
 
 ```text
@@ -31,9 +33,6 @@ Create an AgentMail inbox and send a hi email from it to you@example.com.
 ```
 
 <img src="/images/integrations/replit-send.png" alt="Replit confirming a sent email from an @agentmail.to inbox" />
-</Step>
-
-</Steps>
 
 ## Next Steps
 
@@ -56,10 +55,10 @@ Enable the AgentMail integration in Replit and the apps and agents you build get
 
 ## Do this
 
-1. Generate an API key at `https://console.agentmail.to/dashboard/api-keys`.
-2. In Replit, open **Settings > Integrations**, search `AgentMail`, and click **Enable**.
-3. Paste the API key and click **Configure**.
-4. In a chat, prompt:
+1. In Replit, open **Settings > Integrations** and search `AgentMail`. Connect one of two ways:
+   - **API key**: enable the **AgentMail** integration, paste a key from `https://console.agentmail.to/dashboard/api-keys`, and click **Configure**.
+   - **OAuth**: choose the **MCP** option and sign in to AgentMail. No API key.
+2. In a chat, prompt:
 
 ```text
 Create an AgentMail inbox and send a hi email from it to you@example.com.
@@ -67,14 +66,14 @@ Create an AgentMail inbox and send a hi email from it to you@example.com.
 
 ## Facts
 
-- The AgentMail integration is enabled from **Settings > Integrations** and authenticates with an AgentMail API key. Keys are prefixed `am_` and are sent as a bearer token on every request.
-- Replit stores the key with the integration, so it stays out of your app's code.
+- Two connection paths from **Settings > Integrations**: the **AgentMail** integration authenticates with an API key (keys are prefixed `am_`, sent as a bearer token), while the **MCP** option authenticates with an OAuth sign-in and needs no key.
+- Replit stores the credential with the integration, so it stays out of your app's code.
 - Once configured, the connector is available to the apps and agents you build on Replit.
 - Creating an inbox without a username lets AgentMail generate an available one. A taken username makes `create_inbox` return `403` with up to 3 available variants in `suggestions`.
 
 ## Not supported
 
-- The integration needs a valid API key. Without one, its tools cannot authenticate.
+- The API-key integration needs a valid key to authenticate. To connect without a key, use the MCP option and its OAuth sign-in instead.
 
 ## Errors
 

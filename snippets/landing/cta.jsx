@@ -13,6 +13,7 @@ export const LandingCta = () => {
     { name: "Skills", href: "/integrations/mcp-and-skills", logo: "am" },
     // the household names
     { name: "Claude Cowork", href: "/integrations/frameworks/claude-cowork", logo: "/images/logos/claude.svg" },
+    { name: "Claude Code", href: "/integrations/frameworks/claude-code", logo: "/images/logos/claude.svg" },
     { name: "OpenAI Agents SDK", href: "/integrations/frameworks/openai-agents-sdk", logo: "/images/logos/openai.svg" },
     { name: "OpenAI Codex", href: "/integrations/frameworks/codex", logo: "/images/logos/openai.svg" },
     { name: "OpenClaw", href: "/integrations/frameworks/openclaw", logo: "/images/logos/openclaw.svg" },

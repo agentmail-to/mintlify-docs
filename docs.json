@@ -131,6 +131,7 @@
                   "integrations/frameworks/openclaw",
                   "integrations/frameworks/grok",
                   "integrations/frameworks/claude-cowork",
+                  "integrations/frameworks/claude-code",
                   "integrations/frameworks/codex",
                   "integrations/frameworks/hermes",
                   "integrations/frameworks/cursor",
