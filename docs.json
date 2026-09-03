@@ -129,12 +129,13 @@
                   "integrations/frameworks/sim",
                   "integrations/frameworks/replit",
                   "integrations/frameworks/openclaw",
-                  "integrations/frameworks/grokbot",
+                  "integrations/frameworks/grok",
                   "integrations/frameworks/claude-cowork",
+                  "integrations/frameworks/claude-code",
                   "integrations/frameworks/codex",
                   "integrations/frameworks/hermes",
                   "integrations/frameworks/cursor",
-                  "integrations/frameworks/windsurf"
+                  "integrations/frameworks/devin"
                 ],
                 "expanded": true
               },
@@ -590,6 +591,16 @@
     {
       "source": "/api-reference",
       "destination": "/api-reference/inboxes/list-inboxes",
+      "permanent": true
+    },
+    {
+      "source": "/integrations/frameworks/windsurf",
+      "destination": "/integrations/frameworks/devin",
+      "permanent": true
+    },
+    {
+      "source": "/integrations/frameworks/grokbot",
+      "destination": "/integrations/frameworks/grok",
       "permanent": true
     }
   ]

@@ -1,0 +1,160 @@
+---
+title: Grok
+description: Connect AgentMail to the Grok app or Grok Build so it can send, receive, and reply to email from its own inbox.
+icon: "/images/logos/grok.svg"
+---
+
+<Visibility for="humans">
+
+[Grok](https://grok.com) is xAI's assistant. Connect AgentMail and it gets an email inbox of its own to send, receive, and reply from, from the Grok app or the Grok Build CLI.
+
+## Grok app
+
+Add AgentMail as a custom connector. You need a Grok account and an [AgentMail account](https://console.agentmail.to).
+
+<Steps>
+
+<Step title="Open Connectors">
+In Grok, open **Plugins** and go to **Connectors**. Click **New Connector**.
+
+<img src="/images/integrations/grok-connectors.png" alt="Grok's Connectors page" />
+</Step>
+
+<Step title="Add a custom connector">
+Choose **Custom**, name it `AgentMail`, set the server URL to `https://mcp.agentmail.to/mcp`, and click **Add Connector**.
+
+<img src="/images/integrations/grok-custom.png" alt="Grok's Custom Connector form filled in for AgentMail" />
+</Step>
+
+<Step title="Sign in and allow">
+Sign in to AgentMail and click **Allow** to grant Grok access.
+
+<img src="/images/integrations/grok-allow.png" alt="AgentMail authorization screen for Grok" />
+</Step>
+
+<Step title="Send a test email">
+In a chat, paste:
+
+```text
+Create an AgentMail inbox and send a hi email from it to you@example.com.
+```
+
+<img src="/images/integrations/grok-send.png" alt="Grok confirming a sent email from an @agentmail.to inbox" />
+</Step>
+
+</Steps>
+
+## Grok Build
+
+[Grok Build](https://docs.x.ai/build/overview) authenticates with an API key. [Generate one](https://console.agentmail.to/dashboard/api-keys), then register the MCP server:
+
+```bash
+export AGENTMAIL_API_KEY="<API_KEY>"
+
+grok mcp add --transport http agentmail https://mcp.agentmail.to/mcp \
+  --header "Authorization: Bearer $AGENTMAIL_API_KEY"
+```
+
+Pass the key as `Authorization: Bearer`. An `x-api-key` header starts an OAuth sign-in instead. Confirm the registration:
+
+```bash
+grok mcp list
+```
+
+`agentmail: https://mcp.agentmail.to/mcp` should appear, and `grok mcp doctor agentmail` runs a live handshake. To keep the config in version control, write it by hand and start a new `grok` session:
+
+```toml title="~/.grok/config.toml"
+[mcp_servers.agentmail]
+url = "https://mcp.agentmail.to/mcp"
+headers = { "Authorization" = "Bearer <API_KEY>" }
+```
+
+Then ask a `grok` session to use it:
+
+```text
+Create an AgentMail inbox and send a hi email from it to you@example.com.
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Use a custom domain" icon="globe" href="/advanced/custom-domains">
+    Give your agent an address on your own domain instead of `@agentmail.to`.
+  </Card>
+  <Card title="Set an authorization boundary" icon="shield" href="/advanced/safety">
+    Guardrails for an agent that reads untrusted mail and acts on its own.
+  </Card>
+</CardGroup>
+
+</Visibility>
+
+<Visibility for="agents">
+
+# Connect AgentMail to Grok
+
+Give Grok an email inbox of its own through the hosted AgentMail MCP server at `https://mcp.agentmail.to/mcp`, from the Grok app (custom connector, OAuth) or Grok Build (CLI, API key).
+
+## Do this
+
+Grok Build is the runnable path:
+
+1. Generate an API key at `https://console.agentmail.to/dashboard/api-keys` and export it:
+
+```bash
+export AGENTMAIL_API_KEY="<API_KEY>"
+```
+
+2. Register the MCP server:
+
+```bash
+grok mcp add --transport http agentmail https://mcp.agentmail.to/mcp \
+  --header "Authorization: Bearer $AGENTMAIL_API_KEY"
+```
+
+3. Confirm with `grok mcp list` (expect `agentmail: https://mcp.agentmail.to/mcp`), then in a `grok` session:
+
+```text
+Create an AgentMail inbox and send a hi email from it to you@example.com.
+```
+
+## SDK
+
+- Grok app: **Plugins > Connectors > New Connector > Custom**, name `AgentMail`, server URL `https://mcp.agentmail.to/mcp`. The app authenticates over OAuth (Sign in and Allow); no API key.
+- Grok Build: `grok mcp add --transport http agentmail https://mcp.agentmail.to/mcp --header "Authorization: Bearer $AGENTMAIL_API_KEY"`. Or write `~/.grok/config.toml` under `[mcp_servers.agentmail]` and start a new session.
+
+## Facts
+
+- Hosted MCP server URL for both surfaces: `https://mcp.agentmail.to/mcp`. Full tool catalog and OAuth details: [MCP and Skills](/integrations/mcp-and-skills).
+- The Grok app custom connector takes only a name and server URL, then authenticates over OAuth. No API key.
+- Grok Build passes the API key as an `Authorization: Bearer` header. An `x-api-key` header starts an OAuth sign-in instead.
+- A running `grok` session does not pick up manual `~/.grok/config.toml` edits. Start a new session.
+- `grok mcp doctor agentmail` runs a live handshake with the server.
+- Creating an inbox without a username lets AgentMail generate an available one. A taken username makes `create_inbox` return `403` with up to 3 available variants in `suggestions`.
+
+## Not supported
+
+- Grok Build with an `x-api-key` header does not use the key. Pass the key as `Authorization: Bearer`.
+- The Grok app custom connector has no API-key field. It authenticates over OAuth.
+
+## Errors
+
+| Error | Status | Cause | Fix |
+| --- | --- | --- | --- |
+| `resource_taken` | 403 | The requested inbox username belongs to another organization. | Retry with one of the up to 3 variants in `suggestions`. |
+| `already_exists` | 403 | An inbox with the requested username already exists in the organization. | Retry with a username from `suggestions`, or use the existing inbox. |
+
+## Verify
+
+```bash
+grok mcp doctor agentmail
+```
+
+A live handshake succeeds, and the prompt "Create an AgentMail inbox and send a hi email from it to you@example.com" makes the agent call `create_inbox` and `send_message` and report the new `@agentmail.to` address.
+
+## Related
+
+- [Custom domains](/advanced/custom-domains): an address on your own domain instead of `@agentmail.to`.
+- [Agent safety](/advanced/safety): guardrails for an agent that reads untrusted mail and acts on its own.
+- [MCP and Skills](/integrations/mcp-and-skills): the full hosted tool catalog and OAuth details.
+
+</Visibility>

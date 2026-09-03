@@ -72,9 +72,7 @@ console.log(Object.keys(await mcp.listTools()));
 ]
 ```
 
-<Frame caption="One connection to the hosted server discovers all 26 email tools.">
-  <img src="/images/integrations/mastra-check-tools.png" alt="Terminal output of npx tsx check.ts printing 26 tool names prefixed agentmail_" />
-</Frame>
+<img src="/images/integrations/mastra-check-tools.png" alt="Terminal output of npx tsx check.ts printing 26 tool names prefixed agentmail_" />
 
 `listTools()` prefixes each tool with the server name from your config, so the `agentmail` key becomes the `agentmail_` prefix here. Every tool call runs as the organization that owns the API key. To limit an agent to a single inbox, give it an inbox-scoped key instead of an organization key. [MCP and Skills](/integrations/mcp-and-skills) covers the hosted server's full catalog and credential options.
 

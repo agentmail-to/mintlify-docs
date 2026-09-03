@@ -44,9 +44,7 @@ openclaw plugins inspect agentmail --runtime
 
 `inspect --runtime` loads the plugin and reports the surfaces it registered, including the `agentmail` command you will use in the next step.
 
-<Frame caption="A loaded plugin reports both surfaces: the email channel and the agentmail CLI command.">
-  <img src="/images/integrations/openclaw-inspect.png" alt="Output of openclaw plugins inspect agentmail --runtime showing status loaded" />
-</Frame>
+<img src="/images/integrations/openclaw-inspect.png" alt="Output of openclaw plugins inspect agentmail --runtime showing status loaded" />
 
 The bundled CLI takes its key from the plugin entry in `~/.openclaw/openclaw.json` and ignores keys inherited from the process that invokes it. Point the entry at the `AGENTMAIL_API_KEY` you set in the Gateway environment.
 
@@ -128,9 +126,7 @@ openclaw agentmail -- --format json inboxes:messages send \
 
 The send returns the message's `message_id` and the `thread_id` of the conversation it starts. Your agent uses these to follow up in the same thread.
 
-<Frame caption="The passthrough command listing inboxes and sending the first email.">
-  <img src="/images/integrations/openclaw-passthrough.png" alt="Terminal session running openclaw agentmail passthrough commands to list inboxes and send an email" />
-</Frame>
+<img src="/images/integrations/openclaw-passthrough.png" alt="Terminal session running openclaw agentmail passthrough commands to list inboxes and send an email" />
 
 For credential safety, the passthrough rejects `--api-key`, `--base-url`, and `--environment` overrides, and it strips inherited proxy variables such as `HTTP_PROXY` and `HTTPS_PROXY`. If an argument's value is itself `--base-url` or `--environment`, or starts with `--base-url=` or `--environment=`, pass it in `--option=value` form, for example `--subject=--base-url`.
 

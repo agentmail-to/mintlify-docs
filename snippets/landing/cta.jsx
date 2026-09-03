@@ -13,12 +13,13 @@ export const LandingCta = () => {
     { name: "Skills", href: "/integrations/mcp-and-skills", logo: "am" },
     // the household names
     { name: "Claude Cowork", href: "/integrations/frameworks/claude-cowork", logo: "/images/logos/claude.svg" },
+    { name: "Claude Code", href: "/integrations/frameworks/claude-code", logo: "/images/logos/claude.svg" },
     { name: "OpenAI Agents SDK", href: "/integrations/frameworks/openai-agents-sdk", logo: "/images/logos/openai.svg" },
     { name: "OpenAI Codex", href: "/integrations/frameworks/codex", logo: "/images/logos/openai.svg" },
     { name: "OpenClaw", href: "/integrations/frameworks/openclaw", logo: "/images/logos/openclaw.svg" },
-    { name: "Grok Bot", href: "/integrations/frameworks/grokbot", logo: "/images/logos/grok.svg" },
+    { name: "Grok", href: "/integrations/frameworks/grok", logo: "/images/logos/grok.svg" },
     { name: "Cursor", href: "/integrations/frameworks/cursor", logo: "/images/logos/cursor.svg" },
-    { name: "Windsurf", href: "/integrations/frameworks/windsurf", logo: "/images/logos/windsurf.svg" },
+    { name: "Devin", href: "/integrations/frameworks/devin", logo: "/images/logos/devin.svg" },
     { name: "Hermes", href: "/integrations/frameworks/hermes", logo: "/images/logos/hermes.png" },
     // frameworks and platforms
     { name: "LangChain", href: "/integrations/frameworks/langchain", logo: "/images/logos/langchain.svg" },

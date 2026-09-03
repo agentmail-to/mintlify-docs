@@ -114,9 +114,7 @@ env_vars = ["AGENTMAIL_API_KEY"]
 
 `env_vars` passes the variable through from the shell that starts Codex, so export `AGENTMAIL_API_KEY` there first. One more thing for non-interactive runs: `codex exec` denies tool approvals by default, and sending a message asks for one, so pass `--approve-for-me` to approve it automatically. The full tool catalog and the configuration for every other client are on [MCP and Skills](/integrations/mcp-and-skills).
 
-<Frame caption="A headless codex exec run reaches AgentMail through the local bridge and lists the account's inboxes.">
-  <img src="/images/integrations/codex-exec-list-inboxes.png" alt="Terminal output of codex exec calling the agentmail list_inboxes tool and returning three inboxes" />
-</Frame>
+<img src="/images/integrations/codex-exec-list-inboxes.png" alt="Terminal output of codex exec calling the agentmail list_inboxes tool and returning three inboxes" />
 
 ## 5. Give cloud tasks an inbox
 

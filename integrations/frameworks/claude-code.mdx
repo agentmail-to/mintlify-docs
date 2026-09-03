@@ -1,0 +1,100 @@
+---
+title: Claude Code
+description: Add the AgentMail MCP server to Claude Code so it can send, receive, and reply to email from its own inbox.
+icon: "/images/logos/claude.svg"
+---
+
+<Visibility for="humans">
+
+
+[Claude Code](https://claude.com/claude-code) is Anthropic's terminal coding agent. Add the hosted AgentMail MCP server with one command and it gets an email inbox of its own to send, receive, and reply from.
+
+## What you will need
+
+- Claude Code.
+- An AgentMail API key, if you connect with a key. [Generate one here](https://console.agentmail.to/dashboard/api-keys).
+
+## Add the MCP server
+
+Register the server with an API key sent as a header:
+
+```bash
+claude mcp add --transport http agentmail https://mcp.agentmail.to/mcp \
+  --header "x-api-key: $AGENTMAIL_API_KEY"
+```
+
+To sign in with OAuth instead, drop the header. Claude Code opens the AgentMail sign-in on first use:
+
+```bash
+claude mcp add --transport http agentmail https://mcp.agentmail.to/mcp
+```
+
+Confirm it registered with `claude mcp list`. Then ask Claude Code to use it:
+
+```text
+Create an AgentMail inbox and send a hi email from it to you@example.com.
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="MCP and Skills" icon="plug" href="/integrations/mcp-and-skills">
+    The full tool catalog, OAuth details, and the AgentMail skills.
+  </Card>
+  <Card title="Agent safety" icon="shield" href="/advanced/safety">
+    Treat inbound mail as untrusted and confirm sends before the agent acts.
+  </Card>
+</CardGroup>
+
+</Visibility>
+
+<Visibility for="agents">
+
+# Connect Claude Code to AgentMail
+
+Add AgentMail's hosted MCP server to Claude Code with `claude mcp add`. It gets `@agentmail.to` inboxes to send, receive, and reply from, authenticated by an API key header or an OAuth sign-in.
+
+## Do this
+
+1. Register the server with an API key from `https://console.agentmail.to/dashboard/api-keys`:
+
+```bash
+claude mcp add --transport http agentmail https://mcp.agentmail.to/mcp \
+  --header "x-api-key: $AGENTMAIL_API_KEY"
+```
+
+2. Confirm with `claude mcp list`, then prompt:
+
+```text
+Create an AgentMail inbox and send a hi email from it to you@example.com.
+```
+
+## Facts
+
+- API-key registration: `claude mcp add --transport http agentmail https://mcp.agentmail.to/mcp --header "x-api-key: $AGENTMAIL_API_KEY"`.
+- OAuth registration: the same command without `--header`. Claude Code opens the AgentMail sign-in on first use.
+- The endpoint is exactly `https://mcp.agentmail.to/mcp`. Full tool catalog and OAuth details: [MCP and Skills](/integrations/mcp-and-skills).
+- Creating an inbox without a username lets AgentMail generate an available one. A taken username makes `create_inbox` return `403` with up to 3 available variants in `suggestions`.
+
+## Not supported
+
+- The API-key path needs a valid key. To connect without one, drop `--header` and use the OAuth sign-in.
+
+## Errors
+
+| Error | Status | Cause | Fix |
+| --- | --- | --- | --- |
+| `404` on every call | 404 | Incorrect server URL | Set the URL to exactly `https://mcp.agentmail.to/mcp` |
+| `resource_taken` | 403 | The requested inbox username belongs to another organization | Retry with one of the up to 3 variants in `suggestions` |
+| `already_exists` | 403 | An inbox with the requested username already exists in the organization | Retry with a username from `suggestions`, or use the existing inbox |
+
+## Verify
+
+Run `claude mcp list` (the AgentMail server appears), then prompt `List my AgentMail inboxes`. Success is Claude Code calling `list_inboxes` and returning the addresses.
+
+## Related
+
+- [MCP and Skills](/integrations/mcp-and-skills): the full tool catalog, OAuth details, and skills.
+- [Agent safety](/advanced/safety): treat inbound mail as untrusted and confirm sends before the agent acts.
+
+</Visibility>

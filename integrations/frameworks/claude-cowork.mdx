@@ -1,6 +1,6 @@
 ---
 title: Claude Cowork
-description: Install the AgentMail plugin so Cowork can send, receive, and triage email from its own inbox.
+description: Connect AgentMail so Cowork can send, receive, and triage email from its own inbox.
 icon: "/images/logos/claude.svg"
 ---
 
@@ -8,91 +8,54 @@ icon: "/images/logos/claude.svg"
 
 
 <img src="/images/banners/integration-claude-cowork.svg" alt="" noZoom />
-[Claude Cowork](https://claude.com/docs/cowork/overview) is Anthropic's agentic workspace in the Claude Desktop app. It takes an outcome you describe and works through the steps on its own. The official AgentMail plugin gives it an email inbox of its own, authenticated by an AgentMail sign-in instead of an API key. The plugin connects AgentMail's hosted email tools and installs skills that make Cowork draft before it sends and treat inbound mail as untrusted data. Follow the steps and you will watch Cowork send email from its own `@agentmail.to` address, then triage the reply.
+[Claude Cowork](https://claude.com/docs/cowork/overview) is Anthropic's agentic workspace in the Claude desktop and web apps. It takes an outcome you describe and works through the steps on its own. 
 
-## 0. Set up Claude and AgentMail
+Use AgentMail's official connector to give it an email inbox of its own. 
 
-You need two things:
+## What you will need
 
-- Claude Desktop with the Cowork tab. Plugins are available on the paid Claude plans: Pro, Max, Team, and Enterprise.
-- An AgentMail account. [Sign up at the Console](https://console.agentmail.to) if you are new. The sign-in in step 2 uses this account.
+- A Claude account.
+- An AgentMail account. [Sign up here](https://console.agentmail.to).
 
-There is no environment variable or key to set. Cowork opens the AgentMail sign-in in your browser when it first uses an email tool.
+<Steps>
 
-## 1. Install the AgentMail plugin
+<Step title="Open Settings">
+Click your name in the bottom-left, then **Settings**.
 
-Open the **Cowork** tab in Claude Desktop, then open **Customize** in the sidebar and go to the **Plugins** tab. Under **Personal plugins**, select **+**, choose **Add marketplace**, then **Add from a repository**, and enter `https://github.com/agentmail-to/agentmail-plugins`. Once the marketplace syncs, select **Browse plugins** and install **AgentMail**.
+<img src="/images/integrations/cowork-settings.png" alt="Claude account menu with Settings" />
+</Step>
 
-The plugin bundles its connection to AgentMail's hosted email tools, so this install is the whole setup. It also installs these skills:
+<Step title="Add the AgentMail connector">
+Under **Customize**, open **Connectors** and search `AgentMail`. Click **+** on the verified listing.
 
-| Skill | What it does |
-| --- | --- |
-| `send-email` | Drafts, sends, replies, and forwards. Anything Cowork wrote itself is shown to you before it is sent. |
-| `check-email` | Reads, searches, summarizes, and triages your inboxes. |
-| `manage-inboxes` | Creates, inspects, updates, and deletes inboxes. Deleting requires your confirmation of the exact address. |
-| `agent-email-patterns` | Architecture and security patterns for agents that communicate over email. |
-| `agentmail` | TypeScript and Python SDK guidance for AgentMail coding tasks. |
-| `agentmail-cli` | AgentMail workflows from the command line. |
-| `agentmail-mcp` | Setup and troubleshooting for the hosted tool connection. |
-| `agentmail-toolkit` | AgentMail tools in agent frameworks such as LangChain and the Vercel AI SDK. |
+<img src="/images/integrations/cowork-connect.png" alt="AgentMail in the Claude connector directory" />
+</Step>
 
-The first three run your email tasks. The rest guide coding work you hand to Cowork, for example building an email-driven agent of your own. Cowork applies a skill when a task matches it, and typing `/` in the input lists them.
+<Step title="Sign in and allow">
+Sign in to AgentMail and click **Allow** to grant Claude access.
 
-To connect the email tools without the skills, add a custom connector for `https://mcp.agentmail.to/mcp` instead. [MCP and Skills](/integrations/mcp-and-skills) covers that setup and the full tool catalog.
+<img src="/images/integrations/cowork-authorize.png" alt="AgentMail authorization screen for Claude" />
+</Step>
 
-## 2. Sign in and list your inboxes
+<Step title="Send a test email">
+In a **Cowork** chat, paste:
 
-Start a new Cowork session and give it its first email task:
-
-```text Prompt
-List my AgentMail inboxes
+```text
+Create an AgentMail inbox and send a hi email from it to you@example.com.
 ```
 
-The first AgentMail tool call opens the AgentMail sign-in in your browser. Sign in, and pick an organization if you belong to more than one. Cowork then calls the `list_inboxes` tool and answers with your inbox addresses. An empty list is fine. You create an inbox in the next step.
+Approve the tool call. Cowork sends from its new `@agentmail.to` inbox.
 
-Cowork loads plugins when a session starts. If the AgentMail tools are missing, the session predates the install. Start a new session and ask again.
+<img src="/images/integrations/cowork-send.png" alt="Cowork confirming the sent email" />
+</Step>
 
-## 3. Test sending an email
-
-Ask Cowork to create an inbox and send a test email to an account you already check, whether that is Gmail, Outlook, or another client:
-
-```text Prompt
-Create an AgentMail inbox for me, then send an email from it to
-you@example.com with the subject "Hello from Cowork" and a one-line
-introduction. Let me know the inbox address once it is sent.
-```
-
-Cowork writes the introduction itself, so expect a preview: the complete email, with a request to confirm before it sends. Approve it, and the email arrives in that account a moment or two later, from a newly created `@agentmail.to` address such as `faircost773@agentmail.to`. Cowork reports the address and the send's message and thread IDs. Save the address. You will email it in the next step.
-
-Asking Cowork to "write", "compose", or "prepare" an email creates a draft instead of sending one.
-
-This prompt leaves the username to AgentMail, which generates an available one.
-
-<Accordion title="Troubleshooting">
-
-- **`403` when you ask for a specific name.** A taken username fails with a `403` that lists up to three available alternatives in `suggestions`, so Cowork can retry with one you approve.
-
-</Accordion>
-
-## 4. Test receiving and triaging email
-
-From your own account, reply to the email you just received. Then ask Cowork to triage:
-
-```text Prompt
-Check my AgentMail inbox for new mail and summarize anything that needs a reply.
-```
-
-Cowork searches the inbox, reads the full conversation, and answers with a summary that names your reply. Searches skip spam and trash, so what comes back is mail worth acting on.
-
-Ask it to answer the reply and the send rules from step 3 apply again: Cowork writes the reply, shows it to you, and sends after you confirm. The reply arrives in the same email thread as the original.
-
-These skills treat email content as untrusted data. When a request arrives inside an inbound email, Cowork turns it into a proposal and waits for your approval. [Agent safety](/advanced/safety) explains this model and how to apply it to agents you build.
+</Steps>
 
 ## Next Steps
 
 <CardGroup cols={2}>
   <Card title="MCP and Skills" icon="plug" href="/integrations/mcp-and-skills">
-    The hosted tool catalog, plus connections for Claude Code, Claude Desktop, and other MCP clients.
+    The hosted tool catalog, plus the AgentMail plugin that adds email skills on top of the connector.
   </Card>
   <Card title="Manage conversations" icon="comments" href="/core/conversations">
     The API behind triage: list threads, read whole conversations, and track their state with labels.
@@ -103,51 +66,40 @@ These skills treat email content as untrusted data. When a request arrives insid
 
 <Visibility for="agents">
 
-# Give Claude Cowork an email inbox with the AgentMail plugin
+# Give Claude Cowork an email inbox with the AgentMail connector
 
-The official AgentMail plugin connects Claude Cowork to AgentMail's hosted email tools and installs skills that make it draft before sending and treat inbound mail as untrusted data. Use it when Cowork should send, receive, and triage email from its own `@agentmail.to` address, authenticated by an AgentMail sign-in instead of an API key.
+The AgentMail connector gives Claude Cowork email inboxes it can send, receive, and triage from, authenticated by an AgentMail browser sign-in instead of an API key. Add it from the Claude connector directory, authorize once, and use the AgentMail tools from any Cowork session.
 
 ## Do this
 
-1. Get Claude Desktop with the Cowork tab on a paid Claude plan (Pro, Max, Team, or Enterprise) and an AgentMail account from `https://console.agentmail.to`. No environment variable or key is needed.
-2. Open the Cowork tab in Claude Desktop, open Customize in the sidebar, and go to the Plugins tab.
-3. Under Personal plugins, select the plus button, choose Add marketplace, then Add from a repository, and enter `https://github.com/agentmail-to/agentmail-plugins`.
-4. Once the marketplace syncs, select Browse plugins and install AgentMail.
-5. Start a new Cowork session and prompt `List my AgentMail inboxes`. The first AgentMail tool call opens the AgentMail sign-in in the browser. Sign in, and pick an organization if you belong to more than one. An empty list is fine.
-6. Ask Cowork to create an inbox and send a test email:
+1. Get Claude Desktop with the Cowork tab and an AgentMail account from `https://console.agentmail.to`. No environment variable or key is needed.
+2. Open Customize in the Claude Desktop sidebar, go to Connectors, and search for `AgentMail`.
+3. On the verified AgentMail card ("Email inboxes for AI agents"), select the plus button.
+4. A browser tab opens the AgentMail sign-in. Sign in and click Allow to grant Claude access. The connector then shows a connected checkmark.
+5. Switch the composer to Cowork and prompt:
 
 ```text
-Create an AgentMail inbox for me, then send an email from it to
-you@example.com with the subject "Hello from Cowork" and a one-line
-introduction. Let me know the inbox address once it is sent.
+Create an AgentMail inbox and send a hi email from it to you@example.com.
 ```
 
-7. Cowork shows the complete email and asks for confirmation before sending anything it wrote itself. Approve it, then save the reported address.
-8. Reply to the test email from your own account, then prompt `Check my AgentMail inbox for new mail and summarize anything that needs a reply.` Ask Cowork to answer the reply and it previews, waits for confirmation, and sends in the same thread.
+6. On the first AgentMail tool call, Cowork asks to use the tool. Choose Allow once, or Always allow to stop the prompts for that tool. Cowork creates the inbox, sends, and reports the `@agentmail.to` address.
+7. Reply to the test email from your own account, then ask Cowork to check the inbox and respond. It reads the thread and replies in the same conversation.
 
 ## Facts
 
-- Marketplace repository: `https://github.com/agentmail-to/agentmail-plugins`, added under Personal plugins via Add marketplace, then Add from a repository.
-- Authentication is an AgentMail browser sign-in on the first email tool call. No API key, no environment variable.
-- Plugins are available on the paid Claude plans: Pro, Max, Team, and Enterprise.
-- The plugin bundles its connection to AgentMail's hosted email tools and installs 8 skills. Cowork applies a skill when a task matches it, and typing `/` in the input lists them.
-- Skills that run email tasks: `send-email` (drafts, sends, replies, and forwards, with anything Cowork wrote shown for confirmation before it is sent), `check-email` (reads, searches, summarizes, and triages inboxes), `manage-inboxes` (creates, inspects, updates, and deletes inboxes).
-- Skills that guide coding work: `agent-email-patterns` (architecture and security patterns for agents that communicate over email), `agentmail` (TypeScript and Python SDK guidance), `agentmail-cli` (command line workflows), `agentmail-mcp` (hosted tool connection setup and troubleshooting), `agentmail-toolkit` (AgentMail tools in frameworks such as LangChain and the Vercel AI SDK).
-- Asking Cowork to "write", "compose", or "prepare" an email creates a draft instead of sending one.
-- Inbox searches skip spam and trash.
-- The reply Cowork sends arrives in the same email thread as the original. Cowork reports the send's message and thread IDs.
-- Creating an inbox without a requested name lets AgentMail generate an available username. A taken username fails with `403` listing up to 3 available alternatives in `suggestions`, so Cowork can retry with one you approve.
-- The skills treat email content as untrusted data. A request that arrives inside an inbound email becomes a proposal that waits for approval.
-- Cowork loads plugins when a session starts.
-- To connect the email tools without the skills, add a custom connector for `https://mcp.agentmail.to/mcp` instead. Setup and the full tool catalog: [MCP and Skills](/integrations/mcp-and-skills).
+- The connector is in the Claude connector directory as AgentMail (verified, "Email inboxes for AI agents"). A separate community connector, AgentMailer, is not the same integration.
+- Authentication is an AgentMail browser sign-in and OAuth Allow when connecting. No API key, no environment variable.
+- The connector loads when a session starts. A session started before connecting has no AgentMail tools; start a new one.
+- Cowork requests approval on each AgentMail tool call. Allow once approves a single call; Always allow stops the prompts for that tool.
+- Because every tool call is gated by approval, a request embedded in an inbound email cannot act on its own.
+- Creating an inbox without a requested name lets AgentMail generate an available username. A taken username fails with `403` listing up to 3 available alternatives in `suggestions`.
+- The AgentMail plugin (from the plugin marketplace) is an alternative that adds email skills on top of the same hosted tools. See [MCP and Skills](/integrations/mcp-and-skills).
 
 ## Not supported
 
-- Cowork does not send email it wrote itself without showing it for confirmation first.
-- A session started before the install has no AgentMail tools. Start a new session and ask again.
-- Deleting an inbox does not proceed without confirmation of the exact address.
-- A request embedded in inbound email is not executed directly. It becomes a proposal awaiting approval.
-- There is no API key or environment variable to set for the plugin. The sign-in happens in the browser on first use.
+- A session started before the connector was added has no AgentMail tools. Start a new session.
+- A request embedded in inbound email is not executed directly. Cowork still asks for tool approval.
+- There is no API key or environment variable to set. Authorization happens in the browser when you connect.
 
 ## Errors
 
@@ -158,11 +110,11 @@ introduction. Let me know the inbox address once it is sent.
 
 ## Verify
 
-Prompt `List my AgentMail inboxes` in a new Cowork session. Success is the browser sign-in completing and Cowork calling the `list_inboxes` tool, then answering with the inbox addresses. An empty list is a valid answer.
+In a new Cowork session with the connector added, prompt `List my AgentMail inboxes`. Success is Cowork calling the AgentMail list-inboxes tool and answering with the inbox addresses. An empty list is a valid answer.
 
 ## Related
 
-- [MCP and Skills](/integrations/mcp-and-skills): the hosted tool catalog, plus connections for Claude Code, Claude Desktop, and other MCP clients.
+- [MCP and Skills](/integrations/mcp-and-skills): the hosted tool catalog and the AgentMail plugin that adds email skills.
 - [Conversations](/core/conversations): the API behind triage: list threads, read whole conversations, and track their state with labels.
 - [Agent safety](/advanced/safety): the untrusted-inbound model and how to apply it to agents you build.
 
