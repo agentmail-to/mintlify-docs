@@ -1,0 +1,102 @@
+# AgentMail
+
+> AgentMail gives AI agents their own email addresses to send and receive email, manage conversations, and use email across tools and platforms.
+
+## Sign up with the CLI
+
+Check whether the CLI is installed, install it if needed, and check authentication:
+
+```bash
+if command -v agentmail >/dev/null 2>&1; then
+  agentmail --version
+else
+  npm install -g agentmail-cli
+fi
+agentmail auth me
+```
+
+The install command requires Node.js and npm. If `agentmail auth me` succeeds, go to the [Quickstart](https://docs.agentmail.to/quickstart.md). If authentication fails, load your existing API key into `AGENTMAIL_API_KEY` and retry. A connection error is not a reason to create another account.
+
+For a new account, ask your human for their email address and choose an inbox username. Replace the placeholders below. Signup creates your inbox and sends a verification code to your human:
+
+```bash
+agentmail agent sign-up \
+  --human-email "<your human's email address>" \
+  --username "<your inbox username>" \
+  --source "agentmail-cli" \
+  --referrer "https://docs.agentmail.to/llms.txt" \
+  --format json
+
+# Save the returned credentials before continuing.
+
+export AGENTMAIL_API_KEY="<api_key from the signup response>"
+export AGENTMAIL_INBOX_ID="<inbox_id from the signup response>"
+
+# Your human checks their email and completes verification with their code.
+
+agentmail agent verify --otp-code "<6-digit code>" --format json
+```
+
+Save `api_key`, `inbox_id`, and `organization_id` from the response. Keep the key in a secret store or an environment file excluded from version control. It cannot be retrieved again. Ask your human to check their email and complete the verification command in the authenticated shell above. Look for `"verified": true`. Until verification, your inbox can send only to your human's address. Repeating signup rotates the API key, so reuse your saved credentials for later sessions.
+
+Go to the [Quickstart](https://docs.agentmail.to/quickstart.md) to send, receive, and reply to your first email. Reuse the inbox and key from signup.
+
+## What can you do with AgentMail
+
+- [Send email](https://docs.agentmail.to/core/send.md): Send plain text or HTML messages, include attachments, and prepare drafts for review or scheduled sending.
+
+- [Receive email](https://docs.agentmail.to/core/receive.md): Read incoming messages, download attachments, and track processing with labels.
+
+- [Manage conversations](https://docs.agentmail.to/core/conversations.md): Group messages into threads and reply with the conversation's context.
+
+- [Use custom email domains](https://docs.agentmail.to/advanced/custom-domains.md): Give your agent an address on your own domain.
+
+- [Get live notifications with WebSockets](https://docs.agentmail.to/advanced/websockets.md): React to incoming email over a persistent connection.
+
+- [Receive webhook events](https://docs.agentmail.to/advanced/webhooks.md): Deliver email events to your application's HTTP endpoint.
+
+- [Set inbound and outbound controls](https://docs.agentmail.to/core/inbound-control.md): Use allowlists and blocklists to control who can email your agent, reply to it, and receive its messages.
+
+- [Add safety controls](https://docs.agentmail.to/advanced/safety.md): Handle untrusted email content and require human review for actions that need approval.
+
+- [Separate tenants](https://docs.agentmail.to/advanced/multi-tenant.md): Group resources in pods and scope access for different customers or agents.
+
+- [Choose the EU region](https://docs.agentmail.to/advanced/eu-region.md): Configure clients for AgentMail's EU environment.
+
+- [Manage deliverability](https://docs.agentmail.to/advanced/deliverability.md): Understand authentication, bounces, and sending reputation.
+
+- [Check plans and usage](https://docs.agentmail.to/advanced/plans-and-usage.md): Find resource limits and monitor usage.
+
+- [Use labels](https://docs.agentmail.to/extras/labels-and-system-labels.md): Track message state with custom labels and understand system labels.
+- [Understand deliverability](https://docs.agentmail.to/extras/deliverability-fundamentals.md): Learn how email authentication, sender reputation, bounces, and inbound screening affect delivery.
+- [Review security and compliance](https://docs.agentmail.to/extras/security-compliance.md): Read about SOC 2 compliance and email protections.
+- [Manage your account lifecycle](https://docs.agentmail.to/extras/account-lifecycle.md): Delete data, exercise GDPR rights, or close an account.
+
+Build from an example:
+
+- [Outbound GTM / SDR agent](https://docs.agentmail.to/examples/outbound-gtm-sdr-agent.md): Research prospects, send outreach, follow up, and hand interested replies to a human.
+- [Customer support agent](https://docs.agentmail.to/examples/customer-support-agent.md): Answer from documentation and past conversations, reply in threads, and escalate with drafts.
+- [AI employee with its own inbox](https://docs.agentmail.to/examples/ai-employee-with-its-own-inbox.md): Bring an agent into email threads, forward it documents, and connect its tools.
+
+## Platforms and integrations
+
+Use your AgentMail email address from your agent's existing tools and runtime:
+
+- [SDKs and CLI](https://docs.agentmail.to/integrations/sdks-and-cli.md): Use the Python or TypeScript SDK, shell commands, or the REST API.
+
+- [MCP and skills](https://docs.agentmail.to/integrations/mcp-and-skills.md): Give an assistant AgentMail tools and instructions for working with email.
+
+- [OpenClaw](https://docs.agentmail.to/integrations/frameworks/openclaw.md), [Claude Code](https://docs.agentmail.to/integrations/frameworks/claude-code.md), [Codex](https://docs.agentmail.to/integrations/frameworks/codex.md), and [Cursor](https://docs.agentmail.to/integrations/frameworks/cursor.md): Set up email in your agent platform.
+
+- [OpenAI Agents SDK](https://docs.agentmail.to/integrations/frameworks/openai-agents-sdk.md), [LangChain](https://docs.agentmail.to/integrations/frameworks/langchain.md), [Google ADK](https://docs.agentmail.to/integrations/frameworks/google-adk.md), and [Vercel AI SDK](https://docs.agentmail.to/integrations/frameworks/ai-sdk.md): Add email tools to an agent built with a framework.
+
+- [LiveKit](https://docs.agentmail.to/integrations/frameworks/livekit.md): Add email to a voice agent.
+
+- [IMAP and SMTP](https://docs.agentmail.to/core/imap-smtp.md): Connect your inbox to external mail clients and tools.
+
+- [AgentID](https://docs.agentmail.to/advanced/agentid.md): Use your agent's inbox identity for supported sign-in flows.
+
+
+For an overview, visit the [AgentMail home page](https://docs.agentmail.to/index.md) and [introduction](https://docs.agentmail.to/introduction.md). Follow the [changelog](https://docs.agentmail.to/resources/changelog.md) for API and SDK releases.
+
+For implementation details, read the [architecture](https://docs.agentmail.to/architecture.md), [error reference](https://docs.agentmail.to/advanced/errors.md), or [OpenAPI specification](https://docs.agentmail.to/api-reference/openapi.json). Fetch [the full documentation](https://docs.agentmail.to/llms-full.txt) for broader context. Page links above return Markdown. Append `.md` to other documentation page URLs to read them as text.

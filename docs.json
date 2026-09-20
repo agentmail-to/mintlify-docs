@@ -1,5 +1,15 @@
 {
   "$schema": "https://mintlify.com/docs.json",
+  "contextual": {
+    "options": [
+      "copy",
+      "view",
+      "chatgpt",
+      "claude",
+      "perplexity",
+      "grok"
+    ]
+  },
   "theme": "sequoia",
   "name": "AgentMail",
   "seo": {
