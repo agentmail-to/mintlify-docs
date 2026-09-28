@@ -128,31 +128,31 @@
               {
                 "group": "Agent platforms",
                 "pages": [
-                  "integrations/frameworks/claude-cowork",
-                  "integrations/frameworks/claude-code",
-                  "integrations/frameworks/codex",
-                  "integrations/frameworks/openclaw",
-                  "integrations/frameworks/grok",
-                  "integrations/frameworks/manus",
-                  "integrations/frameworks/cursor",
-                  "integrations/frameworks/devin",
-                  "integrations/frameworks/opencode",
-                  "integrations/frameworks/replit",
-                  "integrations/frameworks/sim",
-                  "integrations/frameworks/hermes"
+                  "integrations/claude-cowork",
+                  "integrations/claude-code",
+                  "integrations/codex",
+                  "integrations/openclaw",
+                  "integrations/grok",
+                  "integrations/manus",
+                  "integrations/cursor",
+                  "integrations/devin",
+                  "integrations/opencode",
+                  "integrations/replit",
+                  "integrations/sim",
+                  "integrations/hermes"
                 ],
                 "expanded": true
               },
               {
                 "group": "Agent frameworks",
                 "pages": [
-                  "integrations/frameworks/langchain",
-                  "integrations/frameworks/openai-agents-sdk",
-                  "integrations/frameworks/ai-sdk",
-                  "integrations/frameworks/google-adk",
-                  "integrations/frameworks/mastra",
-                  "integrations/frameworks/eve",
-                  "integrations/frameworks/livekit"
+                  "integrations/langchain",
+                  "integrations/openai-agents-sdk",
+                  "integrations/ai-sdk",
+                  "integrations/google-adk",
+                  "integrations/mastra",
+                  "integrations/eve",
+                  "integrations/livekit"
                 ],
                 "expanded": true
               },
@@ -362,7 +362,7 @@
     },
     {
       "source": "/integrate-livekit-agents",
-      "destination": "/integrations/frameworks/livekit",
+      "destination": "/integrations/livekit",
       "permanent": true
     },
     {
@@ -536,31 +536,6 @@
       "permanent": true
     },
     {
-      "source": "/integrations/google-adk",
-      "destination": "/integrations/frameworks/google-adk",
-      "permanent": true
-    },
-    {
-      "source": "/integrations/langchain",
-      "destination": "/integrations/frameworks/langchain",
-      "permanent": true
-    },
-    {
-      "source": "/integrations/openclaw",
-      "destination": "/integrations/frameworks/openclaw",
-      "permanent": true
-    },
-    {
-      "source": "/integrations/replit",
-      "destination": "/integrations/frameworks/replit",
-      "permanent": true
-    },
-    {
-      "source": "/integrations/sim",
-      "destination": "/integrations/frameworks/sim",
-      "permanent": true
-    },
-    {
       "source": "/integrations/x402",
       "destination": "/integrations/pay-per-use/x402",
       "permanent": true
@@ -611,14 +586,98 @@
       "permanent": true
     },
     {
-      "source": "/integrations/frameworks/windsurf",
-      "destination": "/integrations/frameworks/devin",
+      "source": "/integrations/windsurf",
+      "destination": "/integrations/devin",
       "permanent": true
     },
     {
-      "source": "/integrations/frameworks/grokbot",
-      "destination": "/integrations/frameworks/grok",
+      "source": "/integrations/grokbot",
+      "destination": "/integrations/grok",
       "permanent": true
+    },
+    {
+      "source": "/integrations/frameworks/ai-sdk",
+      "destination": "/integrations/ai-sdk"
+    },
+    {
+      "source": "/integrations/frameworks/claude-code",
+      "destination": "/integrations/claude-code"
+    },
+    {
+      "source": "/integrations/frameworks/claude-cowork",
+      "destination": "/integrations/claude-cowork"
+    },
+    {
+      "source": "/integrations/frameworks/codex",
+      "destination": "/integrations/codex"
+    },
+    {
+      "source": "/integrations/frameworks/cursor",
+      "destination": "/integrations/cursor"
+    },
+    {
+      "source": "/integrations/frameworks/devin",
+      "destination": "/integrations/devin"
+    },
+    {
+      "source": "/integrations/frameworks/eve",
+      "destination": "/integrations/eve"
+    },
+    {
+      "source": "/integrations/frameworks/google-adk",
+      "destination": "/integrations/google-adk"
+    },
+    {
+      "source": "/integrations/frameworks/grok",
+      "destination": "/integrations/grok"
+    },
+    {
+      "source": "/integrations/frameworks/hermes",
+      "destination": "/integrations/hermes"
+    },
+    {
+      "source": "/integrations/frameworks/langchain",
+      "destination": "/integrations/langchain"
+    },
+    {
+      "source": "/integrations/frameworks/livekit",
+      "destination": "/integrations/livekit"
+    },
+    {
+      "source": "/integrations/frameworks/manus",
+      "destination": "/integrations/manus"
+    },
+    {
+      "source": "/integrations/frameworks/mastra",
+      "destination": "/integrations/mastra"
+    },
+    {
+      "source": "/integrations/frameworks/openai-agents-sdk",
+      "destination": "/integrations/openai-agents-sdk"
+    },
+    {
+      "source": "/integrations/frameworks/openclaw",
+      "destination": "/integrations/openclaw"
+    },
+    {
+      "source": "/integrations/frameworks/opencode",
+      "destination": "/integrations/opencode"
+    },
+    {
+      "source": "/integrations/frameworks/replit",
+      "destination": "/integrations/replit"
+    },
+    {
+      "source": "/integrations/frameworks/sim",
+      "destination": "/integrations/sim"
+    },
+    {
+      "source": "/integrations/frameworks/windsurf",
+      "destination": "/integrations/devin"
+    },
+    {
+      "source": "/integrations/frameworks/grokbot",
+      "destination": "/integrations/grok"
     }
   ]
 }
