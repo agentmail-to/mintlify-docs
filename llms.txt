@@ -86,11 +86,11 @@ Use your AgentMail email address from your agent's existing tools and runtime:
 
 - [MCP and skills](https://docs.agentmail.to/integrations/mcp-and-skills.md): Give an assistant AgentMail tools and instructions for working with email.
 
-- [OpenClaw](https://docs.agentmail.to/integrations/frameworks/openclaw.md), [Claude Code](https://docs.agentmail.to/integrations/frameworks/claude-code.md), [Codex](https://docs.agentmail.to/integrations/frameworks/codex.md), and [Cursor](https://docs.agentmail.to/integrations/frameworks/cursor.md): Set up email in your agent platform.
+- [OpenClaw](https://docs.agentmail.to/integrations/openclaw.md), [Claude Code](https://docs.agentmail.to/integrations/claude-code.md), [Codex](https://docs.agentmail.to/integrations/codex.md), and [Cursor](https://docs.agentmail.to/integrations/cursor.md): Set up email in your agent platform.
 
-- [OpenAI Agents SDK](https://docs.agentmail.to/integrations/frameworks/openai-agents-sdk.md), [LangChain](https://docs.agentmail.to/integrations/frameworks/langchain.md), [Google ADK](https://docs.agentmail.to/integrations/frameworks/google-adk.md), and [Vercel AI SDK](https://docs.agentmail.to/integrations/frameworks/ai-sdk.md): Add email tools to an agent built with a framework.
+- [OpenAI Agents SDK](https://docs.agentmail.to/integrations/openai-agents-sdk.md), [LangChain](https://docs.agentmail.to/integrations/langchain.md), [Google ADK](https://docs.agentmail.to/integrations/google-adk.md), and [Vercel AI SDK](https://docs.agentmail.to/integrations/ai-sdk.md): Add email tools to an agent built with a framework.
 
-- [LiveKit](https://docs.agentmail.to/integrations/frameworks/livekit.md): Add email to a voice agent.
+- [LiveKit](https://docs.agentmail.to/integrations/livekit.md): Add email to a voice agent.
 
 - [IMAP and SMTP](https://docs.agentmail.to/core/imap-smtp.md): Connect your inbox to external mail clients and tools.
 
