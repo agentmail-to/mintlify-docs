@@ -187,9 +187,9 @@ export default defineChannel({
   routes: [
     POST("/webhooks/agentmail", async (request, { from }) => {
       const payload = await request.text();
-      let event: any;
+      // svix 2.x: verify() only checks the signature; parse the payload yourself
       try {
-        event = verifier.verify(payload, {
+        verifier.verify(payload, {
           "svix-id": request.headers.get("svix-id") ?? "",
           "svix-timestamp": request.headers.get("svix-timestamp") ?? "",
           "svix-signature": request.headers.get("svix-signature") ?? "",
@@ -197,6 +197,7 @@ export default defineChannel({
       } catch {
         return new Response(null, { status: 400 });
       }
+      const event = JSON.parse(payload);
 
       const message = event.message;
       if (!claim(message.message_id)) return new Response(null, { status: 200 });
@@ -249,7 +250,8 @@ export default defineTool({
       INBOX,
       messageId,
       { text },
-      { headers: { "Idempotency-Key": `reply-${messageId}` } },
+      // message ids are RFC Message-IDs (<...@...>); the header allows only A-Z a-z 0-9 - . _ ~
+      { headers: { "Idempotency-Key": `reply-${messageId}`.replace(/[^A-Za-z0-9._~-]/g, "_") } },
     );
     return { messageId: reply.messageId, threadId: reply.threadId };
   },
@@ -293,7 +295,7 @@ export default defineTool({
           `A proposed reply is saved as a draft in this thread. ` +
           `Open it in the Console, edit if needed, and send.`,
       },
-      { headers: { "Idempotency-Key": `escalate-${messageId}` } },
+      { headers: { "Idempotency-Key": `escalate-${messageId}`.replace(/[^A-Za-z0-9._~-]/g, "_") } },
     );
     return { escalated: true, reason };
   },

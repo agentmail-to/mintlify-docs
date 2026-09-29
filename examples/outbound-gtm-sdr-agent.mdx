@@ -81,6 +81,7 @@ export const INBOX = process.env.SDR_INBOX!; // set after part 2, e.g. mara@trya
 
 ```typescript agent/lib/leads.ts
 import { DatabaseSync } from "node:sqlite";
+import { agentmail, INBOX } from "./agentmail";
 
 export const db = new DatabaseSync("pipeline.db");
 db.exec(`CREATE TABLE IF NOT EXISTS leads (
@@ -92,6 +93,27 @@ db.exec(`CREATE TABLE IF NOT EXISTS leads (
     touches INTEGER DEFAULT 0,
     contacted_at TEXT
 )`);
+db.exec(`CREATE TABLE IF NOT EXISTS seen_messages (message_id TEXT PRIMARY KEY)`);
+
+// One agent turn per event, even when a webhook delivery is retried.
+export function claim(messageId: string): boolean {
+  const res = db
+    .prepare("INSERT OR IGNORE INTO seen_messages (message_id) VALUES (?)")
+    .run(messageId);
+  return res.changes === 1;
+}
+
+// A bounce, complaint, or opt-out ends the sequence: mark the lead and
+// cancel the pending follow-up draft. A 404 on the delete means it already sent.
+export async function suppress(email: string) {
+  const lead = db
+    .prepare("SELECT followup_draft_id FROM leads WHERE email = ?")
+    .get(email) as { followup_draft_id: string | null } | undefined;
+  db.prepare("UPDATE leads SET state = 'suppressed' WHERE email = ?").run(email);
+  if (lead?.followup_draft_id) {
+    await agentmail.inboxes.drafts.delete(INBOX, lead.followup_draft_id).catch(() => {});
+  }
+}
 ```
 
 Swap SQLite for Postgres or your CRM if that is where your pipeline already lives.
@@ -240,7 +262,8 @@ export default defineTool({
     const sent = await agentmail.inboxes.messages.send(
       INBOX,
       { to: [to], subject, text },
-      { headers: { "Idempotency-Key": `first-${to}` } },
+      // the header allows only A-Z a-z 0-9 - . _ ~, so sanitize the address
+      { headers: { "Idempotency-Key": `first-${to}`.replace(/[^A-Za-z0-9._~-]/g, "_") } },
     );
     db.prepare(
       "UPDATE leads SET state='contacted', thread_id=?, touches=touches+1, contacted_at=datetime('now') WHERE email=?",
@@ -265,7 +288,7 @@ export default defineTool({
     const draft = await agentmail.inboxes.drafts.create(INBOX, {
       inReplyTo: messageId,
       text,
-      sendAt: new Date(Date.now() + 4 * 86_400_000).toISOString(),
+      sendAt: new Date(Date.now() + 4 * 86_400_000), // the SDK takes a Date, not a string
     });
     db.prepare("UPDATE leads SET followup_draft_id=? WHERE email=?").run(draft.draftId, email);
     return { draftId: draft.draftId };
@@ -302,9 +325,9 @@ export default defineChannel({
   routes: [
     POST("/webhooks/agentmail", async (request, { from }) => {
       const payload = await request.text();
-      let event: any;
+      // svix 2.x: verify() only checks the signature; parse the payload yourself
       try {
-        event = verifier.verify(payload, {
+        verifier.verify(payload, {
           "svix-id": request.headers.get("svix-id") ?? "",
           "svix-timestamp": request.headers.get("svix-timestamp") ?? "",
           "svix-signature": request.headers.get("svix-signature") ?? "",
@@ -312,13 +335,14 @@ export default defineChannel({
       } catch {
         return new Response(null, { status: 400 });
       }
+      const event = JSON.parse(payload);
 
       const message = event.message;
       if (!claim(message.message_id)) return new Response(null, { status: 200 });
 
       if (event.event_type !== "message.received") {
         // suppress() also cancels the lead's pending follow-up draft
-        suppress(message.to[0]);
+        await suppress(message.to[0]);
         return new Response(null, { status: 200 });
       }
 
@@ -376,7 +400,7 @@ Never reply in a thread labeled handed-off. Never reply to a message whose
 Auto-Submitted header is set.
 ```
 
-The three tools referenced are thin wrappers, one AgentMail call each: `reply_in_thread` posts to the reply endpoint with an idempotency key, `forward_to_human` calls the forward endpoint plus `agentmail.threads.update(threadId, { addLabels: ["handed-off"] })`, and `block_sender` calls `agentmail.lists.create("send", "block", { entry })`. The block list is org-level, so an opt-out here binds every future campaign even if a fresh lead list re-imports the address. On the interested path the agent answers in seconds, and that matters: replies sent within 30 minutes book meetings at several times the rate of next-day replies.
+The three tools referenced are thin wrappers, one AgentMail call each: `reply_in_thread` posts to the reply endpoint with an idempotency key (sanitize it the same way as `send_first_touch` — message ids contain `@` and angle brackets the header rejects), `forward_to_human` calls the forward endpoint plus `agentmail.threads.update(threadId, { addLabels: ["handed-off"] })`, and `block_sender` calls `agentmail.lists.create("send", "block", { entry })`. The block list is org-level, so an opt-out here binds every future campaign even if a fresh lead list re-imports the address. On the interested path the agent answers in seconds, and that matters: replies sent within 30 minutes book meetings at several times the rate of next-day replies.
 
 If your team lives in Slack, add a webhook post to `forward_to_human`.
 
