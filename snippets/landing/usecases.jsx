@@ -1,6 +1,8 @@
-// AgentMail landing — example cards. The three cookbooks from the docs'
-// Examples section, each with a hand-built UI mock (no images).
-// All constants live INSIDE the component body (Mintlify snippet rule).
+// AgentMail landing — blueprints + example cards. The blueprint pitch
+// (agentmail.to/build) heads the section; the three cookbooks from the
+// docs' Examples section sit below it, each with a hand-built UI mock
+// (no images). All constants live INSIDE the component body (Mintlify
+// snippet rule).
 
 export const LandingUseCases = () => {
   const Chip = ({ children, variant }) => (
@@ -11,18 +13,21 @@ export const LandingUseCases = () => {
     <section className="aml-section aml-uc">
       <div className="aml-secthead">
         <div className="aml-secthead-left">
-          <div className="aml-kicker">EXAMPLES</div>
+          <div className="aml-kicker">BLUEPRINTS</div>
           <h2 className="aml-h2">
-            <span className="ln">Built For Real</span>
-            <span className="ln aml-grad">Email Workflows.</span>
+            <span className="ln">Not Sure</span>
+            <span className="ln aml-grad">What To Build?</span>
           </h2>
         </div>
         <div className="aml-secthead-right">
           <p className="aml-secthead-copy">
-            Three end-to-end cookbooks, built on Vercel Eve with AgentMail as
-            the email layer. Copy the prompt into your coding agent and build
-            it.
+            Describe what you are working on and get a blueprint back, with a
+            prompt your coding agent can build from.
           </p>
+          <a className="aml-btn aml-btn--primary" href="https://agentmail.to/build">
+            <span>Get a blueprint</span>
+            <span className="arrow" aria-hidden="true">→</span>
+          </a>
         </div>
       </div>
 
