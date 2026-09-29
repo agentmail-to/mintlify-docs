@@ -101,7 +101,7 @@ Create the inbox with a human name. If you have not added your domain yet, read 
 const inbox = await agentmail.inboxes.create({
   username: "sam",
   domain: "agents.example.com",
-  displayName: "Sam (Assistant)",
+  displayName: "Sam Assistant", // parentheses are not allowed in display names
 });
 console.log(inbox.email); // sam@agents.example.com
 ```
@@ -183,9 +183,9 @@ export default defineChannel({
   routes: [
     POST("/webhooks/agentmail", async (request, { from }) => {
       const payload = await request.text();
-      let event: any;
+      // svix 2.x: verify() only checks the signature; parse the payload yourself
       try {
-        event = verifier.verify(payload, {
+        verifier.verify(payload, {
           "svix-id": request.headers.get("svix-id") ?? "",
           "svix-timestamp": request.headers.get("svix-timestamp") ?? "",
           "svix-signature": request.headers.get("svix-signature") ?? "",
@@ -193,12 +193,14 @@ export default defineChannel({
       } catch {
         return new Response(null, { status: 400 });
       }
+      const event = JSON.parse(payload);
 
       const message = event.message;
       if (!claim(message.message_id)) return new Response(null, { status: 200 });
 
       await from(message.thread_id).send(
-        `New message from ${message.from} in thread ${message.thread_id}. ` +
+        `New message ${message.message_id} from ${message.from} in thread ${message.thread_id}.\n\n` +
+          `It says:\n${message.extracted_text ?? message.text ?? "(no text body)"}\n\n` +
           `Handle it per your instructions.`,
         { auth: null },
       );
@@ -223,7 +225,8 @@ export default defineTool({
       EMPLOYEE,
       messageId,
       { text, replyAll: true },
-      { headers: { "Idempotency-Key": `reply-${messageId}` } },
+      // message ids are RFC Message-IDs (<...@...>); the header allows only A-Z a-z 0-9 - . _ ~
+      { headers: { "Idempotency-Key": `reply-${messageId}`.replace(/[^A-Za-z0-9._~-]/g, "_") } },
     );
     return { messageId: reply.messageId, threadId: reply.threadId };
   },
@@ -254,7 +257,7 @@ export default defineTool({
     const sent = await agentmail.inboxes.messages.send(
       EMPLOYEE,
       { to: [to], subject, text },
-      { headers: { "Idempotency-Key": `send-${to}-${subject}` } },
+      { headers: { "Idempotency-Key": `send-${to}-${subject}`.replace(/[^A-Za-z0-9._~-]/g, "_") } },
     );
     return { sent: true, messageId: sent.messageId };
   },
